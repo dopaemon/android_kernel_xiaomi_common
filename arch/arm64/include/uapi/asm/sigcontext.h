@@ -17,7 +17,7 @@
 #ifndef _UAPI__ASM_SIGCONTEXT_H
 #define _UAPI__ASM_SIGCONTEXT_H
 
-#ifdef __aarch64__
+#ifdef CONFIG_64BIT
 #ifndef __ASSEMBLY__
 
 #include <linux/types.h>
@@ -249,7 +249,7 @@ struct sve_context {
 
 #define SVE_SIG_CONTEXT_SIZE(vq) \
 		(SVE_SIG_REGS_OFFSET + SVE_SIG_REGS_SIZE(vq))
-#else /* __aarch64__ */
+#else /* CONFIG_64BIT */
 
 /*
  * Signal context structure - contains all info to do with the state
@@ -279,6 +279,6 @@ struct sigcontext {
 	unsigned long arm_cpsr;
 	unsigned long fault_address;
 };
-#endif /* __aarch64__ */
+#endif /* CONFIG_64BIT */
 
 #endif /* _UAPI__ASM_SIGCONTEXT_H */
