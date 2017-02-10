@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-License-Identifier: GPL-2.0
 __dtbo := $(sort $(dtbo-y))
 
 dtbo-base	:= $(sort $(foreach m,$(__dtbo),$($(m)-base)))
@@ -11,21 +11,15 @@ dtbo	:= $(addprefix $(obj)/,$(dtbo))
 ifneq ($(DTC_OVERLAY_TEST_EXT),)
 DTC_OVERLAY_TEST = $(DTC_OVERLAY_TEST_EXT)
 quiet_cmd_dtbo_verify	= VERIFY  $@
-cmd_dtbo_verify = $(foreach m,\
-	$(addprefix $(obj)/,$($(@F)-base)),\
-		$(if $(m),\
-			$(DTC_OVERLAY_TEST) $(m) $@ \
-			$(dot-target).$(patsubst $(obj)/%.dtb,%,$(m)).tmp > /dev/null;))\
-			true
+cmd_dtbo_verify = $(DTC_OVERLAY_TEST) $(addprefix $(obj)/,$($(@F)-base)) $@ $(dot-target).dtb
 else
 cmd_dtbo_verify = true
 endif
 
-
 $(obj)/%.dtbo: $(src)/%.dts FORCE
-	$(call if_changed_dep,dtc,,-@,dtb)
+	$(call if_changed_dep,dtc,dtb)
 	$(call if_changed,dtbo_verify)
 
 $(call multi_depend, $(dtbo), , -base)
 
-always-$(CONFIG_BUILD_ARM64_DT_OVERLAY) +=  $(dtbo)
+always +=  $(dtbo)
