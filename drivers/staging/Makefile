@@ -51,3 +51,4 @@ obj-$(CONFIG_WFX)		+= wfx/
 obj-y				+= hikey9xx/
 obj-$(CONFIG_BINDER_PRIO)	+= binder_prio/
 obj-$(CONFIG_EXTEND_RECLAIM)	+= extend_reclaim/
+obj-$(CONFIG_QCA_CLD_WLAN)	+= qcacld-3.0/
