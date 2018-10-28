@@ -73,3 +73,7 @@ config HYBRIDSWAP_CORE
 	  If unsure, say N here.
 	  This module can't be compiled as a module,
 	  the module is as one part of the ZRAM driver.
+
+config ZRAM_DEFAULT_COMP_ALGORITHM
+	string "Default ZRAM algorithm"
+	default "zstd"
