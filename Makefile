@@ -432,12 +432,23 @@ HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
+ifdef BUILD_WITH_CCACHE
+CCACHE := $(shell which ccache)
 ifneq ($(LLVM),)
-HOSTCC	= clang
-HOSTCXX	= clang++
+HOSTCC	= $(CCACHE) clang
+HOSTCXX	= $(CCACHE) clang++
 else
-HOSTCC	= gcc
-HOSTCXX	= g++
+HOSTCC	= $(CCACHE) gcc
+HOSTCXX	= $(CCACHE) g++
+endif
+endif
+
+ifneq ($(LLVM),)
+HOSTCC  = clang
+HOSTCXX = clang++
+else
+HOSTCC  = gcc
+HOSTCXX = g++
 endif
 
 KBUILD_USERHOSTCFLAGS := -Wall -Wmissing-prototypes -Wstrict-prototypes \
@@ -452,24 +463,45 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
+ifdef BUILD_WITH_CCACHE
 ifneq ($(LLVM),)
-CC		= clang
-LD		= ld.lld
-AR		= llvm-ar
-NM		= llvm-nm
-OBJCOPY		= llvm-objcopy
-OBJDUMP		= llvm-objdump
-READELF		= llvm-readelf
-STRIP		= llvm-strip
+CC		= $(CCACHE) clang
+LD		= $(CCACHE) ld.lld
+AR		= $(CCACHE) llvm-ar
+NM		= $(CCACHE) llvm-nm
+OBJCOPY		= $(CCACHE) llvm-objcopy
+OBJDUMP		= $(CCACHE) llvm-objdump
+READELF		= $(CCACHE) llvm-readelf
+STRIP		= $(CCACHE) llvm-strip
 else
-CC		= $(CROSS_COMPILE)gcc
-LD		= $(CROSS_COMPILE)ld
-AR		= $(CROSS_COMPILE)ar
-NM		= $(CROSS_COMPILE)nm
-OBJCOPY		= $(CROSS_COMPILE)objcopy
-OBJDUMP		= $(CROSS_COMPILE)objdump
-READELF		= $(CROSS_COMPILE)readelf
-STRIP		= $(CROSS_COMPILE)strip
+CC		= $(CCACHE) $(CROSS_COMPILE)gcc
+LD		= $(CCACHE) $(CROSS_COMPILE)ld
+AR		= $(CCACHE) $(CROSS_COMPILE)ar
+NM		= $(CCACHE) $(CROSS_COMPILE)nm
+OBJCOPY		= $(CCACHE) $(CROSS_COMPILE)objcopy
+OBJDUMP		= $(CCACHE) $(CROSS_COMPILE)objdump
+READELF		= $(CCACHE) $(CROSS_COMPILE)readelf
+STRIP		= $(CCACHE) $(CROSS_COMPILE)strip
+endif
+endif
+ifneq ($(LLVM),)
+CC              = clang
+LD              = ld.lld
+AR              = llvm-ar
+NM              = llvm-nm
+OBJCOPY         = llvm-objcopy
+OBJDUMP         = llvm-objdump
+READELF         = llvm-readelf
+STRIP           = llvm-strip
+else
+CC              = $(CROSS_COMPILE)gcc
+LD              = $(CROSS_COMPILE)ld
+AR              = $(CROSS_COMPILE)ar
+NM              = $(CROSS_COMPILE)nm
+OBJCOPY         = $(CROSS_COMPILE)objcopy
+OBJDUMP         = $(CROSS_COMPILE)objdump
+READELF         = $(CROSS_COMPILE)readelf
+STRIP           = $(CROSS_COMPILE)strip
 endif
 PAHOLE		= pahole
 RESOLVE_BTFIDS	= $(objtree)/tools/bpf/resolve_btfids/resolve_btfids

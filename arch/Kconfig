@@ -600,6 +600,18 @@ config STACKPROTECTOR_STRONG
 	  about 20% of all kernel functions, which increases the kernel code
 	  size by about 2%.
 
+config BUILD_WITH_CCACHE
+	bool "Build kernel using ccache"
+	default n
+	help
+	  Enable this option to compile the kernel using ccache.
+	  This can speed up incremental builds by caching compiled objects.
+
+	  To use this, your build scripts/Makefile must check:
+	    ifeq ($(CONFIG_BUILD_WITH_CCACHE),y)
+	        CC := ccache $(CC)
+	    endif          
+
 config ARCH_SUPPORTS_SHADOW_CALL_STACK
 	bool
 	help
