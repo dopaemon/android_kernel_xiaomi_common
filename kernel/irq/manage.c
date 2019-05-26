@@ -249,6 +249,10 @@ int irq_do_set_affinity(struct irq_data *data, const struct cpumask *mask,
 	/* IRQs only run on the first CPU in the affinity mask; reflect that */
 	mask = cpumask_of(cpumask_first(mask));
 	raw_spin_lock(&tmp_mask_lock);
+	
+	/* IRQs only run on the first CPU in the affinity mask; reflect that */
+	mask = cpumask_of(cpumask_first(mask));
+
 	/*
 	 * If this is a managed interrupt and housekeeping is enabled on
 	 * it check whether the requested affinity mask intersects with
