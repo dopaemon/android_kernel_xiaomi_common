@@ -343,6 +343,9 @@ kmem_cache_create_usercopy(const char *name,
 	 */
 	flags &= CACHE_CREATE_MASK;
 
+        /* Embrace davem */
+        flags |= SLAB_HWCACHE_ALIGN;
+
 	/* Fail closed on bad usersize of useroffset values. */
 	if (WARN_ON(!usersize && useroffset) ||
 	    WARN_ON(size < usersize || size - usersize < useroffset))
@@ -350,6 +353,7 @@ kmem_cache_create_usercopy(const char *name,
 
 	if (!usersize)
 		s = __kmem_cache_alias(name, size, align, flags, ctor);
+
 	if (s)
 		goto out_unlock;
 
