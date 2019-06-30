@@ -1281,6 +1281,9 @@ int dma_async_device_register(struct dma_device *device)
 	dma_channel_rebalance();
 	mutex_unlock(&dma_list_mutex);
 
+	if (!chancnt)
+		kfree(idr_ref);
+
 	dmaengine_debug_register(device);
 
 	return 0;
