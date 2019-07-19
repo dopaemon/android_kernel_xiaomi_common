@@ -1,3 +1,7 @@
+#
+# General setup
+#
+
 CONFIG_UAPI_HEADER_TEST=y
 CONFIG_LOCALVERSION="-DoraCore"
 # CONFIG_LOCALVERSION_AUTO is not set
