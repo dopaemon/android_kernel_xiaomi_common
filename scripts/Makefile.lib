@@ -321,7 +321,7 @@ endif
 DTC ?= $(objtree)/scripts/dtc/dtc
 DTC_FLAGS += $(call dtc-option,-Wno-interrupt_provider)
 
-# Silence all DTC warnings by default
+# Silence warnings
 DTC_FLAGS += -q
 
 # Disable noisy checks by default
