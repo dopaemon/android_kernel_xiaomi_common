@@ -52,6 +52,10 @@
 #include <linux/dax.h>
 #include <linux/psi.h>
 #include <linux/simple_lmk.h>
+#include <linux/pagewalk.h>
+#include <linux/shmem_fs.h>
+#include <linux/ctype.h>
+#include <linux/debugfs.h>
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -3707,7 +3711,6 @@ restart:
 		bool balanced;
 		bool ret;
 
-		simple_lmk_decide_reclaim(sc.priority);
 		sc.reclaim_idx = highest_zoneidx;
 
 		/*
