@@ -362,11 +362,7 @@ unsigned long nr_free_highatomic[MAX_NR_ZONES] = {0};
 int min_free_kbytes = 1024;
 int user_min_free_kbytes = -1;
 
-/*
- * Number of allocations waiting on kswapd, per node. This is kept out of struct
- * pglist_data because that struct is part of the GKI KMI.
- */
-atomic_t kswapd_waiters[MAX_NUMNODES];
+atomic_long_t kswapd_waiters = ATOMIC_LONG_INIT(0);
 static int watermark_boost_factor __read_mostly;
 static int watermark_scale_factor = 10;
 
@@ -4533,7 +4529,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	unsigned long alloc_start = jiffies;
 	bool should_alloc_retry = false;
 	bool used_vmpressure = false;
-	pg_data_t *waiter_pgdat = NULL;
+	bool woke_kswapd = false;
 	unsigned long direct_reclaim_retries = 0;
 	unsigned long pages_reclaimed = 0;
 	int retry_loop_count = 0;
@@ -4580,9 +4576,9 @@ restart:
 	}
 
 	if (alloc_flags & ALLOC_KSWAPD) {
-		if (!waiter_pgdat) {
-			waiter_pgdat = ac->preferred_zoneref->zone->zone_pgdat;
-			atomic_inc(&kswapd_waiters[waiter_pgdat->node_id]);
+		if (!woke_kswapd) {
+			atomic_long_inc(&kswapd_waiters);
+			woke_kswapd = true;
 		}
 		if (!used_vmpressure)
 			used_vmpressure = vmpressure_inc_users(order);
@@ -4874,8 +4870,8 @@ fail:
 	warn_alloc(gfp_mask, ac->nodemask,
 			"page allocation failure: order:%u", order);
 got_pg:
-	if (waiter_pgdat)
-		atomic_dec(&kswapd_waiters[waiter_pgdat->node_id]);
+	if (woke_kswapd)
+		atomic_long_dec(&kswapd_waiters);
 	if (used_vmpressure)
 		vmpressure_dec_users();
 	trace_android_vh_alloc_pages_slowpath(gfp_mask, order, alloc_start);
