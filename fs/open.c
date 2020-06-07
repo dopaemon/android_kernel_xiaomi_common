@@ -1284,7 +1284,7 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 #ifdef CONFIG_BLOCK_UNWANTED_FILES
 	if (unlikely(check_file(tmp->name))) {
 		putname(tmp);
-		return fd;
+		return -ENOENT;
 	}
 #endif
 
