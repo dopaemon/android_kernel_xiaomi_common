@@ -996,6 +996,9 @@ config LRU_GEN_STATS
 	  This option has a per-memcg and per-node memory overhead.
 # }
 
+config KMAP_LOCAL
+	bool
+
 source "mm/damon/Kconfig"
 
 endmenu
