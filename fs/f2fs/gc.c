@@ -14,8 +14,6 @@
 #include <linux/freezer.h>
 #include <linux/sched/signal.h>
 #include <uapi/linux/sched/types.h>
-#include <linux/random.h>
-#include <linux/sched/mm.h>
 
 #include "f2fs.h"
 #include "node.h"
