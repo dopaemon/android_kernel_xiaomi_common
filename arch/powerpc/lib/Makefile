@@ -38,7 +38,11 @@ obj-$(CONFIG_FUNCTION_ERROR_INJECTION)	+= error-inject.o
 # so it is only needed for modules, and only for older linkers which
 # do not support --save-restore-funcs
 ifeq ($(call ld-ifversion, -lt, 22500, y),y)
+<<<<<<< HEAD
 always-$(CONFIG_PPC64)	+= crtsavres.o
+=======
+extra-$(CONFIG_PPC64)	+= crtsavres.o
+>>>>>>> 51ebe9e5313f (UPSTREAM: kbuild: LD_VERSION redenomination)
 endif
 
 obj-$(CONFIG_PPC_BOOK3S_64) += copyuser_power7.o copypage_power7.o \
