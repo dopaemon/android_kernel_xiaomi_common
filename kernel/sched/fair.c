@@ -9915,12 +9915,17 @@ asym_active_balance(struct lb_env *env)
 }
 
 static inline bool
-voluntary_active_balance(struct lb_env *env)
+imbalanced_active_balance(struct lb_env *env)
 {
-	if (asym_active_balance(env))
-		return 1;
+	struct sched_domain *sd = env->sd;
 
-	if (env->migration_type == migrate_misfit)
+	/*
+	 * The imbalanced case includes the case of pinned tasks preventing a fair
+	 * distribution of the load on the system but also the even distribution of the
+	 * threads on a system with spare capacity
+	 */
+	if ((env->migration_type == migrate_task) &&
+	    (sd->nr_balance_failed > sd->cache_nice_tries+2))
 		return 1;
 
 	return 0;
@@ -9928,12 +9933,16 @@ voluntary_active_balance(struct lb_env *env)
 
 static int need_active_balance(struct lb_env *env)
 {
-	struct sched_domain *sd = env->sd;
-
-	if (voluntary_active_balance(env))
+	if (asym_active_balance(env))
 		return 1;
 
-	return unlikely(sd->nr_balance_failed > sd->cache_nice_tries+2);
+	if (imbalanced_active_balance(env))
+		return 1;
+
+	if (env->migration_type == migrate_misfit)
+		return 1;
+
+	return 0;
 }
 
 static int active_load_balance_cpu_stop(void *data);
@@ -10195,21 +10204,13 @@ more_balance:
 			/* We've kicked active balancing, force task migration. */
 			sd->nr_balance_failed = sd->cache_nice_tries+1;
 		}
-	} else
+	} else {
 		sd->nr_balance_failed = 0;
+	}
 
-	if (likely(!active_balance) || voluntary_active_balance(&env)) {
+	if (likely(!active_balance) || need_active_balance(&env)) {
 		/* We were unbalanced, so reset the balancing interval */
 		sd->balance_interval = sd->min_interval;
-	} else {
-		/*
-		 * If we've begun active balancing, start to back off. This
-		 * case may not be covered by the all_pinned logic if there
-		 * is only 1 task on the busy runqueue (because we don't call
-		 * detach_tasks).
-		 */
-		if (sd->balance_interval < sd->max_interval)
-			sd->balance_interval *= 2;
 	}
 
 	goto out;
