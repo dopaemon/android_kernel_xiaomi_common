@@ -9987,13 +9987,21 @@ imbalanced_active_balance(struct lb_env *env)
 
 static int need_active_balance(struct lb_env *env)
 {
+	struct sched_domain *sd = env->sd;
+
 	if (asym_active_balance(env))
 		return 1;
 
 	if (imbalanced_active_balance(env))
 		return 1;
 
-	if (env->migration_type == migrate_misfit)
+	/*
+	 * The imbalanced case includes the case of pinned tasks preventing a fair
+	 * distribution of the load on the system but also the even distribution of the
+	 * threads on a system with spare capacity
+	 */
+	if ((env->migration_type == migrate_task) &&
+	    (sd->nr_balance_failed > sd->cache_nice_tries+2))
 		return 1;
 
 	return 0;
