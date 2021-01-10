@@ -221,6 +221,7 @@ struct irq_data {
  *				  irq_chip::irq_set_affinity() when deactivated.
  * IRQD_IRQ_ENABLED_ON_SUSPEND	- Interrupt is enabled on suspend by irq pm if
  *				  irqchip have flag IRQCHIP_ENABLE_WAKEUP_ON_SUSPEND set.
+ * IRQD_PERF_CRITICAL		- IRQ is performance-critical
  */
 enum {
 	IRQD_TRIGGER_MASK		= 0xf,
@@ -245,8 +246,9 @@ enum {
 	IRQD_CAN_RESERVE		= (1 << 26),
 	IRQD_MSI_NOMASK_QUIRK		= (1 << 27),
 	IRQD_HANDLE_ENFORCE_IRQCTX	= (1 << 28),
-	IRQD_AFFINITY_ON_ACTIVATE	= (1 << 29),
-	IRQD_IRQ_ENABLED_ON_SUSPEND	= (1 << 30),
+	IRQD_PERF_CRITICAL		= (1 << 29),
+	IRQD_AFFINITY_ON_ACTIVATE	= (1 << 30),
+	IRQD_IRQ_ENABLED_ON_SUSPEND	= (1 << 31),
 };
 
 #define __irqd_to_state(d) ACCESS_PRIVATE((d)->common, state_use_accessors)
