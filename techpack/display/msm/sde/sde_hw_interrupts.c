@@ -493,6 +493,9 @@ static void sde_hw_intr_dispatch_irq(struct sde_hw_intr *intr,
 		/* Finally update IRQ status based on enable mask */
 		irq_status &= enable_mask;
 
+		irq_status = SDE_REG_READ(&intr->hw,
+				intr->sde_irq_tbl[reg_idx].status_off);
+
 		/*
 		 * Search through matching intr status from irq map.
 		 * start_idx and end_idx defined the search range in
