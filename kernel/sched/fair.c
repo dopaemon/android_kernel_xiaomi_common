@@ -11052,10 +11052,10 @@ static void nohz_newidle_balance(struct rq *this_rq)
 		return;
 
 	/*
-	 * Set the need to trigger ILB in order to update blocked load
-	 * before entering idle state.
+	 * Blocked load of idle CPUs need to be updated.
+	 * Kick an ILB to update statistics.
 	 */
-	atomic_or(NOHZ_NEWILB_KICK, nohz_flags(this_cpu));
+	kick_ilb(NOHZ_STATS_KICK);
 }
 
 #else /* !CONFIG_NO_HZ_COMMON */
