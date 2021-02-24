@@ -2389,6 +2389,7 @@ extern void cfs_bandwidth_usage_dec(void);
 #define NOHZ_NEWILB_KICK	BIT(NOHZ_NEWILB_KICK_BIT)
 /* Update nohz.next_balance */
 #define NOHZ_NEXT_KICK		BIT(NOHZ_NEXT_KICK_BIT)
+#define NOHZ_NEWILB_KICK	BIT(NOHZ_NEWILB_KICK_BIT)
 
 #define NOHZ_KICK_MASK	(NOHZ_BALANCE_KICK | NOHZ_STATS_KICK | NOHZ_NEXT_KICK)
 
