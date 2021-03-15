@@ -1276,6 +1276,10 @@ config QTI_OEMVM_CORE_CTL
 	  API for user to migrate vCPU to current pCPU then yield on current
 	  pCPU. User can also recover vCPU mapping after work is done.
 
+config VH_FS
+	tristate "Vendor hooks for filesystem"
+	default m
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 source "drivers/soc/qcom/sync_fence/Kconfig"
 source "drivers/soc/qcom/tmecom/Kconfig"
