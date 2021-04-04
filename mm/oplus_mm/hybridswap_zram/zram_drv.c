@@ -2434,6 +2434,9 @@ static int zram_add(void)
 #ifdef CONFIG_HYBRIDSWAP_ZRAM_WRITEBACK
 	spin_lock_init(&zram->wb_limit_lock);
 #endif
+#ifdef CONFIG_ZRAM_DEDUP
+	zram->use_dedup = true;
+#endif
 	queue = blk_alloc_queue(NUMA_NO_NODE);
 	if (!queue) {
 		pr_err("Error allocating disk queue for device %d\n",
