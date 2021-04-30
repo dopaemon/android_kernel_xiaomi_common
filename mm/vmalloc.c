@@ -2771,6 +2771,10 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 
 	if (!pages) {
 		free_vm_area(area);
+		warn_alloc(gfp_mask, NULL,
+			   "vmalloc size %lu allocation failure: "
+			   "page array size %lu allocation failed",
+			   nr_small_pages * PAGE_SIZE, array_size);
 		return NULL;
 	}
 
@@ -2789,6 +2793,10 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 			/* Successfully allocated i pages, free them in __vfree() */
 			area->nr_pages = i;
 			atomic_long_add(area->nr_pages, &nr_vmalloc_pages);
+			warn_alloc(gfp_mask, NULL,
+				   "vmalloc size %lu allocation failure: "
+				   "page order %u allocation failed",
+				   area->nr_pages * PAGE_SIZE, page_order);
 			goto fail;
 		}
 		area->pages[i] = page;
@@ -2797,16 +2805,20 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	}
 	atomic_long_add(area->nr_pages, &nr_vmalloc_pages);
 
-	if (map_kernel_range((unsigned long)area->addr, get_vm_area_size(area),
-			prot, pages) < 0)
+	if (vmap_pages_range(addr, addr + size, prot, pages, page_shift) < 0) {
+		warn_alloc(gfp_mask, NULL,
+			   "vmalloc size %lu allocation failure: "
+			   "failed to map pages",
+			   area->nr_pages * PAGE_SIZE);
 		goto fail;
+	}
 
 	return area->addr;
 
 fail:
 	warn_alloc(gfp_mask, NULL,
-			  "vmalloc: allocation failure, allocated %ld of %ld bytes",
-			  (area->nr_pages*PAGE_SIZE), area->size);
+		  "vmalloc: allocation failure, allocated %ld of %ld bytes",
+		  (area->nr_pages * PAGE_SIZE), area->size);
 	__vfree(area->addr);
 	return NULL;
 }
@@ -2840,12 +2852,19 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 
 	size = PAGE_ALIGN(size);
 	if (!size || (size >> PAGE_SHIFT) > totalram_pages())
+		warn_alloc(gfp_mask, NULL,
+			   "vmalloc size %lu allocation failure: "
+			   "exceeds total pages", real_size);
 		goto fail;
 
 	area = __get_vm_area_node(real_size, align, VM_ALLOC | VM_UNINITIALIZED |
 				vm_flags, start, end, node, gfp_mask, caller);
-	if (!area)
+	if (!area) {
+		warn_alloc(gfp_mask, NULL,
+			   "vmalloc size %lu allocation failure: "
+			   "vm_struct allocation failed", real_size);
 		goto fail;
+	}
 
 	addr = __vmalloc_area_node(area, gfp_mask, prot, node);
 	if (!addr)
