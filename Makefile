@@ -1008,9 +1008,6 @@ else
 CC_FLAGS_LTO	+= -fvisibility=default
 endif
 
-# Limit inlining across translation units to reduce binary size
-KBUILD_LDFLAGS += -mllvm -import-instr-limit=5
-
 ifeq ($(shell echo "$CONFIG_CC_VERSION_TEXT" | grep -qE 'Android|Neutron'; echo $?),0)
 KBUILD_LDFLAGS += -mllvm -regalloc-enable-advisor=release
 endif
