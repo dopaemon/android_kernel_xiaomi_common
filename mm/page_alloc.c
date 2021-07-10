@@ -4530,6 +4530,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	int reserve_flags;
 	unsigned long alloc_start = jiffies;
 	bool should_alloc_retry = false;
+	bool used_vmpressure = false;
 	unsigned long direct_reclaim_retries = 0;
 	unsigned long pages_reclaimed = 0;
 	int retry_loop_count = 0;
@@ -4575,8 +4576,11 @@ restart:
 			goto nopage;
 	}
 
-	if (alloc_flags & ALLOC_KSWAPD)
+	if (alloc_flags & ALLOC_KSWAPD) {
+		if (!used_vmpressure)
+			used_vmpressure = vmpressure_inc_users(order);
 		wake_all_kswapds(order, gfp_mask, ac);
+	}
 
 	if (can_direct_reclaim && !direct_reclaim_retries && !(current->flags & PF_MEMALLOC)) {
 		/*
@@ -4724,6 +4728,8 @@ retry:
 		direct_reclaim_retries++;
 
 	/* Try direct reclaim and then allocating */
+	if (!used_vmpressure)
+		used_vmpressure = vmpressure_inc_users(order);
 	page = __alloc_pages_direct_reclaim(gfp_mask, order, alloc_flags, ac,
 							&did_some_progress);
 	pages_reclaimed += did_some_progress;
@@ -4859,6 +4865,8 @@ fail:
 	warn_alloc(gfp_mask, ac->nodemask,
 			"page allocation failure: order:%u", order);
 got_pg:
+	if (used_vmpressure)
+		vmpressure_dec_users();
 	trace_android_vh_alloc_pages_slowpath(gfp_mask, order, alloc_start);
 	trace_android_vh_alloc_pages_slowpath_end(&gfp_mask, order, alloc_start,
 			stime, did_some_progress, pages_reclaimed, retry_loop_count);
