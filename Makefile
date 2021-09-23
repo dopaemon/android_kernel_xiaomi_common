@@ -1083,6 +1083,9 @@ KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
 # Ensure compilers do not transform certain loops into calls to wcslen()
 KBUILD_CFLAGS += -fno-builtin-wcslen
 
+# Use store motion pass for gcse
+KBUILD_CFLAGS += $(call cc-option,-fgcse-sm)
+
 # change __FILE__ to the relative path from the srctree
 KBUILD_CPPFLAGS += $(call cc-option,-fmacro-prefix-map=$(srctree)/=)
 
