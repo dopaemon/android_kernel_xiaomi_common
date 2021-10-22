@@ -879,6 +879,7 @@ void dpm_resume_early(pm_message_t state)
 void dpm_resume_start(pm_message_t state)
 {
 	dpm_resume_noirq(state);
+	cpuidle_resume();
 	dpm_resume_early(state);
 }
 EXPORT_SYMBOL_GPL(dpm_resume_start);
@@ -1536,9 +1537,13 @@ int dpm_suspend_end(pm_message_t state)
 	if (error)
 		goto out;
 
+	cpuidle_pause();
+
 	error = dpm_suspend_noirq(state);
-	if (error)
+	if (error) {
+		cpuidle_resume();
 		dpm_resume_early(resume_event(state));
+	}
 
 out:
 	dpm_show_time(starttime, state, error, "end");
