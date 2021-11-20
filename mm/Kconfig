@@ -999,6 +999,9 @@ config LRU_GEN_STATS
 config KMAP_LOCAL
 	bool
 
+config KMAP_LOCAL_NON_LINEAR_PTE_ARRAY
+	bool
+
 source "mm/damon/Kconfig"
 
 endmenu
