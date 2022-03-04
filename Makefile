@@ -435,8 +435,14 @@ HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 CCACHE := $(shell which ccache)
 
 ifneq ($(LLVM),)
-HOSTCC	= $(CCACHE) clang
-HOSTCXX	= $(CCACHE) clang++
+ifneq ($(filter %/,$(LLVM)),)
+LLVM_PREFIX := $(LLVM)
+else ifneq ($(filter -%,$(LLVM)),)
+LLVM_SUFFIX := $(LLVM)
+endif
+
+HOSTCC	= $(CCACHE) $(LLVM_PREFIX)clang$(LLVM_SUFFIX)
+HOSTCXX	= $(CCACHE) $(LLVM_PREFIX)clang++$(LLVM_SUFFIX)
 else
 HOSTCC	= $(CCACHE) gcc
 HOSTCXX	= $(CCACHE) g++
@@ -455,14 +461,14 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC		= $(CCACHE) clang
-LD		= ld.lld
-AR		= llvm-ar
-NM		= llvm-nm
-OBJCOPY		= llvm-objcopy
-OBJDUMP		= llvm-objdump
-READELF		= llvm-readelf
-STRIP		= llvm-strip
+CC		= $(CCACHE) $(LLVM_PREFIX)clang$(LLVM_SUFFIX)
+LD		= $(LLVM_PREFIX)ld.lld$(LLVM_SUFFIX)
+AR		= $(LLVM_PREFIX)llvm-ar$(LLVM_SUFFIX)
+NM		= $(LLVM_PREFIX)llvm-nm$(LLVM_SUFFIX)
+OBJCOPY		= $(LLVM_PREFIX)llvm-objcopy$(LLVM_SUFFIX)
+OBJDUMP		= $(LLVM_PREFIX)llvm-objdump$(LLVM_SUFFIX)
+READELF		= $(LLVM_PREFIX)llvm-readelf$(LLVM_SUFFIX)
+STRIP		= $(LLVM_PREFIX)llvm-strip$(LLVM_SUFFIX)
 else
 CC		= $(CCACHE) $(CROSS_COMPILE)gcc
 LD		= $(CROSS_COMPILE)ld
