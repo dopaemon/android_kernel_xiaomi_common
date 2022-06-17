@@ -629,7 +629,13 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
 	if (q->nr_hw_queues != 1)
 		return NULL;
 
-	return elevator_get(q, "ssg", false);
+	return elevator_get(q,
+#ifdef CONFIG_MQ_IOSCHED_SSG
+	"ssg",
+#else
+	"mq-deadline",
+#endif
+	false);
 }
 
 /*
