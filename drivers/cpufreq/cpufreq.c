@@ -32,6 +32,40 @@
 #include <trace/events/power.h>
 #include <trace/hooks/cpufreq.h>
 
+/*
+XQ-CT54:/ # cat sys/devices/system/cpu/cpufreq/policy0/scaling_available_frequencies
+* 307200 403200 518400 614400 729600 844800 960000 1075200 1171200 1267200 1363200 1478400 1574400 1689600 1785600
+XQ-CT54:/ # cat sys/devices/system/cpu/cpufreq/policy4/scaling_available_frequencies
+633600 768000 883200 998400 1113600 1209600 1324800 1440000 1555200 1651200 1766400 1881600 1996800 2112000 2227200 2342400 2419200
+XQ-CT54:/ # cat sys/devices/system/cpu/cpufreq/policy7/scaling_available_frequencies
+806400 940800 1056000 1171200 1286400 1401600 1497600 1612800 1728000 1843200 1958400 2054400 2169600 2284800 2400000 2515200 2630400 2726400 2822400 2841600
+*/
+
+// saver 1
+#define LVL1_LITTLE 1689600
+#define LVL1_BIG    1996800
+#define LVL1_PRIME  2284800
+
+// saver 2
+#define LVL2_LITTLE 1478400
+#define LVL2_BIG    1651200
+#define LVL2_PRIME  1843200
+
+// saver 3
+#define LVL3_LITTLE 1171200
+#define LVL3_BIG    1113600
+#define LVL3_PRIME  1171200
+
+static int batterysaver = 0; // 0 - 1 - 3
+module_param(batterysaver, int, 0644);
+// default 0, seriously cutting back max freqs for sunshine inside car/long gps tracking...
+// 1 medium cutback, 2 full cutback, 3 full cutback and disable touch freq min boost
+static int batterysaver_level = 0; // 0 - 1 - 3
+module_param(batterysaver_level, int, 0644);
+static bool batterysaver_touch_limiting = true;
+module_param(batterysaver_touch_limiting, bool, 0644);
+#define BATTERY_SAVER_MAX_LEVEL 3
+
 static LIST_HEAD(cpufreq_policy_list);
 
 /* Macros to iterate over CPU policies */
@@ -531,6 +565,31 @@ void cpufreq_disable_fast_switch(struct cpufreq_policy *policy)
 }
 EXPORT_SYMBOL_GPL(cpufreq_disable_fast_switch);
 
+// cpu max freqs for saver modes...
+static int batterysaver_max_freqs[BATTERY_SAVER_MAX_LEVEL][8] = {
+	// little x 4 , big x 3, prime x 1 - clusters
+	// saver 1
+	{ LVL1_LITTLE,LVL1_LITTLE,LVL1_LITTLE,LVL1_LITTLE,
+	LVL1_BIG,LVL1_BIG,LVL1_BIG,
+	LVL1_PRIME },
+	// saver 2
+	{ LVL2_LITTLE,LVL2_LITTLE,LVL2_LITTLE,LVL2_LITTLE,
+	LVL2_BIG,LVL2_BIG,LVL2_BIG,
+	LVL2_PRIME },
+	// saver 3
+	{ LVL3_LITTLE,LVL3_LITTLE,LVL3_LITTLE,LVL3_LITTLE,
+	LVL3_BIG,LVL3_BIG,LVL3_BIG,
+	LVL3_PRIME }
+};
+
+static int get_cpu_max_for_core(unsigned int cpu, int batterysaverlevel) {
+	if (cpu<=7 && batterysaverlevel>0 && batterysaverlevel<=BATTERY_SAVER_MAX_LEVEL) {
+		return batterysaver_max_freqs[batterysaverlevel-1][cpu];
+	} else {
+	    return -EINVAL;
+	}
+}
+
 /**
  * cpufreq_driver_resolve_freq - Map a target frequency to a driver-supported
  * one.
@@ -547,6 +606,13 @@ unsigned int cpufreq_driver_resolve_freq(struct cpufreq_policy *policy,
 {
 	unsigned int old_target_freq = target_freq;
 
+	if (batterysaver>0) {
+		unsigned int cpu = policy->cpu;
+		int max = 0;
+		max = get_cpu_max_for_core(cpu,batterysaver_level);
+		if (max<=0) max = policy->max;
+		target_freq = clamp_val(target_freq, policy->min, max);
+	} else
 	target_freq = clamp_val(target_freq, policy->min, policy->max);
 	trace_android_vh_cpufreq_resolve_freq(policy, target_freq, old_target_freq);
 	policy->cached_target_freq = target_freq;
@@ -2519,6 +2585,25 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 
 	policy->min = new_data.min;
 	policy->max = new_data.max;
+	if (batterysaver && batterysaver_touch_limiting) {
+		unsigned int cpu = policy->cpu;
+		int max = 0;
+		pr_debug("%s [cleanslate_policy] new min and max freqs are %u - %u kHz\n",__func__,
+			 policy->min, policy->max);
+		max = get_cpu_max_for_core(cpu,batterysaver_level);
+		if (policy->min>max) {
+			pr_debug("%s [cleanslate_policy] freq for core: %u saver_level %d  cpu: %d  target MIN: %u",__func__,max,batterysaver_level,cpu,policy->min);
+			policy->min = max;
+			new_data.min = max;
+		}
+		if (policy->max>max) {
+			pr_debug("%s [cleanslate_policy] freq for core: %u saver_level %d  cpu: %d  target MAX: %u",__func__,max,batterysaver_level,cpu,policy->max);
+			policy->max = max;
+			new_data.max = max;
+		}
+		pr_debug("%s [cleanslate_policy] OVERRIDDEN: new min and max freqs are %u - %u kHz\n",__func__,
+			 policy->min, policy->max);
+	}
 	trace_cpu_frequency_limits(policy);
 
 	policy->cached_target_freq = UINT_MAX;
