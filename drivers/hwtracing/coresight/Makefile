@@ -4,6 +4,11 @@
 #
 CFLAGS_coresight-stm.o := -D__DISABLE_TRACE_MMIO__
 
+KBUILD_CFLAGS		+= -O2
+KBUILD_CFLAGS_KERNEL 	+= -O2
+KBUILD_AFLAGS_MODULE  	+=
+KBUILD_CFLAGS_MODULE  	+=
+
 obj-$(CONFIG_CORESIGHT) += coresight.o
 coresight-y := coresight-core.o  coresight-etm-perf.o coresight-platform.o \
 		coresight-sysfs.o
