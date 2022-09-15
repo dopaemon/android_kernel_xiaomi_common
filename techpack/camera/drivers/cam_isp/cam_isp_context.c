@@ -1932,6 +1932,18 @@ static int __cam_isp_ctx_handle_deferred_buf_done_in_bubble(
 	return rc;
 }
 
+static bool __cam_isp_ctx_request_can_reapply(struct cam_isp_ctx_req *req_isp)
+{
+	int j;
+
+	for (j = 0; j < req_isp->num_fence_map_out; j++) {
+		if (req_isp->fence_map_out[j].sync_id == -1)
+			return false;
+	}
+
+	return true;
+}
+
 static int __cam_isp_ctx_handle_buf_done_for_request_verify_addr(
 	struct cam_isp_context *ctx_isp,
 	struct cam_ctx_request  *req,
@@ -2209,11 +2221,16 @@ check_deferred:
 			ctx_isp, &unhandled_done, bubble_state);
 
 	if (req_isp->num_acked > req_isp->num_fence_map_out) {
-		/* Should not happen */
-		CAM_ERR(CAM_ISP,
-			"WARNING: req_id %lld num_acked %d > map_out %d, ctx %u",
-			req->request_id, req_isp->num_acked,
-			req_isp->num_fence_map_out, ctx->ctx_id);
+		/* As long as we can re-apply the request, bubble is recoverable. */
+		if (req_isp->bubble_detected && __cam_isp_ctx_request_can_reapply(req_isp)) {
+			CAM_DBG(CAM_ISP, "num acked mismatch but can re-apply");
+			req_isp->num_acked = req_isp->num_fence_map_out;
+		} else {
+			CAM_ERR(CAM_ISP,
+				"WARNING: req_id %lld num_acked %d > map_out %d, ctx %u",
+				req->request_id, req_isp->num_acked,
+				req_isp->num_fence_map_out, ctx->ctx_id);
+		}
 	}
 
 	if (req_isp->num_acked != req_isp->num_fence_map_out)
