@@ -895,6 +895,7 @@ static void cam_ife_hw_mgr_stop_hw_res(
 	for (i = 0; i < CAM_ISP_HW_SPLIT_MAX; i++) {
 		if (!isp_hw_res->hw_res[i])
 			continue;
+		isp_hw_res->hw_res[i]->rdi_only_ctx = false;
 		hw_intf = isp_hw_res->hw_res[i]->hw_intf;
 
 		if (isp_hw_res->hw_res[i]->res_state !=
@@ -1551,6 +1552,7 @@ static int cam_ife_mgr_csid_stop_hw(
 				continue;
 
 			isp_res = hw_mgr_res->hw_res[i];
+			isp_res->rdi_only_ctx = false;
 			if (isp_res->hw_intf->hw_idx != base_idx)
 				continue;
 			CAM_DBG(CAM_ISP, "base_idx %d res:%s res_id %d cnt %u",
