@@ -18,6 +18,8 @@
 #include "cam_cpas_hw.h"
 #include "cam_cpas_soc.h"
 
+#define LLCC_RETRY 5
+
 static uint cpas_dump;
 module_param(cpas_dump, uint, 0644);
 
@@ -706,6 +708,7 @@ static int cam_cpas_parse_sys_cache_uids(
 {
 	enum cam_sys_cache_config_types type = CAM_LLCC_MAX;
 	int num_caches, i, rc;
+	int m = 0;
 	uint32_t scid;
 
 	soc_private->llcc_info = NULL;
@@ -756,13 +759,25 @@ static int cam_cpas_parse_sys_cache_uids(
 			goto end;
 		}
 
-		soc_private->llcc_info[i].slic_desc =
-			llcc_slice_getd(soc_private->llcc_info[i].uid);
+		do {
+			soc_private->llcc_info[i].slic_desc =
+				llcc_slice_getd(soc_private->llcc_info[i].uid);
 
-		if (IS_ERR_OR_NULL(soc_private->llcc_info[i].slic_desc)) {
-			CAM_ERR(CAM_CPAS,
-				"Failed to get slice desc for uid %u",
-				soc_private->llcc_info[i].uid);
+			if (IS_ERR_OR_NULL(soc_private->llcc_info[i].slic_desc)) {
+				CAM_ERR(CAM_CPAS,
+					"Failed to get slice desc for uid %u with retry %d",
+					soc_private->llcc_info[i].uid, m);
+			} else {
+				CAM_INFO(CAM_CPAS,
+					"Succeeded to get slice desc %lld with retry %d",
+					PTR_ERR(soc_private->llcc_info[i].slic_desc), m);
+				break;
+			}
+			msleep(1000);
+			m++;
+		} while (m <= LLCC_RETRY);
+
+		if (m >= LLCC_RETRY) {
 			rc = -EINVAL;
 			goto end;
 		}
