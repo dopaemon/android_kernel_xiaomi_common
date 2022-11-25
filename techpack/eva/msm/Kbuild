@@ -11,11 +11,13 @@ ccflags-y += -I$(srctree)/drivers/media/platform/msm/synx/
 KBUILD_CPPFLAGS += -DCONFIG_MSM_MMRM
 
 ifeq ($(CONFIG_ARCH_WAIPIO), y)
+# include $(EVA_ROOT)/config/waipio.mk
 KBUILD_CPPFLAGS += -DCONFIG_EVA_WAIPIO=1
 ccflags-y += -DCONFIG_EVA_WAIPIO=1
 endif
 
 ifeq ($(CONFIG_ARCH_KALAMA), y)
+# include $(EVA_ROOT)/config/waipio.mk
 KBUILD_CPPFLAGS += -DCONFIG_EVA_KALAMA=1
 ccflags-y += -DCONFIG_EVA_KALAMA=1
 endif
@@ -40,4 +42,3 @@ msm-eva-objs := eva/cvp.o \
         eva/msm_cvp_synx.o \
 		eva/cvp_fw_load.o
 obj-m += msm-eva.o
-
