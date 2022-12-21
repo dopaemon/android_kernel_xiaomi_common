@@ -144,6 +144,7 @@ static int _block2mtd_write(struct block2mtd_dev *dev, const u_char *buf,
 	int offset = to & ~PAGE_MASK;	// page offset
 	int cpylen;
 
+	printk(KERN_ERR "_block2mtd_write: start len = %d, mapping_index= %d \n",len,index);
 	while (len) {
 		if ((offset+len) > PAGE_SIZE)
 			cpylen = PAGE_SIZE - offset;	// multiple pages
@@ -171,6 +172,8 @@ static int _block2mtd_write(struct block2mtd_dev *dev, const u_char *buf,
 		offset = 0;
 		index++;
 	}
+
+	printk(KERN_ERR "_block2mtd_write: finish all \n");
 	return 0;
 }
 
@@ -186,6 +189,7 @@ static int block2mtd_write(struct mtd_info *mtd, loff_t to, size_t len,
 	mutex_unlock(&dev->write_mutex);
 	if (err > 0)
 		err = 0;
+	dev->mtd._sync(mtd);
 	return err;
 }
 
@@ -329,6 +333,8 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 		dev->mtd.index,
 		label ? label : dev->mtd.name + strlen("block2mtd: "),
 		dev->mtd.erasesize >> 10, dev->mtd.erasesize);
+
+	pr_err("block2mtd: add device sucess \n");
 	return dev;
 
 err_destroy_mutex:
