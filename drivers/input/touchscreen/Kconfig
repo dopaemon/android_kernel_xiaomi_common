@@ -1394,6 +1394,8 @@ config TOUCHSCREEN_HIMAX_HX83112B
 	help
 	  Say Y here to enable support for Himax hx83112b touchscreens.
 
+source "drivers/input/touchscreen/fts_spi/Kconfig"
+
 	  If unsure, say N.
 
 	  To compile this driver as a module, choose M here: the
