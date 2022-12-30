@@ -936,4 +936,6 @@ config LRU_GEN_STATS
 
 source "mm/damon/Kconfig"
 
+source "mm/oplus_mm/Kconfig"
+
 endmenu
