@@ -1030,4 +1030,6 @@ config KMAP_LOCAL_NON_LINEAR_PTE_ARRAY
 
 source "mm/damon/Kconfig"
 
+source "mm/oplus_mm/Kconfig"
+
 endmenu
