@@ -423,7 +423,7 @@ module_param_named(cpu_intensive_warning_thresh, wq_cpu_intensive_warning_thresh
 #endif
 
 /* see the comment above the definition of WQ_POWER_EFFICIENT */
-static bool wq_power_efficient = IS_ENABLED(CONFIG_WQ_POWER_EFFICIENT_DEFAULT);
+static bool wq_power_efficient = true;
 module_param_named(power_efficient, wq_power_efficient, bool, 0444);
 
 static bool wq_online;			/* can kworkers be created yet? */
