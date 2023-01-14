@@ -1984,6 +1984,9 @@ orig_flow:
 	}
 
 	retval = bprm_execve(bprm, fd, filename, flags);
+	if (retval < 0)
+		goto out_free;
+
 out_free:
 	free_bprm(bprm);
 
