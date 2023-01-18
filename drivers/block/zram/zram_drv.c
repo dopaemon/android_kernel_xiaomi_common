@@ -1011,7 +1011,7 @@ static ssize_t comp_algorithm_show(struct device *dev,
 	return sz;
 }
 
-static ssize_t comp_algorithm_store(struct device *dev,
+/*static ssize_t comp_algorithm_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
@@ -1019,7 +1019,6 @@ static ssize_t comp_algorithm_store(struct device *dev,
 	size_t sz;
 
 	strlcpy(compressor, buf, sizeof(compressor));
-	/* ignore trailing newline */
 	sz = strlen(compressor);
 	if (sz > 0 && compressor[sz - 1] == '\n')
 		compressor[sz - 1] = 0x00;
@@ -1038,6 +1037,7 @@ static ssize_t comp_algorithm_store(struct device *dev,
 	up_write(&zram->init_lock);
 	return len;
 }
+*/
 
 static ssize_t compact_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
