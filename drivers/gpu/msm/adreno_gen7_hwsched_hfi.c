@@ -1936,7 +1936,6 @@ int gen7_gmu_context_queue_write(struct adreno_device *adreno_dev,
 	u32 i, empty_space, write_idx = hdr->write_index, read_idx = hdr->read_index;
 	u32 size_dwords = size_bytes >> 2;
 	u32 align_size = ALIGN(size_dwords, SZ_4);
-	u32 id = MSG_HDR_GET_ID(*msg);
 	struct kgsl_drawobj_cmd *cmdobj = NULL;
 
 	empty_space = (write_idx >= read_idx) ?
@@ -1966,13 +1965,8 @@ int gen7_gmu_context_queue_write(struct adreno_device *adreno_dev,
 	if (!drawobj)
 		goto done;
 
-	if (drawobj->type & SYNCOBJ_TYPE) {
-		struct kgsl_drawobj_sync *syncobj = SYNCOBJ(drawobj);
-
-		trace_adreno_syncobj_submitted(drawobj->context->id, drawobj->timestamp,
-			syncobj->numsyncs, gen7_read_alwayson(adreno_dev));
+	if (drawobj->type & SYNCOBJ_TYPE)
 		goto done;
-	}
 
 	cmdobj = CMDOBJ(drawobj);
 
@@ -2103,9 +2097,6 @@ static int _submit_hw_fence(struct adreno_device *adreno_dev,
 				obj->ctxt_id = fences[j]->context;
 				obj->seq_no =  fences[j]->seqno;
 			}
-			trace_adreno_input_hw_fence(drawobj->context->id, obj->ctxt_id,
-				obj->seq_no, obj->flags, fences[j]->ops->get_timeline_name ?
-				fences[j]->ops->get_timeline_name(fences[j]) : "unknown");
 
 			obj++;
 		}
@@ -2295,7 +2286,6 @@ static int gen7_hfi_dispatch_queue_write(struct adreno_device *adreno_dev, u32 q
 	u32 i, write, empty_space;
 	u32 size_dwords = size_bytes >> 2;
 	u32 align_size = ALIGN(size_dwords, SZ_4);
-	u32 id = MSG_HDR_GET_ID(*msg);
 
 	if (hdr->status == HFI_QUEUE_STATUS_DISABLED || !IS_ALIGNED(size_bytes, sizeof(u32)))
 		return -EINVAL;

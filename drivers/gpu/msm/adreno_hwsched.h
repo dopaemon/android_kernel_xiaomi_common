@@ -167,17 +167,6 @@ void adreno_hwsched_fault(struct adreno_device *adreno_dev, u32 fault);
  */
 void adreno_hwsched_clear_fault(struct adreno_device *adreno_dev);
 
-/**
- * adreno_hwsched_parse_fault_ib - Parse the faulty submission
- * @adreno_dev: pointer to the adreno device
- * @snapshot: Pointer to the snapshot structure
- *
- * Walk the list of active submissions to find the one that faulted and
- * parse it so that relevant command buffers can be added to the snapshot
- */
-void adreno_hwsched_parse_fault_cmdobj(struct adreno_device *adreno_dev,
-	struct kgsl_snapshot *snapshot);
-
 void adreno_hwsched_flush(struct adreno_device *adreno_dev);
 
 /**

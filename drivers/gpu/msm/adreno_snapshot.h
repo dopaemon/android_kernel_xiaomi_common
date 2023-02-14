@@ -8,6 +8,8 @@
 
 #include "kgsl_snapshot.h"
 
+#if 0
+
 #define CP_CRASH_DUMPER_TIMEOUT 500
 
 #define DEBUG_SECTION_SZ(_dwords) (((_dwords) * sizeof(unsigned int)) \
@@ -115,4 +117,5 @@ void adreno_snapshot_dump_all_ibs(struct kgsl_device *device,
 			unsigned int *rbptr,
 			struct kgsl_snapshot *snapshot);
 
+#endif
 #endif /*__ADRENO_SNAPSHOT_H */
