@@ -545,7 +545,7 @@ static unsigned int uksm_max_cpu_percentage;
 
 static int uksm_cpu_governor = CONFIG_UKSM_CPU_GOVERNOR;
 
-static char *uksm_cpu_governor_str[4] = { "full", "medium", "low", "quiet" };
+static char *uksm_cpu_governor_str[5] = { "full", "medium", "low", "quiet", "android" };
 
 struct uksm_cpu_preset_s {
 	int cpu_ratio[SCAN_LADDER_SIZE];
@@ -553,7 +553,7 @@ struct uksm_cpu_preset_s {
 	unsigned int max_cpu; /* percentage */
 };
 
-struct uksm_cpu_preset_s uksm_cpu_preset[4] = {
+struct uksm_cpu_preset_s uksm_cpu_preset[5] = {
 	{
 		{
 			20,
@@ -613,6 +613,21 @@ struct uksm_cpu_preset_s uksm_cpu_preset[4] = {
 			1000
 		},
 		1
+	},
+	{
+		{
+			100,
+			-TIME_RATIO_SCALE / 10,
+			-TIME_RATIO_SCALE / 2,
+			-TIME_RATIO_SCALE
+		},
+		{
+			1000,
+			500,
+			200,
+			50
+		},
+		90
 	},
 };
 
