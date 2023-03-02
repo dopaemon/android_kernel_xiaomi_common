@@ -543,7 +543,7 @@ static unsigned int uksm_sleep_saved;
 /* Max percentage of cpu utilization ksmd can take to scan in one batch */
 static unsigned int uksm_max_cpu_percentage;
 
-static int uksm_cpu_governor;
+static int uksm_cpu_governor = CONFIG_UKSM_CPU_GOVERNOR;
 
 static char *uksm_cpu_governor_str[4] = { "full", "medium", "low", "quiet" };
 
