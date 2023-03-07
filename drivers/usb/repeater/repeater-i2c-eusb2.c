@@ -18,6 +18,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/types.h>
 #include <linux/usb/repeater.h>
+#include <linux/usb/dwc3-msm.h>
 
 #define NUM_SUPPLIES			2
 
@@ -82,6 +83,8 @@ struct eusb2_repeater {
 	struct gpio_desc		*reset_gpiod;
 	u32				*param_override_seq;
 	u8				param_override_seq_cnt;
+	u32				*param_override_seq_host;
+	u8				param_override_seq_cnt_host;
 };
 
 static const struct regmap_config eusb2_i2c_regmap = {
@@ -107,7 +110,7 @@ static int eusb2_i2c_read_reg(struct eusb2_repeater *er, u8 reg, u8 *val)
 	return 0;
 }
 
-static int eusb2_i2c_write_reg(struct eusb2_repeater *er, u8 reg, u8 val)
+static int eusb2_i2c_write_reg(struct eusb2_repeater *er, u8 reg, u32 val)
 {
 	int ret;
 
@@ -168,7 +171,7 @@ static int eusb2_repeater_power(struct eusb2_repeater *er, bool on)
 	return ret;
 }
 
-static int eusb2_repeater_init(struct usb_repeater *ur)
+static int eusb2_repeater_init(struct usb_repeater *ur, unsigned int flags)
 {
 	struct eusb2_repeater *er =
 			container_of(ur, struct eusb2_repeater, ur);
@@ -193,11 +196,18 @@ static int eusb2_repeater_init(struct usb_repeater *ur)
 	dev_dbg(er->ur.dev, "eUSB2 repeater version = 0x%x ur->flags:0x%x\n", reg_val, ur->flags);
 
 	/* override init sequence using devicetree based values */
-	if (er->param_override_seq_cnt)
-		eusb2_repeater_update_seq(er, er->param_override_seq,
+	if (er->param_override_seq_cnt) {
+		if (flags & PHY_HOST_MODE) {
+			/*it's host, then write host eye params*/
+			eusb2_repeater_update_seq(er, er->param_override_seq_host,
+					er->param_override_seq_cnt_host);
+			dev_info(er->ur.dev, "eUSB2 repeater init host \n");
+		} else {
+			eusb2_repeater_update_seq(er, er->param_override_seq,
 					er->param_override_seq_cnt);
-
-	dev_dbg(er->ur.dev, "eUSB2 repeater init\n");
+			dev_info(er->ur.dev, "eUSB2 repeater init device!\n");
+		}
+	}
 
 	return 0;
 }
@@ -322,6 +332,30 @@ static int eusb2_repeater_i2c_probe(struct i2c_client *client)
 					"qcom,param-override-seq read failed\n");
 	}
 
+	/*This is for host params. start*/
+	num_elem = of_property_count_elems_of_size(dev->of_node, "qcom,param-override-seq-host",
+				sizeof(*er->param_override_seq_host));
+	if (num_elem > 0) {
+		if (num_elem % 2) {
+			return dev_err_probe(dev, -EINVAL, "invalid param_override_seq_len\n");
+		}
+
+		er->param_override_seq_cnt_host = num_elem;
+		er->param_override_seq_host = devm_kcalloc(dev,
+				er->param_override_seq_cnt_host,
+				sizeof(*er->param_override_seq_host), GFP_KERNEL);
+		if (!er->param_override_seq_host)
+			return -ENOMEM;
+
+		ret = of_property_read_u32_array(dev->of_node,
+				"qcom,param-override-seq-host",
+				er->param_override_seq_host,
+				er->param_override_seq_cnt_host);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					"qcom,param-override-seq-host read failed\n");
+	}
+	/*This is for host params. end*/
 
 	er->ur.dev = dev;
 
