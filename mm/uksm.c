@@ -5285,14 +5285,16 @@ UKSM_ATTR_RO(ema_per_page_time);
 static ssize_t pages_shared_show(struct kobject *kobj,
 				 struct kobj_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%lu\n", uksm_pages_shared);
+	return sprintf(buf, "%lu\n", uksm_pages_shared +
+		       (global_zone_page_state(NR_UKSM_ZERO_PAGES) ? 1 : 0));
 }
 UKSM_ATTR_RO(pages_shared);
 
 static ssize_t pages_sharing_show(struct kobject *kobj,
 				  struct kobj_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%lu\n", uksm_pages_sharing);
+	return sprintf(buf, "%lu\n", uksm_pages_sharing +
+		       global_zone_page_state(NR_UKSM_ZERO_PAGES));
 }
 UKSM_ATTR_RO(pages_sharing);
 
