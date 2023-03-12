@@ -128,3 +128,5 @@ obj-$(CONFIG_MAPPING_DIRTY_HELPERS) += mapping_dirty_helpers.o
 obj-$(CONFIG_PTDUMP_CORE) += ptdump.o
 obj-$(CONFIG_PAGE_REPORTING) += page_reporting.o
 obj-$(CONFIG_OPLUS_FEATURE_PERFORMANCE_MM) += oplus_mm/
+
+CFLAGS_kmemleak.o += -DCONFIG_DEBUG_FS
