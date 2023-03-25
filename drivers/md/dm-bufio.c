@@ -1143,7 +1143,8 @@ EXPORT_SYMBOL_GPL(dm_bufio_get);
 void *dm_bufio_read(struct dm_bufio_client *c, sector_t block,
 		    struct dm_buffer **bp)
 {
-	BUG_ON(dm_bufio_in_request());
+	if (WARN_ON_ONCE(dm_bufio_in_request()))
+		return ERR_PTR(-EINVAL);
 
 	return new_read(c, block, NF_READ, bp);
 }
@@ -1152,7 +1153,8 @@ EXPORT_SYMBOL_GPL(dm_bufio_read);
 void *dm_bufio_new(struct dm_bufio_client *c, sector_t block,
 		   struct dm_buffer **bp)
 {
-	BUG_ON(dm_bufio_in_request());
+	if (WARN_ON_ONCE(dm_bufio_in_request()))
+		return ERR_PTR(-EINVAL);
 
 	return new_read(c, block, NF_FRESH, bp);
 }
@@ -1165,7 +1167,8 @@ void dm_bufio_prefetch(struct dm_bufio_client *c,
 
 	LIST_HEAD(write_list);
 
-	BUG_ON(dm_bufio_in_request());
+	if (WARN_ON_ONCE(dm_bufio_in_request()))
+		return; /* should never happen */
 
 	blk_start_plug(&plug);
 	dm_bufio_lock(c);
@@ -1271,7 +1274,8 @@ void dm_bufio_write_dirty_buffers_async(struct dm_bufio_client *c)
 {
 	LIST_HEAD(write_list);
 
-	BUG_ON(dm_bufio_in_request());
+	if (WARN_ON_ONCE(dm_bufio_in_request()))
+		return; /* should never happen */
 
 	dm_bufio_lock(c);
 	__write_dirty_buffers_async(c, 0, &write_list);
@@ -1377,7 +1381,8 @@ int dm_bufio_issue_flush(struct dm_bufio_client *c)
 		.count = 0,
 	};
 
-	BUG_ON(dm_bufio_in_request());
+	if (WARN_ON_ONCE(dm_bufio_in_request()))
+		return -EINVAL;
 
 	return dm_io(&io_req, 1, &io_reg, NULL);
 }
@@ -1401,7 +1406,8 @@ int dm_bufio_issue_discard(struct dm_bufio_client *c, sector_t block, sector_t c
 		.count = block_to_sector(c, count),
 	};
 
-	BUG_ON(dm_bufio_in_request());
+	if (WARN_ON_ONCE(dm_bufio_in_request()))
+		return -EINVAL; /* discards are optional */
 
 	return dm_io(&io_req, 1, &io_reg, NULL);
 }
