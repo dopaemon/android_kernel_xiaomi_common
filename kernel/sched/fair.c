@@ -54,9 +54,9 @@ unsigned int __read_mostly starve_divisor		= 3000000; // 3ms
  *
  * (default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
  */
-unsigned int sysctl_sched_latency			= 6000000ULL;
+unsigned int sysctl_sched_latency			= 5000000ULL;
 EXPORT_SYMBOL_GPL(sysctl_sched_latency);
-static unsigned int normalized_sysctl_sched_latency	= 6000000ULL;
+static unsigned int normalized_sysctl_sched_latency	= 5000000ULL;
 
 /*
  * The initial- and re-scaling of tunables is configurable
