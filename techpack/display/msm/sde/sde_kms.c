@@ -54,6 +54,7 @@
 #include "sde_reg_dma.h"
 #include "sde_connector.h"
 #include "sde_vm.h"
+#include "mi_disp_print.h"
 
 #include <linux/qcom_scm.h>
 #include <linux/qcom-iommu-util.h>
@@ -957,6 +958,8 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 	struct sde_connector *c_conn;
 	int i, old_mode, new_mode, old_fps, new_fps;
 	enum panel_event_notifier_tag panel_type;
+	ktime_t start_ktime;
+	s64 elapsed_us;
 
 	for_each_old_connector_in_state(old_state, connector,
 			old_conn_state, i) {
@@ -965,14 +968,20 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 		if (!crtc)
 			continue;
 
-		new_fps = drm_mode_vrefresh(&crtc->state->mode);
+		if (crtc->state->mode.hskew)
+			new_fps = crtc->state->mode.hskew;
+		else
+			new_fps = drm_mode_vrefresh(&crtc->state->mode);
 		new_mode = _sde_kms_get_blank(crtc->state, connector->state);
 
 		if (old_conn_state->crtc) {
 			old_crtc_state = drm_atomic_get_existing_crtc_state(
 					old_state, old_conn_state->crtc);
 
-			old_fps = drm_mode_vrefresh(&old_crtc_state->mode);
+			if (old_crtc_state->mode.hskew)
+				old_fps = old_crtc_state->mode.hskew;
+			else
+				old_fps = drm_mode_vrefresh(&old_crtc_state->mode);
 			old_mode = _sde_kms_get_blank(old_crtc_state,
 							old_conn_state);
 		} else {
@@ -980,7 +989,7 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 			old_mode = DRM_PANEL_EVENT_BLANK;
 		}
 
-		if ((old_mode != new_mode) || (old_fps != new_fps)) {
+		if ((old_mode != new_mode) || ((old_fps != new_fps) && (old_fps != 0))) {
 			c_conn = to_sde_connector(connector);
 			SDE_EVT32(old_mode, new_mode, old_fps, new_fps,
 				c_conn->panel, crtc->state->active,
@@ -1009,8 +1018,15 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 			notification.notif_data.old_fps = old_fps;
 			notification.notif_data.new_fps = new_fps;
 			notification.notif_data.early_trigger = is_pre_commit;
+			start_ktime = ktime_get();
+			SDE_ATRACE_BEGIN("panel_event_notification_trigger");
 			panel_event_notification_trigger(panel_type,
 					&notification);
+			SDE_ATRACE_END("panel_event_notification_trigger");
+			elapsed_us = ktime_us_delta(ktime_get(), start_ktime);
+			DISP_TIME_INFO("%s early_trigger:%d (power mode %d->%d, fps %d->%d) - %d.%d(ms)\n",
+				c_conn->name, is_pre_commit, old_mode, new_mode, old_fps, new_fps,
+				(int)(elapsed_us / 1000), (int)(elapsed_us % 1000));
 		}
 	}
 
@@ -1498,6 +1514,7 @@ static void sde_kms_complete_commit(struct msm_kms *kms,
 	struct drm_crtc_state *old_crtc_state;
 	struct drm_connector *connector;
 	struct drm_connector_state *old_conn_state;
+	struct drm_encoder *drm_enc;
 	struct msm_display_conn_params params;
 	struct sde_vm_ops *vm_ops;
 	int i, rc = 0;
@@ -1519,6 +1536,13 @@ static void sde_kms_complete_commit(struct msm_kms *kms,
 
 	for_each_old_crtc_in_state(old_state, crtc, old_crtc_state, i) {
 		sde_crtc_complete_commit(crtc, old_crtc_state);
+
+		drm_for_each_encoder_mask(drm_enc, crtc->dev, old_crtc_state->encoder_mask) {
+			if (sde_encoder_in_clone_mode(drm_enc))
+				continue;
+
+			sde_encoder_update_complete_commit(drm_enc, old_crtc_state);
+		}
 
 		/* complete secure transitions if any */
 		if (sde_kms->smmu_state.transition_type == POST_COMMIT)
@@ -1623,7 +1647,7 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 
 	sde_crtc_static_cache_read_kickoff(crtc);
 
-	SDE_ATRACE_END("sde_ksm_wait_for_commit_done");
+	SDE_ATRACE_END("sde_kms_wait_for_commit_done");
 }
 
 static void sde_kms_prepare_fence(struct msm_kms *kms,
