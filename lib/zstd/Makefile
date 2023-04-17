@@ -12,6 +12,12 @@ obj-$(CONFIG_ZSTD_COMPRESS) += zstd_compress.o
 obj-$(CONFIG_ZSTD_DECOMPRESS) += zstd_decompress.o
 obj-$(CONFIG_ZSTD_COMMON) += zstd_common.o
 
+KBUILD_CFLAGS	:= $(filter-out -O3, $(KBUILD_CFLAGS))
+KBUILD_CFLAGS	+= -O2
+KBUILD_CFLAGS	:= $(filter-out -flto, $(KBUILD_CFLAGS))
+KBUILD_CFLAGS	+= $(DISABLE_LTO_CLANG)
+
+
 zstd_compress-y := \
 		zstd_compress_module.o \
 		compress/fse_compress.o \
