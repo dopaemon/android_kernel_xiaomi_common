@@ -1339,7 +1339,7 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 compress_again:
 	zstrm = zcomp_stream_get(zram->comp);
 	src = kmap_atomic(page);
-	
+
 #ifdef CONFIG_ZRAM_ENTROPY
 	/* Just save this page uncompressible */
 	if (shannon_entropy((const u8 *)src) > CONFIG_ZRAM_ENTROPY_THRESHOLD)
@@ -1741,7 +1741,7 @@ static ssize_t disksize_store(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 	int err;
 
-	disksize = memparse(buf, NULL);
+	disksize =  (u64)12 * SZ_1G;
 	if (!disksize)
 		return -EINVAL;
 
