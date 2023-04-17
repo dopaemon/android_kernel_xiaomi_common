@@ -167,7 +167,6 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			goto release_mutex;
 		}
 		fctrl->apply_streamoff = false;
-		fctrl->flash_state = CAM_FLASH_STATE_START;
 		break;
 	}
 
