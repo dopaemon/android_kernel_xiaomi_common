@@ -292,10 +292,10 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	if (is_hiload && nl >= mult_frac(cpu_util, NL_RATIO, 100))
 		*util = *max;
 
-	if (wg_policy->tunables->pl) {
+	if (wg_policy->tunables->pl && pl > *util) {
 		if (sysctl_sched_conservative_pl)
 			pl = mult_frac(pl, TARGET_LOAD, 100);
-		*util = max(*util, pl);
+		*util = (*util + pl) / 2;
 	}
 }
 
