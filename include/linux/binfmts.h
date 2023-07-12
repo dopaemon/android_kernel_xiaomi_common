@@ -143,21 +143,4 @@ extern bool task_is_zygote(struct task_struct *p);
 int kernel_execve(const char *filename,
 		  const char *const *argv, const char *const *envp);
 
-static inline bool task_is_booster(struct task_struct *tsk)
-{
-	char comm[sizeof(tsk->comm)];
-
-	get_task_comm(comm, tsk);
-	return !strcmp(comm, "init") || !strcmp(comm, "NodeLooperThrea") ||
-	       !strcmp(comm, "power@1.2-servi") ||
-	       !strcmp(comm, "power@1.3-servi") ||
-	       !strcmp(comm, "perf@1.0-servic") ||
-	       !strcmp(comm, "perf@2.0-servic") ||
-	       !strcmp(comm, "perf@2.1-servic") ||
-	       !strcmp(comm, "perf@2.2-servic") ||
-	       !strcmp(comm, "power@2.0-servic") ||
-	       !strcmp(comm, "iop@") ||
-	       !strcmp(comm, "init.qcom.post_");
-}
-
 #endif /* _LINUX_BINFMTS_H */
