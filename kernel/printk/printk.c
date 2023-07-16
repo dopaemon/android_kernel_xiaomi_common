@@ -780,6 +780,12 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 			goto skip_write;
 #endif
 
+	if ((strstr(line, "healthd")) || (strstr(line, "logd")) ||
+		 strstr(line, "dashd")) {
+		kfree(buf);
+		return len;
+	}
+
 	devkmsg_emit(facility, level, "%s", line);
 skip_write:
 	kfree(buf);
