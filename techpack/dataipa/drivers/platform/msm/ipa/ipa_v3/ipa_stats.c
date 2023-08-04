@@ -1964,7 +1964,7 @@ dev_alloc_err:
 	return -ENODEV;
 }
 
-int ipa_spearhead_stats_init()
+int ipa_spearhead_stats_init(void)
 {
 	int ret;
 
