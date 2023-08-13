@@ -120,4 +120,6 @@ source "drivers/staging/hikey9xx/Kconfig"
 
 source "drivers/staging/binder_prio/Kconfig"
 
+source "drivers/staging/extend_reclaim/Kconfig"
+
 endif # STAGING
