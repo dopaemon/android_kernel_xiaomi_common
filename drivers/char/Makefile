@@ -56,3 +56,4 @@ obj-$(CONFIG_ADI)		+= adi.o
 obj-$(CONFIG_MSM_RDBG)		+= rdbg.o
 
 obj-$(CONFIG_LRNG)		+= lrng/
+obj-$(CONFIG_XLOGCHAR)		+= xlogchar.o
