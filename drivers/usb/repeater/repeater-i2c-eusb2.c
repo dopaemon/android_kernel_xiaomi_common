@@ -456,6 +456,7 @@ static int eusb2_repeater_i2c_probe(struct i2c_client *client)
 	ret = usb_add_repeater_dev(&er->ur);
 	if (ret)
 		goto err_probe;
+	pr_info("%s success.\n", __func__);
 
 	return 0;
 
