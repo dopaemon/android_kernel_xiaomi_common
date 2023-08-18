@@ -1722,7 +1722,6 @@ static void zram_reset_device(struct zram *zram)
 	set_capacity(zram->disk, 0);
 	part_stat_set_all(&zram->disk->part0, 0);
 
-	up_write(&zram->init_lock);
 	/* I/O operation under all of CPU are done so let's free */
 	zram_meta_free(zram, disksize);
 	memset(&zram->stats, 0, sizeof(zram->stats));
@@ -1731,6 +1730,7 @@ static void zram_reset_device(struct zram *zram)
 #ifdef CONFIG_HYBRIDSWAP_CORE
 	hybridswap_unbind(zram);
 #endif
+	up_write(&zram->init_lock);
 }
 
 static ssize_t disksize_store(struct device *dev,
