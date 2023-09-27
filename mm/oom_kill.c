@@ -1148,15 +1148,16 @@ bool out_of_memory(struct oom_control *oc)
 {
 	unsigned long freed = 0;
 
-	if (oom_killer_disabled)
-		return false;
-
 	/*
-	 * Simple LMK handles global memory pressure. Memcg OOMs are left to the
-	 * OOM killer since Simple LMK doesn't enforce memcg limits, and memcg
-	 * stays enabled on GKI kernels.
+	 * Simple LMK handles global memory pressure and automatically kills in
+	 * the background, so return true to indicate progress. Memcg OOMs are
+	 * left to the OOM killer since Simple LMK doesn't enforce memcg limits,
+	 * and memcg stays enabled on GKI kernels.
 	 */
 	if (IS_ENABLED(CONFIG_ANDROID_SIMPLE_LMK) && !is_memcg_oom(oc))
+		return true;
+
+	if (oom_killer_disabled)
 		return false;
 
 	if (!is_memcg_oom(oc)) {
