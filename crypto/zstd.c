@@ -15,7 +15,7 @@
 #include <crypto/internal/scompress.h>
 
 
-static int __read_mostly compression_level = 1;
+static int __read_mostly compression_level = 3;
 
 int set_compression_level(const char *val, const struct kernel_param *kp)
 {
