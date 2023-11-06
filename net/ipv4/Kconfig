@@ -691,6 +691,20 @@ config TCP_CONG_BBRPLUS
           Originally introduced by dog250 & cx9208.
           Same as BBR, requires the fq ("Fair Queue") pacing packet scheduler.
 
+config TCP_CONG_BRUTAL
+	tristate "BRUTAL TCP"
+	default n
+	help
+
+	TCP Brutal is just a congestion control algorithm for TCP and does not modify the TCP protocol itself,
+	so it does not affect compatibility with other TCP implementations.
+	In other words, clients and servers can use TCP Brutal unilaterally.
+	The congestion control algorithm governs the sending of data,
+	and since proxy users typically download far more data than they upload,
+	implementing TCP Brutal on the server side alone can reap most of the benefits.
+	(Clients using TCP Brutal could achieve better upload speeds, but many users are on Windows, MacOS, or phones,
+	where installing kernel modules is not practical.)
+
 choice
 	prompt "Default TCP congestion control"
 	default DEFAULT_BBRPLUS
@@ -731,6 +745,9 @@ choice
         config DEFAULT_BBRPLUS
                 bool "BBRPLUS" if TCP_CONG_BBRPLUS=y
 
+	config DEFAULT_BRUTAL
+		bool "BRUTAL" if TCP_CONG_BRUTAL=y
+
 	config DEFAULT_RENO
 		bool "Reno"
 endchoice
@@ -756,7 +773,7 @@ config DEFAULT_TCP_CONG
 	default "cdg" if DEFAULT_CDG
 	default "bbr" if DEFAULT_BBR
         default "bbrplus" if DEFAULT_BBRPLUS
-	default "bbrplus"
+	default "brutal" if DEFAULT_BRUTAL
 
 config TCP_MD5SIG
 	bool "TCP: MD5 Signature Option support (RFC2385)"
