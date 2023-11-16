@@ -38,9 +38,10 @@ void mi_dsi_update_backlight_in_aod(struct dsi_panel *panel,
 
 static u64 g_panel_id[MI_DISP_MAX];
 
+/*
 typedef int (*mi_display_pwrkey_callback)(int);
 extern void mi_display_pwrkey_callback_set(mi_display_pwrkey_callback);
-
+*/
 
 struct dsi_panel *g_panel;
 
@@ -99,6 +100,7 @@ int mi_dsi_panel_init(struct dsi_panel *panel)
 	mi_dsi_panel_parse_config(panel);
 	mi_panel_id_init(panel);
 	atomic_set(&mi_cfg->real_brightness_clone, 0);
+	/*
 	if (mi_get_panel_id(panel->mi_cfg.mi_panel_id) == M16T_PANEL_PA ||
 		mi_get_panel_id(panel->mi_cfg.mi_panel_id) == M16T_PANEL_PB||
 		mi_get_panel_id(panel->mi_cfg.mi_panel_id) == M80_PANEL_PA ||
@@ -106,6 +108,7 @@ int mi_dsi_panel_init(struct dsi_panel *panel)
 		mi_get_panel_id(panel->mi_cfg.mi_panel_id) == N16_PANEL_PB){
 		mi_display_pwrkey_callback_set(mi_display_powerkey_callback);
 	}
+	*/
 
 	return 0;
 }
