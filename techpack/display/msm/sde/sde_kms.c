@@ -67,6 +67,7 @@
 #define CREATE_TRACE_POINTS
 #include "sde_trace.h"
 
+#include "mi_dsi_display.h"
 /* defines for secure channel call */
 #define MEM_PROTECT_SD_CTRL_SWITCH 0x18
 #define MDP_DEVICE_ID            0x1A
@@ -758,12 +759,13 @@ static int _sde_kms_release_shared_buffer(unsigned int mem_addr,
 		SDE_ERROR("invalid params\n");
 		return -EINVAL;
 	}
-
-	/* leave ramdump memory only if base address matches */
-	if (ramdump_base == mem_addr &&
-			ramdump_buffer_size <= splash_buffer_size) {
-		mem_addr +=  ramdump_buffer_size;
-		splash_buffer_size -= ramdump_buffer_size;
+	if (mi_dsi_display_ramdump_support()) {
+		/* leave ramdump memory only if base address matches */
+		if (ramdump_base == mem_addr &&
+				ramdump_buffer_size <= splash_buffer_size) {
+			mem_addr +=  ramdump_buffer_size;
+			splash_buffer_size -= ramdump_buffer_size;
+		}
 	}
 
 	pfn_start = mem_addr >> PAGE_SHIFT;
@@ -3995,7 +3997,8 @@ retry:
 			continue;
 
 		lp = sde_connector_get_lp(conn);
-		if (lp == SDE_MODE_DPMS_LP1) {
+		if (lp == SDE_MODE_DPMS_LP1 &&
+			!sde_encoder_check_curr_mode(conn->encoder, MSM_DISPLAY_VIDEO_MODE)) {
 			/* transition LP1->LP2 on pm suspend */
 			ret = sde_connector_set_property_for_commit(conn, state,
 					CONNECTOR_PROP_LP, SDE_MODE_DPMS_LP2);

@@ -13,6 +13,16 @@
 #include <linux/pm_wakeup.h>
 #include <drm/mi_disp.h>
 
+#define PMIC_PWRKEY_BARK_TRIGGER 1
+#define PMIC_PWRKEY_TRIGGER 2
+#define PMIC_PWRKEY_CLOSE_BRIGHNESS 3
+#define DISPLAY_DELAY_SHUTDOWN_TIME_MS 1800
+
+#define TEMP_INDEX1_36 0x01
+#define TEMP_INDEX2_32 0x20
+#define TEMP_INDEX3_28 0x40
+#define TEMP_INDEX4_off 0x80
+
 struct dsi_panel;
 
 enum backlight_dimming_state {
@@ -73,11 +83,47 @@ struct dc_lut_cfg {
 	u8 exit_dc_lut[DC_LUT_MAX][75];
 };
 
+struct lockdown_cfg {
+	u8 lockdown_param[8];
+};
+
 struct flat_mode_cfg {
 	bool update_done;
-	bool cur_flat_state;  /*only use when flat cmd need sync with te*/
+	int cur_flat_state;  /*only use when flat cmd need sync with te*/
 	u8 flat_on_data[4];
 	u8 flat_off_data[4];
+};
+
+struct mi_panel_flatmode_config {
+	struct dsi_panel_cmd_set offset_cmd;
+	struct dsi_panel_cmd_set status_cmd;
+	struct dsi_panel_cmd_set offset_end_cmd;
+	u32 *status_cmds_rlen;
+	u32 *status_value;
+	u8 *return_buf;
+	u8 *status_buf;
+};
+
+struct mi_drm_panel_build_id_config {
+	struct dsi_panel_cmd_set id_cmd;
+	u32 id_cmds_rlen;
+	u8 build_id;
+};
+
+struct drm_panel_wp_config {
+	struct dsi_panel_cmd_set pre_tx_cmd;
+	struct dsi_panel_cmd_set wp_cmd;
+	u32 wp_read_info_index;
+	u32 wp_cmds_rlen;
+	u8 *return_buf;
+};
+
+struct drm_panel_cell_id_config {
+	struct dsi_panel_cmd_set pre_tx_cmd;
+	struct dsi_panel_cmd_set cell_id_cmd;
+	u32 cell_id_read_info_index;
+	u32 cell_id_cmds_rlen;
+	u8 *return_buf;
 };
 
 struct mi_dsi_panel_cfg {
@@ -85,6 +131,10 @@ struct mi_dsi_panel_cfg {
 
 	/* xiaomi panel id */
 	u64 mi_panel_id;
+
+	bool is_tddi_flag;
+	bool tddi_doubleclick_flag;
+	bool panel_dead_flag;
 
 	/* xiaomi feature values */
 	int feature_val[DISP_FEATURE_MAX];
@@ -95,9 +145,17 @@ struct mi_dsi_panel_cfg {
 	int esd_err_irq_flags;
 	bool esd_err_enabled;
 
+
+	/* indicate esd check gpio and config irq */
+	int esd_err_irq_gpio_second;
+	int esd_err_irq_second;
+	int esd_err_irq_flags_second;
+	bool esd_err_enabled_second;
+
 	/* brightness control */
 	u32 last_bl_level;
 	u32 last_no_zero_bl_level;
+	bool bl_sync_flag;
 	/* set by user space */
 	/* maybe less than @brightness_clone due to thermal limit */
 	u32 user_brightness_clone;
@@ -106,6 +164,10 @@ struct mi_dsi_panel_cfg {
 	u32 normal_max_brightness_clone;
 	u32 thermal_max_brightness_clone;
 	bool thermal_dimming_enabled;
+
+	/* software build id */
+	bool panel_build_id_read_needed;
+	struct mi_drm_panel_build_id_config id_config;
 
 	/* AOD control */
 	u32 doze_brightness;
@@ -120,16 +182,14 @@ struct mi_dsi_panel_cfg {
 	bool local_hbm_enabled;
 	u32 lhbm_ui_ready_delay_frame;
 	bool need_fod_animal_in_normal;
-	bool aod_to_normal_statue;
+	bool aod_to_normal_status;
 	bool in_fod_calibration;
-	bool fod_low_brightness_allow;
-	int fod_low_brightness_lux_threshold;
-	int fod_low_brightness_clone_threshold;
 	bool lhbm_g500_update_flag;
 	bool lhbm_g500_updatedone;
 	bool lhbm_alpha_ctrlaa;
 	bool lhbm_ctrl_df_reg;
 	bool lhbm_ctrl_b2_reg;
+	bool lhbm_ctrl_63_C5_reg;
 	bool lhbm_w1000_update_flag;
 	bool lhbm_w1000_readbackdone;
 	bool lhbm_w110_update_flag;
@@ -147,6 +207,9 @@ struct mi_dsi_panel_cfg {
 	/* DDIC round corner */
 	bool ddic_round_corner_enabled;
 
+	/* lockdown read */
+	struct lockdown_cfg lockdown_cfg;
+
 	/* DC */
 	bool dc_feature_enable;
 	bool dc_update_flag;
@@ -159,10 +222,12 @@ struct mi_dsi_panel_cfg {
 	bool flat_sync_te;
 	bool flat_update_flag;
 	bool flat_update_gamma_zero;
+	bool flat_update_several_gamma;
 	struct flat_mode_cfg flat_cfg;
 
     /* record the last refresh_rate */
 	u32 last_refresh_rate;
+	u32 last_fps;
 
 	/* Dimming */
 	u32 panel_on_dimming_delay;
@@ -176,6 +241,22 @@ struct mi_dsi_panel_cfg {
 
 	u8 panel_batch_number;
 	bool panel_batch_number_read_done;
+
+	u32 hbm_backlight_threshold;
+	bool count_hbm_by_backlight;
+
+	/* flat mode check*/
+	bool flatmode_check_enabled;
+	struct mi_panel_flatmode_config flatmode_check_config;
+
+	/* ingore esd in aod*/
+	bool ignore_esd_in_aod;
+	bool aod_enter_flags;
+	bool aod_exit_flags;
+	int pmic_pwrkey_status;
+	bool aod_to_normal_pending;
+	/* video panel fps cmds*/
+	bool video_fps_cmdsets_enanle;
 };
 
 struct panel_batch_info
@@ -302,9 +383,28 @@ int mi_dsi_panel_switch_page(struct dsi_panel *panel, u8 page_index);
 
 int mi_dsi_update_switch_cmd(struct dsi_panel *panel);
 
+int mi_dsi_update_switch_cmd_several_gamma(struct dsi_panel *panel);
+
 int mi_dsi_update_nolp_cmd_B2reg(struct dsi_panel *panel,
 			enum dsi_cmd_set_type type);
 
+int mi_dsi_panel_parse_build_id_read_config(struct dsi_panel *panel);
+
 int mi_dsi_update_51_mipi_cmd(struct dsi_panel *panel,enum dsi_cmd_set_type type, int bl_lvl);
+
+int mi_dsi_panel_parse_flatmode_configs(struct dsi_panel *panel);
+
+int mi_dsi_panel_match_fps_pen_setting(struct dsi_panel *panel,struct dsi_display_mode *adj_mode);
+
+int mi_dsi_pwr_enable_vregs(struct dsi_regulator_info *regs, bool enable, int index);
+
+int mi_dsi_update_switch_gamma_cmd(struct dsi_panel *panel);
+
+int dsi_panel_parse_wp_reg_read_config(struct dsi_panel *panel);
+
+int dsi_panel_parse_cell_id_read_config(struct dsi_panel *panel);
+int mi_dsi_panel_set_flat_mode(struct dsi_panel *panel, bool enable);
+int mi_dsi_panel_set_flat_mode_locked(struct dsi_panel *panel, bool enable);
+int mi_dsi_panel_aod_to_normal_optimize_locked(struct dsi_panel *panel, bool enable);
 
 #endif /* _MI_DSI_PANEL_H_ */

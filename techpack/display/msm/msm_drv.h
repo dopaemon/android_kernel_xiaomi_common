@@ -465,6 +465,7 @@ struct msm_display_dsc_info {
 	u32 dsc_4hsmerge_padding;
 	u32 dsc_4hsmerge_alignment;
 	bool half_panel_pu;
+	bool is_nvt;
 };
 
 

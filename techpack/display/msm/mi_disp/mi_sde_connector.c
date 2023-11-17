@@ -22,7 +22,6 @@
 #include "mi_disp_lhbm.h"
 #include "mi_panel_id.h"
 
-
 static irqreturn_t mi_esd_err_irq_handle(int irq, void *data)
 {
 	struct sde_connector *c_conn = (struct sde_connector *)data;
@@ -36,6 +35,17 @@ static irqreturn_t mi_esd_err_irq_handle(int irq, void *data)
 	}
 
 	DISP_INFO("%s display esd irq trigging \n", display->display_type);
+	if (display->panel->mi_cfg.ignore_esd_in_aod) {
+		power_mode = display->panel->power_mode;
+		if(power_mode == SDE_MODE_DPMS_LP1 ||
+			power_mode == SDE_MODE_DPMS_LP2) {
+			DISP_INFO("%s don't report panel_dead in aod\n", display->display_type);
+			dsi_panel_acquire_panel_lock(display->panel);
+			mi_dsi_panel_esd_irq_ctrl_locked(display->panel, false);
+			dsi_panel_release_panel_lock(display->panel);
+			return IRQ_HANDLED;
+		}
+	}
 
 	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
 		dsi_panel_acquire_panel_lock(display->panel);
@@ -117,6 +127,23 @@ int mi_sde_connector_register_esd_irq(struct sde_connector *c_conn)
 				disable_irq(display->panel->mi_cfg.esd_err_irq);
 			}
 		}
+			
+		if (mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == M80_PANEL_PA){
+			if (display->panel->mi_cfg.esd_err_irq_gpio_second > 0) {
+				rc = request_threaded_irq(display->panel->mi_cfg.esd_err_irq_second,
+					NULL, mi_esd_err_irq_handle,
+					display->panel->mi_cfg.esd_err_irq_flags_second,
+					"esd_err_irq_second", c_conn);
+				if (rc) {
+					DISP_ERROR("%s display register esd irq second failed\n",
+						display->display_type);
+				} else {
+					DISP_INFO("%s display register esd irq second success\n",
+						display->display_type);
+					disable_irq(display->panel->mi_cfg.esd_err_irq_second);
+				}
+			}
+		}
 	}
 
 	return rc;
@@ -192,6 +219,7 @@ static int mi_sde_connector_update_aod_status(struct drm_connector *connector,
 	struct sde_connector *c_conn;
 	struct sde_encoder_virt *sde_enc;
 	struct dsi_display *display = NULL;
+	static bool aod_status_restore = false;
 
 	if (!connector) {
 		DISP_ERROR("invalid connector ptr\n");
@@ -205,6 +233,20 @@ static int mi_sde_connector_update_aod_status(struct drm_connector *connector,
 	if (connector->connector_type == DRM_MODE_CONNECTOR_DSI) {
 		display = (struct dsi_display *)c_conn->display;
 		if (display) {
+			if (mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == N16_PANEL_PB ||
+				mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == N16_PANEL_PA) {
+				if (aod_status_restore != is_aod_exit && is_aod_exit && (c_conn->lp_mode == SDE_MODE_DPMS_LP1 || c_conn->lp_mode == SDE_MODE_DPMS_LP2)) {
+					DISP_INFO("AOD layer disappears prematurely and is inserted black in advance\n");
+					dsi_panel_acquire_panel_lock(display->panel);
+					dsi_panel_update_backlight(display->panel, 0);
+					dsi_panel_release_panel_lock(display->panel);
+				}
+				aod_status_restore = is_aod_exit;
+				if (!display->panel->mi_cfg.last_bl_level) {
+					return 0;
+				}
+			}
+
 			if (is_aod_exit) {
 				if (c_conn->lp_mode == SDE_MODE_DPMS_ON)
 					display->panel->mi_cfg.bl_enable = true;
@@ -238,9 +280,70 @@ static int mi_sde_connector_update_aod_status(struct drm_connector *connector,
 	return 0;
 }
 
+int mi_sde_connector_set_em_pulse(struct drm_connector *connector, u32 bl_lvl)
+{
+	int rc = 0;
+	struct sde_connector *c_conn;
+	struct dsi_display *dsi_display;
+	struct dsi_panel *panel;
+	struct mi_drm_panel_build_id_config *id_config;
+	struct mi_dsi_panel_cfg *mi_cfg;
+	static bool em_pulse_16 = false;
+
+	if (!connector) {
+		DISP_ERROR("invalid connector ptr\n");
+		return -EINVAL;
+	}
+
+	c_conn = to_sde_connector(connector);
+
+	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI)
+		return 0;
+
+	dsi_display = (struct dsi_display *) c_conn->display;
+	if (!dsi_display || !dsi_display->panel) {
+		DISP_ERROR("invalid display/panel ptr\n");
+		return -EINVAL;
+	}
+
+	if (mi_get_disp_id(dsi_display->display_type) != MI_DISP_PRIMARY)
+		return -EINVAL;
+
+	panel = dsi_display->panel;
+	mi_cfg = &panel->mi_cfg;
+
+	id_config = &(mi_cfg->id_config);
+	if (id_config->build_id != 0x40 && id_config->build_id != 0x41) {
+		return 0;
+	}
+
+	/* for AP set EM pulse */
+	if (bl_lvl == 326) {
+		sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
+		rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_4PULSE);
+		em_pulse_16 = false;
+		DISP_INFO("%s DSI_CMD_SET_MI_4PULSE rc = %d\n", __func__, rc);
+	} else if (bl_lvl == 325) {
+		sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
+		rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_8PULSE);
+		em_pulse_16 = false;
+		DISP_INFO("%s DSI_CMD_SET_MI_8PULSE rc = %d\n", __func__, rc);
+	} else if (bl_lvl <= 324 && bl_lvl > 0 && !em_pulse_16) {
+		sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
+		rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_16PULSE);
+		em_pulse_16 = true;
+		DISP_INFO("%s DSI_CMD_SET_MI_16PULSE rc = %d\n", __func__, rc);
+	} else if (bl_lvl > 326) {
+		em_pulse_16 = false;
+	}
+
+	return rc;
+}
+
 int mi_sde_connector_update_layer_state(struct drm_connector *connector,
 			u32 mi_layer_flags)
 {
+	int ret = 0;
 	struct sde_connector *c_conn;
 	struct sde_encoder_virt *sde_enc;
 	struct dsi_display *display = NULL;
@@ -275,7 +378,18 @@ int mi_sde_connector_update_layer_state(struct drm_connector *connector,
 		if (connector->connector_type == DRM_MODE_CONNECTOR_DSI) {
 			display = (struct dsi_display *)c_conn->display;
 			if (display && mi_disp_lhbm_fod_enabled(display->panel)) {
-				mi_disp_lhbm_aod_to_normal_optimize(display, cur_flags.fod_anim_flag);
+				if (mi_get_panel_id_by_dsi_panel(display->panel) == N16_PANEL_PB &&
+					cur_flags.fod_anim_flag == true) {
+					display->panel->mi_cfg.aod_to_normal_pending = true;
+				} else {
+					display->panel->mi_cfg.aod_to_normal_pending = false;
+					ret = mi_disp_lhbm_aod_to_normal_optimize(display, cur_flags.fod_anim_flag);
+					if (ret == -EAGAIN) {
+						/*Doze brightness queue work schedule delay
+						 * And trigger once in next frame*/
+						cur_flags.fod_anim_flag = false;
+					}
+				}
 			}
 		}
 	}
@@ -305,6 +419,7 @@ int mi_sde_connector_flat_fence(struct drm_connector *connector)
 	struct sde_connector *c_conn;
 	struct dsi_display *dsi_display;
 	struct mi_dsi_panel_cfg *mi_cfg;
+	int flat_mode_val = FEATURE_OFF;
 
 	if (!connector) {
 		DISP_ERROR("invalid connector ptr\n");
@@ -325,29 +440,29 @@ int mi_sde_connector_flat_fence(struct drm_connector *connector)
 	if (mi_get_disp_id(dsi_display->display_type) != MI_DISP_PRIMARY)
 		return -EINVAL;
 
-	dsi_panel_acquire_panel_lock(dsi_display->panel);
-
 	mi_cfg = &dsi_display->panel->mi_cfg;
 
 	if (mi_cfg->flat_sync_te) {
-		if (mi_cfg->feature_val[DISP_FEATURE_FLAT_MODE] == FEATURE_ON &&
-			mi_cfg->flat_cfg.cur_flat_state == FEATURE_OFF) {
-			dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_ON);
-			sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
-			dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_SEC_ON);
-			mi_cfg->flat_cfg.cur_flat_state = FEATURE_ON;
-			DISP_INFO("DSI_CMD_SET_MI_FLAT_MODE_ON sync with te");
-		} else if (mi_cfg->feature_val[DISP_FEATURE_FLAT_MODE] == FEATURE_OFF &&
-			mi_cfg->flat_cfg.cur_flat_state == FEATURE_ON) {
-			dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_OFF);
-			sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
-			dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_SEC_OFF);
-			mi_cfg->flat_cfg.cur_flat_state = FEATURE_OFF;
-			DISP_INFO("DSI_CMD_SET_MI_FLAT_MODE_OFF sync with te");
+		dsi_panel_acquire_panel_lock(dsi_display->panel);
+		flat_mode_val = mi_cfg->feature_val[DISP_FEATURE_FLAT_MODE];
+		if (flat_mode_val != mi_cfg->flat_cfg.cur_flat_state) {
+			if (flat_mode_val == FEATURE_ON) {
+				dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_ON);
+				sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
+				dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_SEC_ON);
+				DISP_INFO("DSI_CMD_SET_MI_FLAT_MODE_ON sync with te");
+			} else {
+				dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_OFF);
+				sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
+				dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_SEC_OFF);
+				DISP_INFO("DSI_CMD_SET_MI_FLAT_MODE_OFF sync with te");
+			}
+			mi_disp_feature_event_notify_by_type(mi_get_disp_id(dsi_display->display_type),
+				MI_DISP_EVENT_FLAT_MODE, sizeof(int), flat_mode_val);
+			mi_cfg->flat_cfg.cur_flat_state = flat_mode_val;
 		}
+		dsi_panel_release_panel_lock(dsi_display->panel);
 	}
-
-	dsi_panel_release_panel_lock(dsi_display->panel);
 
 	return rc;
 }

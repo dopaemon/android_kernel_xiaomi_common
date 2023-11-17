@@ -44,6 +44,11 @@
 #include "sde_encoder_dce.h"
 #include "sde_vm.h"
 
+#include "dsi_drm.h"
+#include "dsi_display.h"
+#include "mi_panel_id.h"
+#include "mi_disp_lhbm.h"
+
 #define SDE_DEBUG_ENC(e, fmt, ...) SDE_DEBUG("enc%d " fmt,\
 		(e) ? (e)->base.base.id : -1, ##__VA_ARGS__)
 
@@ -2295,14 +2300,11 @@ static int _sde_encoder_rc_early_wakeup(struct drm_encoder *drm_enc,
 		else if (delay_ms > IDLE_POWERCOLLAPSE_IN_EARLY_WAKEUP)
 			delay_ms = IDLE_POWERCOLLAPSE_IN_EARLY_WAKEUP;
 
-		if (!sde_crtc_frame_pending(sde_enc->crtc)) {
+		if (!sde_crtc_frame_pending(sde_enc->crtc))
 			kthread_mod_delayed_work(&disp_thread->worker,
 					&sde_enc->delayed_off_work,
 					msecs_to_jiffies(
-					IDLE_POWERCOLLAPSE_DURATION));
-			idle_pc_duration = IDLE_POWERCOLLAPSE_DURATION;
-		}
-
+					delay_ms));
 	} else if (sde_enc->rc_state == SDE_ENC_RC_STATE_IDLE) {
 		/* enable all the clks and resources */
 		ret = _sde_encoder_resource_control_helper(drm_enc,
@@ -3539,9 +3541,13 @@ static void sde_encoder_underrun_callback(struct drm_encoder *drm_enc,
 	if (!phy_enc)
 		return;
 
+	SDE_ERROR("encoder_underrun_callback - start\n");
+
 	SDE_ATRACE_BEGIN("encoder_underrun_callback");
 	atomic_inc(&phy_enc->underrun_cnt);
 	SDE_EVT32(DRMID(drm_enc), atomic_read(&phy_enc->underrun_cnt));
+	SDE_ERROR("underrun_cnt = %d\n", atomic_read(&phy_enc->underrun_cnt));
+
 	if (sde_enc->cur_master &&
 			sde_enc->cur_master->ops.get_underrun_line_count)
 		sde_enc->cur_master->ops.get_underrun_line_count(
@@ -3558,6 +3564,7 @@ static void sde_encoder_underrun_callback(struct drm_encoder *drm_enc,
 	SDE_DBG_CTRL("panic_underrun");
 
 	SDE_ATRACE_END("encoder_underrun_callback");
+	SDE_ERROR("encoder_underrun_callback - end\n");
 }
 
 void sde_encoder_register_vblank_callback(struct drm_encoder *drm_enc,
@@ -4717,11 +4724,61 @@ end:
 	return ret;
 }
 
+int sde_encoder_vid_wait_for_active(
+			struct drm_encoder *drm_enc)
+{
+	struct drm_display_mode mode;
+	struct sde_encoder_virt *sde_enc = NULL;
+	struct sde_connector *sde_conn = NULL;
+	struct dsi_display *display = NULL;
+	u32 ln_cnt, min_ln_cnt, active_mark_region;
+	u32 i, retry = 150;
+	if (!drm_enc) {
+		SDE_ERROR("invalid encoder\n");
+		return -EINVAL;
+	}
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	for (i = 0; i < sde_enc->num_phys_encs; i++) {
+		struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
+		if (sde_encoder_is_dsi_display(drm_enc)) {
+			sde_conn = to_sde_connector(phys->connector);
+			display = (struct dsi_display *)sde_conn->display;
+		}
+		if (!phys || (phys->ops.is_master && !phys->ops.is_master(phys)))
+			continue;
+		mode = phys->cached_mode;
+		min_ln_cnt = (mode.vtotal - mode.vsync_start) +
+			(mode.vsync_end - mode.vsync_start);
+		if (display && display->panel &&
+			(mi_get_panel_id_by_dsi_panel(display->panel) == N16_PANEL_PA
+			||mi_get_panel_id_by_dsi_panel(display->panel) == N16_PANEL_PB)) {
+			/* need to reserve more time for the following functions.
+			 */
+			active_mark_region = min_ln_cnt + mode.vdisplay / 10;
+		} else {
+			active_mark_region = mode.vdisplay + min_ln_cnt - mode.vdisplay / 4;
+		}
+		while (retry) {
+			ln_cnt = phys->ops.get_line_count(phys);
+			if ((ln_cnt > min_ln_cnt) && (ln_cnt < active_mark_region))
+				return 0;
+			udelay(200);
+			retry--;
+		}
+	}
+	return -EINVAL;
+}
+
 void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool config_changed)
 {
 	struct sde_encoder_virt *sde_enc;
 	struct sde_encoder_phys *phys;
 	unsigned int i;
+	struct dsi_bridge *c_bridge = NULL;
+	struct dsi_display *dsi_display = NULL;
+	struct dsi_display_mode adj_mode;
+	struct drm_bridge *bridge;
+	unsigned int rc = 0;
 
 	if (!drm_enc) {
 		SDE_ERROR("invalid encoder\n");
@@ -4731,6 +4788,15 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool config_changed)
 	sde_enc = to_sde_encoder_virt(drm_enc);
 
 	SDE_DEBUG_ENC(sde_enc, "\n");
+
+	bridge = drm_bridge_chain_get_first_bridge(drm_enc);
+	if (sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_DSI && bridge) {
+		c_bridge = container_of(bridge, struct dsi_bridge, base);
+		if (c_bridge) {
+			dsi_display = c_bridge->display;
+			adj_mode = c_bridge->dsi_mode;
+		}
+	}
 
 	if (sde_enc->delay_kickoff) {
 		u32 loop_count = 20;
@@ -4743,6 +4809,59 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool config_changed)
 		}
 
 		SDE_EVT32(DRMID(drm_enc), i, SDE_EVTLOG_FUNC_CASE1);
+	}
+
+	if (dsi_display && dsi_display->panel
+		&& sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_DSI
+		&& (mi_get_panel_id_by_dsi_panel(dsi_display->panel) == M16T_PANEL_PA
+		|| mi_get_panel_id_by_dsi_panel(dsi_display->panel) == M16T_PANEL_PB)
+		&& adj_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR) {
+		mutex_lock(&dsi_display->panel->panel_lock);
+		sde_encoder_vid_wait_for_active(drm_enc);
+		dsi_panel_gamma_switch_locked(dsi_display->panel);
+		mutex_unlock(&dsi_display->panel->panel_lock);
+	}
+
+	if (dsi_display && dsi_display->panel && sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_DSI
+		&& (mi_get_panel_id_by_dsi_panel(dsi_display->panel) == N16_PANEL_PA
+		||mi_get_panel_id_by_dsi_panel(dsi_display->panel) == N16_PANEL_PB)
+		&& (adj_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR || dsi_display->panel->mi_cfg.aod_to_normal_pending)) {
+		mutex_lock(&dsi_display->panel->panel_lock);
+		if (mi_get_panel_id_by_dsi_panel(dsi_display->panel) == N16_PANEL_PB &&
+			dsi_display->panel->mi_cfg.aod_to_normal_pending) {
+			rc = mi_dsi_panel_aod_to_normal_optimize_locked(dsi_display->panel, true);
+			if (rc != -EAGAIN)
+				dsi_display->panel->mi_cfg.aod_to_normal_pending = false;
+		}
+		sde_encoder_vid_wait_for_active(drm_enc);
+		dsi_panel_pre_aod_inVideo_locked(dsi_display->panel);
+		dsi_panel_gamma_switch_locked(dsi_display->panel);
+		dsi_panel_post_aod_inVideo_locked(dsi_display->panel);
+		mutex_unlock(&dsi_display->panel->panel_lock);
+
+		/* Normal state, allow lhbm tx */
+		if (mi_disp_lhbm_fod_enabled(dsi_display->panel) && adj_mode.timing.refresh_rate != 30
+			&& is_aod_and_panel_initialized(dsi_display->panel)) {
+			mi_disp_lhbm_fod_allow_tx_lhbm(dsi_display, true);
+		}
+	}
+
+	if (dsi_display && dsi_display->panel && (mi_get_panel_id(dsi_display->panel->mi_cfg.mi_panel_id) == M80_PANEL_PA) &&
+	    (adj_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR)) {
+		mutex_lock(&dsi_display->panel->panel_lock);
+		sde_encoder_vid_wait_for_active(drm_enc);
+	}
+
+	if (dsi_display && dsi_display->panel && (mi_get_panel_id(dsi_display->panel->mi_cfg.mi_panel_id) == M80_PANEL_PA) &&
+	    (adj_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR)) {
+		if (dsi_display->panel->mi_cfg.last_fps == 60 && adj_mode.timing.refresh_rate != 120) {
+		    rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_DISP_PEN_CLEAR);
+			if (rc) {
+				pr_err("Failed to send DSI_CMD_SET_DISP_PEN_CLEAR command\n");
+			}
+			sde_encoder_wait_for_event(drm_enc,MSM_ENC_VBLANK);
+			sde_encoder_vid_wait_for_active(drm_enc);
+		}
 	}
 
 	/* All phys encs are ready to go, trigger the kickoff */
@@ -4758,6 +4877,14 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool config_changed)
 	if (sde_enc->autorefresh_solver_disable &&
 			!_sde_encoder_is_autorefresh_enabled(sde_enc))
 		_sde_encoder_update_rsc_client(drm_enc, true);
+
+
+
+	if (dsi_display && dsi_display->panel && (mi_get_panel_id(dsi_display->panel->mi_cfg.mi_panel_id) == M80_PANEL_PA) &&
+	    (adj_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR)) {
+		mi_dsi_panel_match_fps_pen_setting(dsi_display->panel, &adj_mode);
+		mutex_unlock(&dsi_display->panel->panel_lock);
+	}
 
 	SDE_ATRACE_END("encoder_kickoff");
 }
@@ -5604,6 +5731,8 @@ int sde_encoder_wait_for_event(struct drm_encoder *drm_enc,
 	struct sde_encoder_virt *sde_enc = NULL;
 	int i, ret = 0;
 	char atrace_buf[32];
+	struct sde_connector *sde_conn = NULL;
+	struct dsi_display *display = NULL;
 
 	if (!drm_enc) {
 		SDE_ERROR("invalid encoder\n");
@@ -5640,8 +5769,22 @@ int sde_encoder_wait_for_event(struct drm_encoder *drm_enc,
 			SDE_ATRACE_BEGIN(atrace_buf);
 			ret = fn_wait(phys);
 			SDE_ATRACE_END(atrace_buf);
-			if (ret)
+			if (ret) {
+				SDE_ERROR_ENC(sde_enc, "intf_type:%d, event:%d i:%d, failed:%d\n",
+						sde_enc->disp_info.intf_type, event, i, ret);
+				if (event == MSM_ENC_VBLANK) {
+					sde_conn = to_sde_connector(phys->connector);
+					if (sde_encoder_is_dsi_display(drm_enc)) {
+						display = (struct dsi_display *)sde_conn->display;
+						if (display) {
+							SDE_ERROR("[%s] wait for vblank failed!\n", display->name);
+						}
+					}
+				}
+				SDE_EVT32(DRMID(drm_enc), sde_enc->disp_info.intf_type, event,
+						i, ret, SDE_EVTLOG_ERROR);
 				return ret;
+			}
 		}
 	}
 

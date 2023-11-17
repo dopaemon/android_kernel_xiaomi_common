@@ -28,6 +28,7 @@
 #include "mi_dsi_display.h"
 #include "mi_disp_feature.h"
 #include "mi_disp_file.h"
+#include "mi_disp_lhbm.h"
 
 int mi_disp_open(struct inode *inode, struct file *file)
 {
@@ -383,6 +384,41 @@ exit:
 	return ret;
 }
 
+static int mi_disp_ioctl_set_local_hbm(
+			struct disp_feature_client *client, void *data)
+{
+	struct disp_feature *df = client->df;
+	struct disp_local_hbm_req *req = data;
+	u32 disp_id = req->base.disp_id;
+	struct disp_display *dd_ptr = NULL;
+	u32 local_hbm_value;
+	int ret = 0;
+
+	ret = mutex_lock_interruptible(&client->client_lock);
+	if (ret)
+		return ret;
+
+	local_hbm_value = req->local_hbm_value;
+
+	if (is_support_disp_id(disp_id)) {
+		dd_ptr = &df->d_display[disp_id];
+		if (dd_ptr->intf_type == MI_INTF_DSI) {
+			DISP_INFO("%s display local_hbm_value = %d\n",
+				get_disp_id_name(disp_id), local_hbm_value);
+				ret = mi_disp_set_local_hbm(disp_id, local_hbm_value);
+		} else {
+			DISP_INFO("Unsupported display(%s intf)\n",
+				get_disp_intf_type_name(dd_ptr->intf_type));
+			ret = -EINVAL;
+		}
+	} else {
+		DISP_INFO("Unsupported display id\n");
+		ret = -EINVAL;
+	}
+
+	mutex_unlock(&client->client_lock);
+	return ret;
+}
 
 static void mi_disp_set_doze_brightness_work_handler(struct kthread_work *work)
 {
@@ -945,6 +981,7 @@ static const struct disp_ioctl_desc disp_ioctls[] = {
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_GET_BRIGHTNESS, mi_disp_ioctl_get_brightness),
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_GET_FEATURE, mi_disp_ioctl_get_feature),
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_GET_MANUFACTURER_INFO, mi_disp_ioctl_get_manufacturer_info),
+	DISP_IOCTL_DEF(MI_DISP_IOCTL_SET_LOCAL_HBM, mi_disp_ioctl_set_local_hbm),
 };
 
 #define MI_DISP_IOCTL_COUNT	ARRAY_SIZE(disp_ioctls)

@@ -10,7 +10,6 @@
 #include <linux/err.h>
 #include <video/mipi_display.h>
 
-
 #include "msm_drv.h"
 #include "sde_connector.h"
 #include "msm_mmu.h"
@@ -31,6 +30,7 @@
 #include "mi_disp_print.h"
 #include "mi_disp_lhbm.h"
 #include "mi_panel_id.h"
+#include "mi_backlight_ktz8866.h"
 
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 #define INT_BASE_10 10
@@ -329,6 +329,10 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 		bl_temp = panel->bl_config.bl_max_level;
 
 	DSI_DEBUG("dimming enable :%d, bl_temp = %u\n", panel->bl_config.dimming_enabled, (u32)bl_temp);
+
+	/* for AP set EM pulse */
+	if (mi_get_panel_id_by_dsi_panel(dsi_display->panel) == M11A_PANEL_PA)
+		mi_sde_connector_set_em_pulse(connector, (u32)bl_temp);
 
 	rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
 	if (rc)
@@ -741,6 +745,7 @@ static void dsi_display_set_cmd_tx_ctrl_flags(struct dsi_display *display,
 	struct mipi_dsi_msg *msg = &cmd->msg;
 	u32 flags = 0;
 	int i = 0;
+	u8 *buf = NULL;
 
 	m_ctrl = &display->ctrl[display->clk_master_idx];
 	display_for_each_ctrl(i, display) {
@@ -810,6 +815,15 @@ static void dsi_display_set_cmd_tx_ctrl_flags(struct dsi_display *display,
 				flags |= DSI_CTRL_CMD_ASYNC_WAIT;
 		if (msg->flags & MIPI_DSI_MSG_ASYNC_OVERRIDE)
 				flags |= DSI_CTRL_CMD_ASYNC_WAIT;
+
+		/* video panel update 51 use async wait*/
+		if (mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == N16_PANEL_PB ||
+			mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == N16_PANEL_PA) {
+			buf = (u8 *)msg->tx_buf;
+			if ((buf && buf[0] == MIPI_DCS_SET_DISPLAY_BRIGHTNESS)) {
+				flags |= DSI_CTRL_CMD_ASYNC_WAIT;
+			}
+		}
 	}
 
 	cmd->ctrl_flags |= flags;
@@ -1133,7 +1147,7 @@ int dsi_display_ctrl_get_host_init_state(struct dsi_display *dsi_display,
 	return rc;
 }
 
-static int dsi_display_cmd_rx(struct dsi_display *display,
+int dsi_display_cmd_rx(struct dsi_display *display,
 			      struct dsi_cmd_desc *cmd)
 {
 	struct dsi_display_ctrl *m_ctrl = NULL;
@@ -1461,8 +1475,11 @@ int dsi_display_set_power(struct drm_connector *connector,
 		break;
 	case SDE_MODE_DPMS_ON:
 		if ((display->panel->power_mode == SDE_MODE_DPMS_LP1) ||
-			(display->panel->power_mode == SDE_MODE_DPMS_LP2))
+			(display->panel->power_mode == SDE_MODE_DPMS_LP2)) {
 			rc = dsi_panel_set_nolp(display->panel);
+			if (mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == N16_PANEL_PB)
+				mi_dsi_panel_set_flat_mode(display->panel, false);
+		}
 		break;
 	case SDE_MODE_DPMS_OFF:
 		if (mi_disp_lhbm_fod_enabled(display->panel))
@@ -5146,41 +5163,61 @@ static int dsi_display_get_dfps_timing(struct dsi_display *display,
 	}
 	/* TODO: Remove this direct reference to the dsi_ctrl */
 	timing = &per_ctrl_mode.timing;
+	if(mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == M80_PANEL_PA){
+		if (timing->refresh_rate == 90) {
+			adj_mode->timing.v_front_porch = 26;
+			adj_mode->timing.h_front_porch = 518;
+		} else if (timing->refresh_rate == 50) {
+			adj_mode->timing.v_front_porch = 1582;
+			adj_mode->timing.h_front_porch = 518;
+		} else if (timing->refresh_rate == 48) {
+			adj_mode->timing.v_front_porch = 1728;
+			adj_mode->timing.h_front_porch = 518;
+		} else if (timing->refresh_rate == 30) {
+			adj_mode->timing.v_front_porch = 3918;
+			adj_mode->timing.h_front_porch = 518;
+		}else if (timing->refresh_rate == 120) {
+			adj_mode->timing.v_front_porch = 26;
+			adj_mode->timing.h_front_porch = 130;
+		}else if (timing->refresh_rate == 60) {
+			adj_mode->timing.v_front_porch = 1972;
+			adj_mode->timing.h_front_porch = 130;
+		}
+	}else{ 
+		switch (dfps_caps.type) {
+		case DSI_DFPS_IMMEDIATE_VFP:
+			rc = dsi_display_dfps_calc_front_porch(
+					curr_refresh_rate,
+					timing->refresh_rate,
+					dsi_h_total_dce(timing),
+					DSI_V_TOTAL(timing),
+					timing->v_front_porch,
+					&adj_mode->timing.v_front_porch);
+			SDE_EVT32(SDE_EVTLOG_FUNC_CASE1, DSI_DFPS_IMMEDIATE_VFP,
+				curr_refresh_rate, timing->refresh_rate,
+				timing->v_front_porch, adj_mode->timing.v_front_porch);
+			break;
 
-	switch (dfps_caps.type) {
-	case DSI_DFPS_IMMEDIATE_VFP:
-		rc = dsi_display_dfps_calc_front_porch(
-				curr_refresh_rate,
-				timing->refresh_rate,
-				dsi_h_total_dce(timing),
-				DSI_V_TOTAL(timing),
-				timing->v_front_porch,
-				&adj_mode->timing.v_front_porch);
-		SDE_EVT32(SDE_EVTLOG_FUNC_CASE1, DSI_DFPS_IMMEDIATE_VFP,
-			curr_refresh_rate, timing->refresh_rate,
-			timing->v_front_porch, adj_mode->timing.v_front_porch);
-		break;
+		case DSI_DFPS_IMMEDIATE_HFP:
+			rc = dsi_display_dfps_calc_front_porch(
+					curr_refresh_rate,
+					timing->refresh_rate,
+					DSI_V_TOTAL(timing),
+					dsi_h_total_dce(timing),
+					timing->h_front_porch,
+					&adj_mode->timing.h_front_porch);
+			SDE_EVT32(SDE_EVTLOG_FUNC_CASE2, DSI_DFPS_IMMEDIATE_HFP,
+				curr_refresh_rate, timing->refresh_rate,
+				timing->h_front_porch, adj_mode->timing.h_front_porch);
+			if (!rc)
+				adj_mode->timing.h_front_porch *= display->ctrl_count;
+			break;
 
-	case DSI_DFPS_IMMEDIATE_HFP:
-		rc = dsi_display_dfps_calc_front_porch(
-				curr_refresh_rate,
-				timing->refresh_rate,
-				DSI_V_TOTAL(timing),
-				dsi_h_total_dce(timing),
-				timing->h_front_porch,
-				&adj_mode->timing.h_front_porch);
-		SDE_EVT32(SDE_EVTLOG_FUNC_CASE2, DSI_DFPS_IMMEDIATE_HFP,
-			curr_refresh_rate, timing->refresh_rate,
-			timing->h_front_porch, adj_mode->timing.h_front_porch);
-		if (!rc)
-			adj_mode->timing.h_front_porch *= display->ctrl_count;
-		break;
-
-	default:
-		DSI_ERR("Unsupported DFPS mode %d\n", dfps_caps.type);
-		rc = -ENOTSUPP;
+		default:
+			DSI_ERR("Unsupported DFPS mode %d\n", dfps_caps.type);
+			rc = -ENOTSUPP;
+		}
 	}
-
 	return rc;
 }
 
@@ -5976,6 +6013,7 @@ error_ctrl_deinit:
 		dsi_ctrl_put(display_ctrl->ctrl);
 		dsi_phy_put(display_ctrl->phy);
 	}
+
 	(void)dsi_display_debugfs_deinit(display);
 error:
 	mutex_unlock(&display->display_lock);
@@ -6093,8 +6131,10 @@ static int dsi_display_init(struct dsi_display *display)
 	}
 
 	rc = component_add(&pdev->dev, &dsi_display_comp_ops);
-	if (rc)
+
+	if (rc) {
 		DSI_ERR("component add failed, rc=%d\n", rc);
+	}
 
 	DSI_DEBUG("component add success: %s\n", display->name);
 end:
@@ -6184,9 +6224,10 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	if (boot_disp->boot_disp_en) {
 		/* The panel name should be same as UEFI name index */
 		panel_node = of_find_node_by_name(mdp_node, boot_disp->name);
-		if (!panel_node)
+		if (!panel_node) {
 			DSI_WARN("%s panel_node %s not found\n", display->display_type,
 					boot_disp->name);
+		}
 	} else {
 		panel_node = of_parse_phandle(node,
 				"qcom,dsi-default-panel", 0);
@@ -7217,6 +7258,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 	int i, start, end, rc = -EINVAL;
 	int dsc_modes = 0, nondsc_modes = 0;
 	struct dsi_qsync_capabilities *qsync_caps;
+	struct dsi_dfps_capabilities *fps_type = &display->panel->dfps_caps;
 
 	if (!display || !out_modes) {
 		DSI_ERR("Invalid params\n");
@@ -7378,6 +7420,14 @@ int dsi_display_get_modes(struct dsi_display *display,
 				goto error;
 			}
 
+			if (display->panel->mi_cfg.video_fps_cmdsets_enanle) {
+				rc = dsi_panel_get_dfps_cmdsets(display->panel , i, sub_mode);
+				if (rc) {
+					DSI_ERR("unable to get dfps cmdsets\n");
+					goto error;
+				}
+			}
+
 			rc = dsi_display_mode_dyn_clk_cpy(display,
 					&display_mode, sub_mode);
 			if (rc) {
@@ -7395,8 +7445,29 @@ int dsi_display_get_modes(struct dsi_display *display,
 				sub_mode->priv_info->qsync_min_fps = sub_mode->timing.qsync_min_fps;
 			}
 
+			if (mi_get_panel_id_by_dsi_panel(display->panel) == M16T_PANEL_PA ||
+				mi_get_panel_id_by_dsi_panel(display->panel) == M16T_PANEL_PB ||
+				mi_get_panel_id_by_dsi_panel(display->panel) == N16_PANEL_PA ||
+				mi_get_panel_id_by_dsi_panel(display->panel) == N16_PANEL_PB) {
+				if (sub_mode->timing.refresh_rate == 30) {
+					fps_type->type= DSI_DFPS_IMMEDIATE_HFP;
+				} else {
+					fps_type->type = DSI_DFPS_IMMEDIATE_VFP;
+				}
+			}
+
 			dsi_display_get_dfps_timing(display, sub_mode,
 					curr_refresh_rate);
+			/*Override VFP  in M16T_PANEL_PB*/
+			if(mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == M16T_PANEL_PB) {
+				if(sub_mode->timing.refresh_rate == 60) {
+					sub_mode->timing.v_front_porch = 2416;
+				}else if(sub_mode->timing.refresh_rate == 90) {
+					sub_mode->timing.v_front_porch = 812;
+				}else if(sub_mode->timing.refresh_rate == 120) {
+					sub_mode->timing.v_front_porch = 16;
+				}
+			}
 			sub_mode->panel_mode_caps = DSI_OP_VIDEO_MODE;
 		}
 		end = array_idx;
@@ -7898,6 +7969,8 @@ int dsi_display_set_mode(struct dsi_display *display,
 		goto error;
 	}
 
+	display->panel->mi_cfg.last_fps = display->panel->cur_mode->timing.refresh_rate;
+	
 	rc = dsi_display_validate_mode_set(display, &adj_mode, flags);
 	if (rc) {
 		DSI_ERR("[%s] mode cannot be set\n", display->name);
@@ -7909,11 +7982,18 @@ int dsi_display_set_mode(struct dsi_display *display,
 		DSI_ERR("[%s] failed to set mode\n", display->name);
 		goto error;
 	}
-
-	DSI_INFO("mdp_transfer_time=%d, hactive=%d, vactive=%d, fps=%d, clk_rate=%llu\n",
-			adj_mode.priv_info->mdp_transfer_time_us,
-			timing.h_active, timing.v_active, timing.refresh_rate,
-			adj_mode.priv_info->clk_rate_hz);
+		DSI_INFO("mdp_transfer_time=%d, hactive=%d, hbp=%d , hsw=%d, hfp=%d, hskew=%d, vactive=%d, vbp=%d , vsw=%d, vfp=%d, fps=%d, clk_rate=%u\n",
+		adj_mode.priv_info->mdp_transfer_time_us,
+		timing.h_active,timing.h_back_porch, timing.h_sync_width,  timing.h_front_porch, timing.h_skew,
+		timing.v_active, timing.v_back_porch, timing.v_sync_width,  timing.v_front_porch,
+		timing.refresh_rate,
+		adj_mode.priv_info->clk_rate_hz);
+	/*
+		DSI_INFO("mdp_transfer_time=%d, hactive=%d, vactive=%d, fps=%d, clk_rate=%llu\n",
+		adj_mode.priv_info->mdp_transfer_time_us,
+		timing.h_active, timing.v_active, timing.refresh_rate,
+		adj_mode.priv_info->clk_rate_hz);
+	*/
 	SDE_EVT32(adj_mode.priv_info->mdp_transfer_time_us,
 			timing.h_active, timing.v_active, timing.refresh_rate,
 			adj_mode.priv_info->clk_rate_hz);
@@ -7927,8 +8007,7 @@ int dsi_display_set_mode(struct dsi_display *display,
 			mi_disp_feature_sysfs_notify(mi_get_disp_id(display->display_type),
 				MI_SYSFS_DYNAMIC_FPS);
 		}
-
-	} else {
+    } else {
 		mi_disp_feature_event_notify_by_type(mi_get_disp_id(display->display_type),
 			MI_DISP_EVENT_FPS, sizeof(timing.refresh_rate), timing.refresh_rate);
 
@@ -8084,6 +8163,7 @@ static void dsi_display_handle_fifo_overflow(struct work_struct *work)
 	}
 
 	DSI_INFO("handle DSI FIFO overflow error\n");
+
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 
 	dsi_display_clk_ctrl(display->dsi_clk_handle,
@@ -8656,6 +8736,11 @@ wait_failure:
 	if (!ret)
 		rc = dsi_display_set_roi(display, params->rois);
 
+	if (mi_get_panel_id_by_dsi_panel(display->panel) == M16T_PANEL_PA ||
+		mi_get_panel_id_by_dsi_panel(display->panel) == M16T_PANEL_PB) {
+		dsi_panel_pre_aod_inVideo(display->panel);
+	}
+
 	return rc;
 }
 
@@ -8735,6 +8820,8 @@ int dsi_display_enable(struct dsi_display *display)
 {
 	int rc = 0;
 	struct dsi_display_mode *mode;
+	struct dsi_panel *panel;
+	struct mi_dsi_panel_cfg *mi_cfg;
 	char trace_buf[64];
 	struct sde_connector *c_conn;
 
@@ -8772,6 +8859,10 @@ int dsi_display_enable(struct dsi_display *display)
 		DSI_INFO("cont splash enabled, display enable not required\n");
 		dsi_display_panel_id_notification(display);
 
+		if (mi_get_panel_id_by_dsi_panel(display->panel) == N16_PANEL_PB)
+			if (mi_dsi_display_read_panel_build_id(display) <= 0)
+				DSI_INFO("[%s] DSI display read panel build id failed\n", display->name);
+
 		if (mi_get_panel_id_by_dsi_panel(display->panel) == L3_PANEL_PA ||
 			mi_get_panel_id_by_dsi_panel(display->panel) == L3S_PANEL_PA) {
 			if (!display->panel->mi_cfg.uefi_read_lhbm_success) {
@@ -8808,6 +8899,14 @@ int dsi_display_enable(struct dsi_display *display)
 			goto error;
 		}
 	}
+
+	panel = display->panel;
+	mi_cfg = &panel->mi_cfg;
+	if (mi_cfg->panel_build_id_read_needed) {
+		if (mi_dsi_display_read_panel_build_id(display) <= 0)
+			DSI_INFO("[%s] DSI display read panel build id failed\n", display->name);
+	}
+
 	dsi_display_panel_id_notification(display);
 	/* Block sending pps command if modeset is due to fps difference */
 	if ((mode->priv_info->dsc_enabled ||
@@ -9218,6 +9317,9 @@ int dsi_display_unprepare(struct dsi_display *display)
 		if (mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == L3_PANEL_PA ||
 			mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == L3S_PANEL_PA) {
 			usleep_range(1000, 1010);
+		} else if (mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == L12_PANEL_PA ||
+			mi_get_panel_id(display->panel->mi_cfg.mi_panel_id) == L12_PANEL_PB) {
+			usleep_range(10000, 10010);
 		}
 		rc = dsi_panel_post_unprepare(display->panel);
 		if (rc)
@@ -9237,6 +9339,7 @@ int dsi_display_unprepare(struct dsi_display *display)
 
 void __init dsi_display_register(void)
 {
+	mi_backlight_ktz8866_init();
 	mi_disp_feature_init();
 	dsi_phy_drv_register();
 	dsi_ctrl_drv_register();

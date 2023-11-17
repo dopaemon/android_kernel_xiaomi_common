@@ -17,12 +17,17 @@
 #include "mi_dsi_panel.h"
 #include "mi_disp_feature.h"
 #include "mi_panel_id.h"
+#include "mi_disp_flatmode.h"
 
 static char oled_wp_info_str[32] = {0};
 static char sec_oled_wp_info_str[32] = {0};
 static char cell_id_info_str[32] = {0};
 static struct panel_manufaturer_info g_panel_manufaturer_info[MI_DISP_MAX];
 static struct dsi_read_info g_dsi_read_info;
+extern int ktz8866_backlight_update_status(unsigned int backlight);
+
+#define MAX_DEBUG_POLICY_CMDLINE_LEN 64
+static char display_debug_policy[MAX_DEBUG_POLICY_CMDLINE_LEN] = {0};
 
 char *get_display_power_mode_name(int power_mode)
 {
@@ -201,6 +206,7 @@ int mi_dsi_display_set_mipi_rw(void *display, char *buf)
 	const char *delim = " ";
 	bool is_read = false;
 	char *buffer = NULL;
+	char *alloc_buffer = NULL;
 	u32 buf_size = 0;
 	u32 tmp_data = 0;
 	u32 recv_len = 0;
@@ -264,11 +270,12 @@ int mi_dsi_display_set_mipi_rw(void *display, char *buf)
 	else
 		goto exit_free0;
 
-	buffer = kzalloc(strlen(input_copy), GFP_KERNEL);
-	if (!buffer) {
+	alloc_buffer = kzalloc(strlen(input_copy), GFP_KERNEL);
+	if (!alloc_buffer) {
 		ret = -ENOMEM;
 		goto exit_free0;
 	}
+	buffer = alloc_buffer;
 
 	token = strsep(&input_copy, delim);
 	while (token) {
@@ -287,6 +294,21 @@ int mi_dsi_display_set_mipi_rw(void *display, char *buf)
 			token = NULL;
 		}
 	}
+
+	/* check buffer's fist num to find whether set LP/HS flag to send command: (00: LP)/(01:HS) */
+	if (buffer[0] <= 0x01) {
+		if (buffer[0] == 0x00)
+			ctl.rx_state = MI_DSI_CMD_LP_STATE;
+		else if (buffer[0] == 0x01)
+			ctl.rx_state = MI_DSI_CMD_HS_STATE;
+		++buffer;
+		--buf_size;
+	} else {
+		ctl.rx_state = MI_DSI_CMD_LP_STATE;
+		DISP_INFO("transfer speed not set, default use LPM. buffer[0] = 0x%02x\n", buffer[0] );
+	}
+	DISP_INFO("ctl.rx_state= 0x%02x\n", ctl.rx_state);
+
 	ctl.tx_len = buf_size;
 	ctl.tx_ptr = buffer;
 
@@ -305,7 +327,7 @@ int mi_dsi_display_set_mipi_rw(void *display, char *buf)
 	}
 
 exit_free1:
-	kfree(buffer);
+	kfree(alloc_buffer);
 exit_free0:
 	kfree(input_dup);
 exit:
@@ -319,6 +341,14 @@ ssize_t mi_dsi_display_show_mipi_rw(void *display,
 	struct dsi_display *dsi_display = (struct dsi_display *)display;
 	ssize_t count = 0;
 	int i = 0;
+	const char help_message[] = {
+		"\tFirst byte means write/read: 00/01 (Decimalism)\n"
+		"\tSecend byte means read back bytes size (Decimalism)\n"
+		"\tThird byte means LP/HS send: 00/01 (Hexadecimal)\n"
+		"\tExample:\n"
+		"\t\twrite:00 00 00 39 00 00 00 00 00 03 51 07 FF\n"
+		"\t\tread: 01 02 00 06 01 00 00 00 00 01 52\n"
+	};
 
 	if (!dsi_display) {
 		DISP_ERROR("Invalid display ptr\n");
@@ -335,6 +365,8 @@ ssize_t mi_dsi_display_show_mipi_rw(void *display,
 					 g_dsi_read_info.rx_buf[i]);
 			}
 		}
+	} else {
+		count = snprintf(buf, PAGE_SIZE,"%s\n", help_message);
 	}
 
 	return count;
@@ -394,6 +426,57 @@ ssize_t mi_dsi_display_read_wp_info(void *display,
 	}
 
 	return ret;
+}
+
+int mi_dsi_display_read_panel_build_id(struct dsi_display *display)
+{
+	int rc = 0;
+	struct mi_drm_panel_build_id_config *config;
+	struct dsi_cmd_desc* cmds;
+	struct dsi_panel *panel;
+	struct mi_dsi_panel_cfg *mi_cfg;
+	bool state = false;
+
+	if (!display || !display->panel)
+		return -EINVAL;
+
+	panel = display->panel;
+	mi_cfg = &panel->mi_cfg;
+
+	if (!mi_cfg->panel_build_id_read_needed) {
+		DISP_INFO("panel build id do not have to read\n");
+		return 0;
+	}
+
+	config = &(mi_cfg->id_config);
+	cmds = config->id_cmd.cmds;
+	cmds->msg.flags |= MIPI_DSI_MSG_UNICAST_COMMAND;
+	cmds->msg.rx_buf = &config->build_id;
+	cmds->msg.rx_len = config->id_cmds_rlen;
+	cmds->ctrl_flags = DSI_CTRL_CMD_READ;
+	rc = dsi_display_ctrl_get_host_init_state(display, &state);
+
+	/**
+	 * Handle scenario where a command transfer is initiated through
+	 * sysfs interface when device is in suspend state.
+	 */
+	if (!rc && !state) {
+		pr_warn_ratelimited("DSI Command xfer attempted while device is in suspend state\n");
+		return -EPERM;;
+	}
+	if (rc || !state) {
+		DISP_ERROR("[DSI] Invalid host state = %d rc = %d\n",
+			state, rc);
+		return -EPERM;
+	}
+	rc = dsi_display_cmd_rx(display, cmds);
+	if (rc <= 0)
+		DISP_ERROR("[DSI] Display command receive failed, rc=%d\n", rc);
+	else {
+		mi_cfg->panel_build_id_read_needed = false;
+		DISP_INFO("panel build id = 0x%x\n", config->build_id);
+	}
+	return rc;
 }
 
 ssize_t mi_dsi_display_read_gray_scale_info(void *display,
@@ -655,33 +738,53 @@ static ssize_t mi_dsi_display_read_ddic_cell_id(struct dsi_display *display,
 		char *buf, size_t size)
 {
 	int rc = 0;
-	u8 rdbuf[20] = {0};
-	u32 rdlen = 0;
-	u8 cmd[] = {0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xAC};
-	ssize_t count = 0;
+	struct drm_panel_cell_id_config *config;
+	struct dsi_cmd_desc cmd;
+	struct dsi_panel *panel;
 
-	if (!display || !display->panel) {
-		DISP_ERROR("Invalid display/panel ptr\n");
+	if (!display || !display->panel)
+		return -EINVAL;
+
+	config = &(display->panel->cell_id_config);
+	if (config->cell_id_cmd.count == 0 || config->cell_id_cmds_rlen == 0) {
 		return -EINVAL;
 	}
 
-	if (mi_get_panel_id_by_dsi_panel(display->panel) == L3_PANEL_PA ||
-		mi_get_panel_id_by_dsi_panel(display->panel) == L3S_PANEL_PA) {
-		rdlen = 13;
-		rc = dsi_display_cmd_receive(display, cmd, sizeof(cmd), rdbuf, rdlen);
-		if (rc == rdlen) {
-			count = compose_ddic_cell_id(buf, size, rdbuf, rdlen);
-			DISP_INFO("cell_id = %s\n", buf);
-			return count;
+	if (config->pre_tx_cmd.count != 0) {
+		struct dsi_panel_cmd_set *cmd_sets = &config->pre_tx_cmd;
+		panel = display->panel;
+
+		mutex_lock(&panel->panel_lock);
+		rc = mi_dsi_panel_write_cmd_set(panel, cmd_sets);
+		if (rc) {
+			DISP_ERROR("[%s]failed send DSI_CMD_SET_PANEL_CELL_ID_READ_PRE_TX, rc=%d\n",
+               panel->name, rc);
+			mutex_unlock(&panel->panel_lock);
+			return rc;
 		} else {
-			DISP_ERROR("failed to read panel cell id, rc = %d\n", rc);
-			return -EAGAIN;
+			mutex_unlock(&panel->panel_lock);
 		}
+	}
+
+	cmd = config->cell_id_cmd.cmds[0];
+	if (!config->return_buf) {
+		DISP_ERROR("[%s] cell_id_info return buffer is null, rc=%d\n",
+			display->name, rc);
+		return -ENOMEM;
+	}
+
+	memset(config->return_buf, 0x0, sizeof(*config->return_buf));
+
+	rc = mi_dsi_display_cmd_read(display, cmd, config->return_buf, config->cell_id_cmds_rlen);
+
+	if (rc == config->cell_id_cmds_rlen) {
+		rc = compose_ddic_cell_id(buf, size, config->return_buf, config->cell_id_cmds_rlen);
+		DISP_INFO("cell_id = %s\n", buf);
 	} else {
-		DISP_INFO("TODO\n");
-		snprintf(buf, size, "%s\n", "Unsupported");
+		DISP_ERROR("failed to read panel cell id, rc = %d\n", rc);
 		return -EINVAL;
 	}
+	return rc;
 }
 
 ssize_t mi_dsi_display_read_cell_id(void *display,
@@ -959,10 +1062,161 @@ ssize_t mi_dsi_display_read_manufacturer_info_by_globleparam(void *display,
 	return count;
 }
 
+int mi_dsi_display_cmd_read(struct dsi_display *display,
+			struct dsi_cmd_desc cmd, u8 *rx_buf, u32 rx_len)
+{
+	int rc = 0;
+	bool state = false;
+
+	if (!display) {
+		DISP_ERROR("Invalid display ptr\n");
+		return -EINVAL;
+	}
+
+	cmd.msg.flags |= MIPI_DSI_MSG_UNICAST_COMMAND;
+	cmd.msg.rx_buf = rx_buf;
+	cmd.msg.rx_len = rx_len;
+	cmd.ctrl_flags = DSI_CTRL_CMD_READ;
+
+	rc = dsi_display_ctrl_get_host_init_state(display, &state);
+
+	if (!rc && !state) {
+		DISP_ERROR("Command xfer attempted while device is in suspend state\n");
+		rc = -EPERM;
+		goto end;
+	}
+	if (rc || !state) {
+		DISP_ERROR("[DSI] Invalid host state %d rc %d\n",
+				state, rc);
+		rc = -EPERM;
+		goto end;
+	}
+
+	rc = dsi_display_cmd_rx(display, &cmd);
+	if (rc <= 0)
+		DISP_ERROR("[DSI] Display command receive failed, rc=%d\n", rc);
+
+end:
+	return rc;
+}
+
+int mi_dsi_display_check_flatmode_status(void *display, bool *status)
+{
+	struct dsi_display *dsi_display = (struct dsi_display *)display;
+	int rc = 0;
+
+	if (!display || !status) {
+		DISP_ERROR("Invalid display/status ptr\n");
+		return -EINVAL;
+	}
+
+	*status = false;
+
+	if (sde_kms_is_suspend_blocked(dsi_display->drm_dev)) {
+		DISP_ERROR("sde_kms is suspended, skip to write dsi cmd\n");
+		return -EBUSY;
+	}
+
+	mi_dsi_acquire_wakelock(dsi_display->panel);
+	rc = mi_dsi_panel_flatmode_validate_status(dsi_display, status);
+	mi_dsi_release_wakelock(dsi_display->panel);
+
+	return rc;
+}
 struct drm_panel *mi_of_drm_find_panel_for_touch(const struct device_node *np)
 {
 	return of_drm_find_panel(np);
 }
+
+static void mi_display_pm_suspend_delayed_work_handler(struct kthread_work *work)
+{
+	struct disp_delayed_work *delayed_work = container_of(work,
+					struct disp_delayed_work, delayed_work.work);
+	struct dsi_panel *dsi_panel = (struct dsi_panel *)(delayed_work->data);
+	struct mi_dsi_panel_cfg *mi_cfg = &dsi_panel->mi_cfg;
+	unsigned long mode_flags_backup = 0;
+	int pmic_pwrkey_status = mi_cfg->pmic_pwrkey_status;
+	int rc = 0;
+	mi_dsi_acquire_wakelock(dsi_panel);
+	dsi_panel_acquire_panel_lock(dsi_panel);
+	if (dsi_panel->panel_initialized && pmic_pwrkey_status == PMIC_PWRKEY_BARK_TRIGGER) {
+		mode_flags_backup = dsi_panel->mipi_device.mode_flags;
+		dsi_panel->mipi_device.mode_flags |= MIPI_DSI_MODE_LPM;
+		rc = mipi_dsi_dcs_set_display_off(&dsi_panel->mipi_device);
+		dsi_panel->mipi_device.mode_flags = mode_flags_backup;
+		if (rc < 0){
+			DISP_ERROR("failed to send MIPI_DCS_SET_DISPLAY_OFF\n");
+		} else {
+			DISP_INFO("panel send MIPI_DCS_SET_DISPLAY_OFF\n");
+		}
+	} else {
+		DISP_INFO("panel does not need to be off in advance\n");
+	}
+	dsi_panel_release_panel_lock(dsi_panel);
+	mi_dsi_release_wakelock(dsi_panel);
+	kfree(delayed_work);
+}
+int mi_display_pm_suspend_delayed_work(struct dsi_display *display)
+{
+	int disp_id = 0;
+	struct disp_feature *df = mi_get_disp_feature();
+	struct dsi_panel *panel = display->panel;
+	struct disp_display *dd_ptr;
+	struct disp_delayed_work *suspend_delayed_work;
+	if (!panel) {
+		DISP_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+	suspend_delayed_work = kzalloc(sizeof(*suspend_delayed_work), GFP_KERNEL);
+	if (!suspend_delayed_work) {
+		DISP_ERROR("failed to allocate delayed_work buffer\n");
+		return -ENOMEM;
+	}
+	disp_id = mi_get_disp_id(panel->type);
+	dd_ptr = &df->d_display[disp_id];
+	kthread_init_delayed_work(&suspend_delayed_work->delayed_work,
+			mi_display_pm_suspend_delayed_work_handler);
+	suspend_delayed_work->dd_ptr = dd_ptr;
+	suspend_delayed_work->wq = &dd_ptr->pending_wq;
+	suspend_delayed_work->data = panel;
+	return kthread_queue_delayed_work(dd_ptr->worker, &suspend_delayed_work->delayed_work,
+				msecs_to_jiffies(DISPLAY_DELAY_SHUTDOWN_TIME_MS));
+}
+int mi_display_powerkey_callback(int status)
+{
+	struct dsi_display *dsi_display = mi_get_primary_dsi_display();
+	struct dsi_panel *panel;
+	struct mi_dsi_panel_cfg *mi_cfg;
+
+	if (!dsi_display || !dsi_display->panel){
+		DISP_ERROR("invalid dsi_display or dsi_panel ptr\n");
+		return -EINVAL;
+	}
+
+	panel = dsi_display->panel;
+	mi_cfg = &panel->mi_cfg;
+	mi_cfg->pmic_pwrkey_status = status;
+
+	if(status == PMIC_PWRKEY_BARK_TRIGGER){
+		return mi_display_pm_suspend_delayed_work(dsi_display);
+	}
+
+	if(status == PMIC_PWRKEY_CLOSE_BRIGHNESS){
+		int brightness = 0;
+		ktz8866_backlight_update_status(brightness);
+	}
+	return 0;
+}
+
+
+bool mi_dsi_display_ramdump_support()
+{
+	/* when debug policy is 0x0 or 0x20, full dump not supported */
+	if (strcmp(display_debug_policy, "0x0") != 0 && strcmp(display_debug_policy, "0x20") != 0)
+		return true;
+	return false;
+}
+
 EXPORT_SYMBOL(mi_of_drm_find_panel_for_touch);
 
 module_param_string(oled_wp, oled_wp_info_str, MAX_CMDLINE_PARAM_LEN, 0600);
@@ -974,3 +1228,5 @@ MODULE_PARM_DESC(sec_oled_wp, "msm_drm.sec_oled_wp=<wp info> while <wp info> is 
 module_param_string(cell_id, cell_id_info_str, MAX_CMDLINE_PARAM_LEN, 0600);
 MODULE_PARM_DESC(cell_id, "msm_drm.cell_id=<cell id> while <cell id> is 'cell id info' ");
 
+module_param_string(debugpolicy, display_debug_policy, MAX_DEBUG_POLICY_CMDLINE_LEN, 0600);
+MODULE_PARM_DESC(debugpolicy, "msm_drm.debugpolicy=<debug policy> to indicate supporting ramdump or not ");

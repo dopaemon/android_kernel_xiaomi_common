@@ -28,6 +28,7 @@
 #include "mi_dsi_display.h"
 #include "mi_cooling_device.h"
 #include "mi_disp_lhbm.h"
+#include "mi_panel_id.h"
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
@@ -1214,6 +1215,11 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 					connector->base.id, rc);
 			SDE_EVT32(connector->base.id, SDE_EVTLOG_ERROR);
 		}
+	}
+	if(display && display->panel && c_conn->connector_type == DRM_MODE_CONNECTOR_DSI
+		&& (mi_get_panel_id_by_dsi_panel(display->panel) == N16_PANEL_PA
+		|| mi_get_panel_id_by_dsi_panel(display->panel) == N16_PANEL_PB)){
+		memset(&c_conn->mi_layer_state.layer_flags, 0, sizeof(c_conn->mi_layer_state.layer_flags));
 	}
 	/* Disable ESD thread */
 	sde_connector_schedule_status_work(connector, false);
@@ -2776,6 +2782,7 @@ void _sde_connector_report_panel_dead(struct sde_connector *conn,
 	bool skip_pre_kickoff)
 {
 	struct drm_event event;
+	struct dsi_display *display = (struct dsi_display *)(conn->display);
 
 	if (!conn)
 		return;
@@ -2790,6 +2797,7 @@ void _sde_connector_report_panel_dead(struct sde_connector *conn,
 
 	SDE_EVT32(SDE_EVTLOG_ERROR);
 	conn->panel_dead = true;
+	display->panel->mi_cfg.panel_dead_flag = true;
 	sde_encoder_display_failure_notification(conn->encoder,
 		skip_pre_kickoff);
 
@@ -2861,6 +2869,7 @@ int sde_connector_esd_status(struct drm_connector *conn)
 	if (ret <= 0) {
 		/* cancel if any pending esd work */
 		sde_connector_schedule_status_work(conn, false);
+
 		_sde_connector_report_panel_dead(sde_conn, true);
 		ret = -ETIMEDOUT;
 	} else {

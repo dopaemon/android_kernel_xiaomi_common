@@ -1396,6 +1396,10 @@ int dsi_conn_post_kickoff(struct drm_connector *connector,
 			dsi_ctrl_setup_avr(display->ctrl[i].ctrl, enable);
 	}
 
+	if (mi_get_panel_id_by_dsi_panel(display->panel) == M16T_PANEL_PA ||
+		mi_get_panel_id_by_dsi_panel(display->panel) == M16T_PANEL_PB) {
+		dsi_panel_post_aod_inVideo(display->panel);
+	}
 	return 0;
 }
 

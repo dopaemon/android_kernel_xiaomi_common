@@ -40,6 +40,7 @@ int mi_sde_connector_update_layer_state(struct drm_connector *connector,
 		u32 mi_layer_type);
 
 int mi_sde_connector_flat_fence(struct drm_connector *connector);
+int mi_sde_connector_set_em_pulse(struct drm_connector *connector, u32 bl_lvl);
 
 #if MI_DISP_DEBUGFS_ENABLE
 int mi_sde_connector_debugfs_esd_sw_trigger(void *display);

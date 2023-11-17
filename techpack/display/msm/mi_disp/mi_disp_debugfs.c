@@ -332,10 +332,10 @@ static ssize_t mi_disp_debugfs_fod_test_write(struct file *file,
 	}
 
 	for (i = 0; i < retry_count; i++) {
-		mi_disp_lhbm_fod_set_finger_event(dd_ptr->disp_id, FOD_EVENT_DOWN, true);
+		mi_disp_set_local_hbm(dd_ptr->disp_id, LHBM_TARGET_BRIGHTNESS_WHITE_1000NIT);
 		usleep_range((down_sleep_ms * 1000),
 			(down_sleep_ms * 1000) + 10);
-		mi_disp_lhbm_fod_set_finger_event(dd_ptr->disp_id, FOD_EVENT_UP, true);
+		mi_disp_set_local_hbm(dd_ptr->disp_id, LHBM_TARGET_BRIGHTNESS_OFF_FINGER_UP);
 		usleep_range((up_sleep_ms * 1000),
 			(up_sleep_ms * 1000) + 10);
 	}

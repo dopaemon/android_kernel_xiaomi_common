@@ -2460,11 +2460,11 @@ static void _sde_crtc_frame_data_notify(struct drm_crtc *crtc,
 
 void sde_crtc_get_frame_data(struct drm_crtc *crtc)
 {
-	struct sde_crtc *sde_crtc;
-	struct drm_plane *plane;
+	struct sde_crtc *sde_crtc = NULL;
+	struct drm_plane *plane = NULL;
 	struct sde_drm_frame_data_packet frame_data_packet = {0, 0};
-	struct sde_drm_frame_data_packet *data;
-	struct sde_frame_data *frame_data;
+	struct sde_drm_frame_data_packet *data = NULL;
+	struct sde_frame_data *frame_data = NULL;
 	int i = 0;
 
 	if (!crtc || !crtc->state)
@@ -2487,8 +2487,11 @@ void sde_crtc_get_frame_data(struct drm_crtc *crtc)
 	data->frame_count = sde_crtc->fps_info.frame_count;
 
 	/* Collect plane specific data */
-	drm_for_each_plane_mask(plane, crtc->dev, sde_crtc->plane_mask_old)
+	SDE_EVT32(DRMID(crtc), frame_data->cnt, data->commit_count, data->frame_count, sde_crtc->plane_mask_old);
+	drm_for_each_plane_mask(plane, crtc->dev, sde_crtc->plane_mask_old) {
+		SDE_EVT32(DRMID(crtc), plane->base.id, sde_plane_pipe(plane) - SSPP_VIG0);
 		sde_plane_get_frame_data(plane, &data->plane_frame_data[i]);
+	}
 
 	if (frame_data->cnt)
 		_sde_crtc_frame_data_notify(crtc, data);
@@ -2520,7 +2523,7 @@ static void sde_crtc_frame_event_cb(void *data, u32 event, ktime_t ts)
 	crtc_id = drm_crtc_index(crtc);
 
 	SDE_DEBUG("crtc%d\n", crtc->base.id);
-	SDE_EVT32_VERBOSE(DRMID(crtc), event);
+	SDE_EVT32(DRMID(crtc), event);
 
 	spin_lock_irqsave(&sde_crtc->event_spin_lock, flags);
 	fevent = list_first_entry_or_null(&sde_crtc->frame_event_list,
@@ -4175,6 +4178,7 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 	_sde_crtc_flush_frame_events(crtc);
 	SDE_ATRACE_END("flush_event_thread");
 	sde_crtc->plane_mask_old = crtc->state->plane_mask;
+	SDE_EVT32(DRMID(crtc), sde_crtc->plane_mask_old);
 
 	if (atomic_inc_return(&sde_crtc->frame_pending) == 1) {
 		/* acquire bandwidth and other resources */

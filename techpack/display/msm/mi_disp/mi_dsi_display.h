@@ -25,6 +25,8 @@ struct panel_manufaturer_info{
 
 };
 
+int mi_dsi_display_cmd_read(struct dsi_display *display,
+			struct dsi_cmd_desc cmd, u8 *rx_buf, u32 rx_len);
 
 char *get_display_power_mode_name(int power_mode);
 
@@ -80,6 +82,9 @@ ssize_t mi_dsi_display_read_manufacturer_struct_by_globleparam(void *display,
 ssize_t mi_dsi_display_read_gray_scale_info(void *display,
 			char *buf, size_t size);
 
+int mi_dsi_display_read_panel_build_id(struct dsi_display *display);
+
+
 int mi_dsi_display_get_fps(void *display, u32 *fps);
 
 int mi_dsi_display_set_doze_brightness(void *display,
@@ -118,5 +123,12 @@ int mi_dsi_display_esd_irq_ctrl(struct dsi_display *display,
 void mi_dsi_display_wakeup_pending_doze_work(struct dsi_display *display);
 
 struct drm_panel *mi_of_drm_find_panel_for_touch(const struct device_node *np);
+
+int mi_dsi_display_check_flatmode_status(void *display, bool *status);
+
+int mi_display_pm_suspend_delayed_work(struct dsi_display *display);
+int mi_display_powerkey_callback(int status);
+
+bool mi_dsi_display_ramdump_support(void);
 
 #endif /*_MI_DSI_DISPLAY_H_*/

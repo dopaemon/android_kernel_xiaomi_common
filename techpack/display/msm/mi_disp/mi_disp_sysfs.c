@@ -372,6 +372,20 @@ static ssize_t cell_id_show(struct device *device,
 	return ret;
 }
 
+static ssize_t flatmode_check_show(struct device *device,
+		struct device_attribute *attr, char *buf)
+{
+	struct disp_display *dd_ptr = to_disp_display(device);
+	bool status = false;
+
+	if (dd_ptr->intf_type != MI_INTF_DSI)
+		return snprintf(buf, PAGE_SIZE, "Unsupported display(%s intf)\n",
+			get_disp_intf_type_name(dd_ptr->intf_type));
+
+	mi_dsi_display_check_flatmode_status(dd_ptr->display, &status);
+	return snprintf(buf, PAGE_SIZE, "%d\n", status);
+}
+
 static ssize_t panel_manufacturer_info_show(struct device *device,
 		struct device_attribute *attr, char *buf)
 {
@@ -385,6 +399,7 @@ static ssize_t panel_manufacturer_info_show(struct device *device,
 
 }
 
+
 static DEVICE_ATTR_RW(disp_param);
 static DEVICE_ATTR_RW(mipi_rw);
 static DEVICE_ATTR_RO(panel_info);
@@ -397,6 +412,7 @@ static DEVICE_ATTR_RO(max_brightness_clone);
 static DEVICE_ATTR_RO(hw_vsync_info);
 static DEVICE_ATTR_RO(cell_id);
 static DEVICE_ATTR_RO(panel_manufacturer_info);
+static DEVICE_ATTR_RO(flatmode_check);
 
 
 static struct attribute *disp_feature_attrs[] = {
@@ -412,6 +428,7 @@ static struct attribute *disp_feature_attrs[] = {
 	&dev_attr_hw_vsync_info.attr,
 	&dev_attr_cell_id.attr,
 	&dev_attr_panel_manufacturer_info.attr,
+	&dev_attr_flatmode_check.attr,
 	NULL
 };
 

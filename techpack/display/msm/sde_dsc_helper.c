@@ -317,8 +317,12 @@ int sde_dsc_populate_dsc_config(struct drm_dsc_config *dsc, int scr_ver, u64 mi_
 	struct sde_dsc_rc_init_params_lut *rc_param_lut;
 	u32 slice_width_mod;
 	int i, ratio_idx;
+	struct msm_display_dsc_info *info = NULL;
 
 	dsc->rc_model_size = 8192;
+	info = container_of(dsc, struct msm_display_dsc_info, config);
+	if (info)
+		info->is_nvt = false;
 
 	if ((dsc->dsc_version_major == 0x1) &&
 			(dsc->dsc_version_minor == 0x1)) {
@@ -329,8 +333,24 @@ int sde_dsc_populate_dsc_config(struct drm_dsc_config *dsc, int scr_ver, u64 mi_
 
 		if (is_use_nt37705_dsc_config(mi_panel_id))
 			dsc->first_line_bpg_offset = 13;
+
+		if (is_use_nt36532_dsc_config(mi_panel_id)){
+			dsc->first_line_bpg_offset = 13;
+		}
+			
 	} else if (dsc->dsc_version_minor == 0x2) {
 		dsc->first_line_bpg_offset = _get_dsc_v1_2_bpg_offset(dsc);
+		if (is_use_nt37801_dsc_config(mi_panel_id) || is_use_nt37703_dsc_config(mi_panel_id)) {
+			dsc->first_line_bpg_offset = 13;
+			if (info)
+				info->is_nvt = true;
+		} else if (is_use_nt37706_dsc_config(mi_panel_id)) {
+			if (info)
+				info->is_nvt = true;
+		} else {
+			if (info)
+				info->is_nvt = false;
+		}
 	}
 
 	dsc->rc_edge_factor = 6;
@@ -351,7 +371,9 @@ int sde_dsc_populate_dsc_config(struct drm_dsc_config *dsc, int scr_ver, u64 mi_
 		dsc->rc_buf_thresh[i] = sde_dsc_rc_buf_thresh[i];
 
 	for (i = 0; i < DSC_NUM_BUF_RANGES; i++) {
-		if (is_use_nt37705_dsc_config(mi_panel_id))
+		if (is_use_nt37705_dsc_config(mi_panel_id) ||
+			is_use_nt37801_dsc_config(mi_panel_id) ||
+			is_use_nt37703_dsc_config(mi_panel_id))
 			dsc->rc_range_params[i].range_min_qp =
 				sde_dsc_rc_range_min_qp_nvt[ratio_idx][i];
 		else
@@ -365,7 +387,9 @@ int sde_dsc_populate_dsc_config(struct drm_dsc_config *dsc, int scr_ver, u64 mi_
 			dsc->rc_range_params[i].range_max_qp =
 				sde_dsc_rc_range_max_qp[ratio_idx][i];
 
-		if (is_use_nt37705_dsc_config(mi_panel_id))
+		if (is_use_nt37705_dsc_config(mi_panel_id) ||
+			is_use_nt37801_dsc_config(mi_panel_id) ||
+			is_use_nt37703_dsc_config(mi_panel_id))
 			dsc->rc_range_params[i].range_bpg_offset =
 				sde_dsc_rc_range_bpg_nvt[ratio_idx][i];
 		else
@@ -640,6 +664,8 @@ int sde_dsc_create_pps_buf_cmd(struct msm_display_dsc_info *dsc_info,
 			data = BIT(0);
 		else if (dsc->native_420)
 			data = BIT(1);
+		if (dsc_info->is_nvt)
+			data = 0x0; /* set pps88 to 0x0 for NT37801 */
 		*bp++ = data;				/* pps88 */
 		*bp++ = dsc->second_line_bpg_offset;	/* pps89 */
 

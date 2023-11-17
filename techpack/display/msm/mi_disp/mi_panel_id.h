@@ -29,7 +29,14 @@
 #define L18_38_0C_SA_PANEL_ID  0x004C313853380C00
 #define L9S_42_02_0A_PANEL_ID  0x004C395300420200
 #define L9S_36_02_0B_PANEL_ID  0x004C395300360200
-
+#define L12_42_02_0A_PANEL_ID  0x004C313200420200
+#define L12_36_02_0B_PANEL_ID  0x004C313200360200
+#define M11A_42_02_0A_PANEL_ID 0x4D31314100420200
+#define M16T_36_02_0A_PANEL_ID 0x4D31365400360200
+#define M16T_36_02_0B_PANEL_ID 0x4D31365400360201
+#define M80_42_02_0A_PANEL_ID  0x004D383000420200
+#define N16_36_0D_0A_PANEL_ID  0x004E313600360d00
+#define N16_42_02_OB_PANEL_ID  0x004e313600420201
 
 /* PA: Primary display, First selection screen
  * PB: Primary display, Second selection screen
@@ -49,6 +56,14 @@ enum mi_project_panel_id {
 	L18_PANEL_SA,
 	L9S_PANEL_PA,
 	L9S_PANEL_PB,
+	L12_PANEL_PA,
+	L12_PANEL_PB,
+	M11A_PANEL_PA,
+	M16T_PANEL_PA,
+	M16T_PANEL_PB,
+	M80_PANEL_PA,
+	N16_PANEL_PA,
+	N16_PANEL_PB,
 	PANEL_ID_MAX
 };
 
@@ -77,6 +92,22 @@ static inline enum mi_project_panel_id mi_get_panel_id(u64 mi_panel_id)
 		return L9S_PANEL_PA;
 	case L9S_36_02_0B_PANEL_ID:
 		return L9S_PANEL_PB;
+	case L12_42_02_0A_PANEL_ID:
+		return L12_PANEL_PA;
+	case L12_36_02_0B_PANEL_ID:
+		return L12_PANEL_PB;
+	case M11A_42_02_0A_PANEL_ID:
+		return M11A_PANEL_PA;
+	case M16T_36_02_0A_PANEL_ID:
+		return M16T_PANEL_PA;
+	case M16T_36_02_0B_PANEL_ID:
+		return M16T_PANEL_PB;
+	case M80_42_02_0A_PANEL_ID:
+		return M80_PANEL_PA;
+	case N16_36_0D_0A_PANEL_ID:
+		return N16_PANEL_PA;
+	case N16_42_02_OB_PANEL_ID:
+		return N16_PANEL_PB;
 	default:
 		return PANEL_ID_INVALID;
 	}
@@ -107,6 +138,18 @@ static inline const char *mi_get_panel_id_name(u64 mi_panel_id)
 		return "L9S_PANEL_PA";
 	case L9S_PANEL_PB:
 		return "L9S_PANEL_PB";
+	case M11A_PANEL_PA:
+		return "M11A_PANEL_PA";
+	case M16T_PANEL_PA:
+		return "M16T_PANEL_PA";
+	case M16T_PANEL_PB:
+		return "M16T_PANEL_PB";
+	case M80_PANEL_PA:
+		return "M80_PANEL_PA";
+	case N16_PANEL_PA:
+		return "N16_PANEL_PA";
+	case N16_PANEL_PB:
+		return "N16_PANEL_PB";
 	default:
 		return "unknown";
 	}
@@ -120,6 +163,13 @@ static inline bool is_use_nvt_dsc_config(u64 mi_panel_id)
 	case L10_42_02_0A_PANEL_ID:
 	case L9S_42_02_0A_PANEL_ID:
 	case L9S_36_02_0B_PANEL_ID:
+	case L12_42_02_0A_PANEL_ID:
+	case L12_36_02_0B_PANEL_ID:
+	case M11A_42_02_0A_PANEL_ID:
+	case M16T_36_02_0A_PANEL_ID:
+	case M16T_36_02_0B_PANEL_ID:
+	case M80_42_02_0A_PANEL_ID:
+	case N16_42_02_OB_PANEL_ID:
 		return true;
 	default:
 		return false;
@@ -129,6 +179,50 @@ static inline bool is_use_nvt_dsc_config(u64 mi_panel_id)
 static inline bool is_use_nt37705_dsc_config(u64 mi_panel_id)
 {
 	switch(mi_panel_id) {
+	case L12_36_02_0B_PANEL_ID:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static inline bool is_use_nt36532_dsc_config(u64 mi_panel_id)
+{
+	switch(mi_panel_id) {
+	case M80_42_02_0A_PANEL_ID:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static inline bool is_use_nt37801_dsc_config(u64 mi_panel_id)
+{
+	switch(mi_panel_id) {
+	case M11A_42_02_0A_PANEL_ID:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static inline bool is_use_nt37703_dsc_config(u64 mi_panel_id)
+{
+	switch(mi_panel_id) {
+	case M16T_36_02_0A_PANEL_ID:
+	case M16T_36_02_0B_PANEL_ID:
+	case M80_42_02_0A_PANEL_ID:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static inline bool is_use_nt37706_dsc_config(u64 mi_panel_id)
+{
+	switch(mi_panel_id) {
+	case N16_42_02_OB_PANEL_ID:
+		return true;
 	default:
 		return false;
 	}
