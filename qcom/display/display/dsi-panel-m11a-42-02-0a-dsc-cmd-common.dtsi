@@ -1,14 +1,20 @@
 
 			/* fod lhbm */
 			mi,mdss-dsi-hbm-fod-on-command = [
+				39 00 00 40 00 00 06 F0 55 AA 52 08 02
+				15 00 00 00 00 00 02 CC 00
 				39 00 00 00 00 00 03 51 0F FF];
 			mi,mdss-dsi-hbm-fod-on-command-state = "dsi_lp_mode";
 			mi,mdss-dsi-hbm-fod-off-command = [
+				39 00 00 40 00 00 06 F0 55 AA 52 08 02
+				15 00 00 00 00 00 02 CC 00
 				39 00 00 00 00 00 03 51 07 FF];
 			mi,mdss-dsi-hbm-fod-off-command-state = "dsi_lp_mode";
 			mi,mdss-dsi-hbm-fod-off-command-update = <0x51 0 2>;
 
 			mi,mdss-dsi-local-hbm-normal-white-1000nit-command = [
+				39 00 00 40 00 00 06 F0 55 AA 52 08 02
+				15 00 00 00 00 00 02 CC 00
 				/* RND Setting for LHBM */
 				39 00 00 40 00 00 06 F0 55 AA 52 08 07
 				39 00 00 40 00 00 02 C0 B1
@@ -49,10 +55,12 @@
 				39 00 00 40 00 00 02 87 21
 				39 00 00 00 00 00 02 85 00
 			];
-			mi,mdss-dsi-local-hbm-normal-white-1000nit-command-update = <0x87 27 2>, <0xD0 25 6>, <0xDF 23 2>;
+			mi,mdss-dsi-local-hbm-normal-white-1000nit-command-update = <0x87 29 2>, <0xD0 27 6>, <0xDF 25 2>;
 			mi,mdss-dsi-local-hbm-normal-white-1000nit-command-state = "dsi_hs_mode";
 
 			mi,mdss-dsi-local-hbm-normal-white-110nit-command = [
+				39 00 00 40 00 00 06 F0 55 AA 52 08 02
+				15 00 00 00 00 00 02 CC 00
 				/* RND Setting for LHBM */
 				39 00 00 40 00 00 06 F0 55 AA 52 08 07
 				39 00 00 40 00 00 02 C0 B1
@@ -93,10 +101,12 @@
 				39 00 00 40 00 00 02 87 21
 				39 00 00 00 00 00 02 85 00
 			];
-			mi,mdss-dsi-local-hbm-normal-white-110nit-command-update  = <0x87 27 3>, <0xD0 25 6>;
+			mi,mdss-dsi-local-hbm-normal-white-110nit-command-update  = <0x87 29 3>, <0xD0 27 6>;
 			mi,mdss-dsi-local-hbm-normal-white-110nit-command-state = "dsi_hs_mode";
 
 			mi,mdss-dsi-local-hbm-normal-green-500nit-command = [
+				39 00 00 40 00 00 06 F0 55 AA 52 08 02
+				15 00 00 00 00 00 02 CC 00
 				/* RND Setting for LHBM */
 				39 00 00 40 00 00 06 F0 55 AA 52 08 07
 				39 00 00 40 00 00 02 C0 B1
@@ -138,65 +148,28 @@
 				39 00 00 00 00 00 02 85 00
 			];
 			/* <mipi_address  update_index  update_length> */
-			mi,mdss-dsi-local-hbm-normal-green-500nit-command-update = <0x87 27 2>, <0xDF 23 2>;
+			mi,mdss-dsi-local-hbm-normal-green-500nit-command-update = <0x87 29 2>, <0xD0 27 6>, <0xDF 25 2>;
 			mi,mdss-dsi-local-hbm-normal-green-500nit-command-state = "dsi_lp_mode";
 
 			mi,mdss-dsi-local-hbm-off-to-normal-command = [
+				39 00 00 40 00 00 06 F0 55 AA 52 08 02
+				15 00 00 00 00 00 02 CC 00
 				39 00 00 40 00 00 03 51 07 FF
 				39 00 00 40 00 00 02 86 00
 				39 00 00 00 00 00 02 87 20
 			];
-			mi,mdss-dsi-local-hbm-off-to-normal-command-update = <0x51 0 2>;
+			mi,mdss-dsi-local-hbm-off-to-normal-command-update = <0x51 2 2>;
 			mi,mdss-dsi-local-hbm-off-to-normal-command-state = "dsi_hs_mode";
 
-			mi,mdss-dsi-local-hbm-off-to-hbm-command= [
+			mi,mdss-dsi-local-hbm-off-to-hbm-command = [
+				39 00 00 40 00 00 06 F0 55 AA 52 08 02
+				15 00 00 00 00 00 02 CC 00
 				39 00 00 40 00 00 03 51 07 FF
 				39 00 00 40 00 00 02 86 00
 				39 00 00 00 00 00 02 87 20
 			];
-			mi,mdss-dsi-local-hbm-off-to-hbm-command-update = <0x51 0 2>;
+			mi,mdss-dsi-local-hbm-off-to-hbm-command-update = <0x51 2 2>;
 			mi,mdss-dsi-local-hbm-off-to-hbm-command-state = "dsi_hs_mode";
-
-			/* dimming */
-			mi,mdss-dsi-dimmingon-command = [39 00 00 00 00 00 02 53 28];
-			mi,mdss-dsi-dimmingon-command-state = "dsi_hs_mode";
-			mi,mdss-dsi-dimmingoff-command = [39 00 00 00 00 00 02 53 20];
-			mi,mdss-dsi-dimmingoff-command-state = "dsi_hs_mode";
-
-			mi,mdss-dsi-dimming-8frame-command = [
-				39 00 00 00 00 00 06 F0 55 AA 52 08 00
-				15 00 00 00 00 00 02 6F 05
-				39 00 00 00 00 00 03 B2 08 08
-			];
-			mi,mdss-dsi-dimming-8frame-command-state = "dsi_lp_mode";
-
-			mi,mdss-dsi-dimming-4frame-command = [
-				39 00 00 00 00 00 06 F0 55 AA 52 08 00
-				15 00 00 00 00 00 02 6F 05
-				39 00 00 00 00 00 03 B2 04 04
-			];
-			mi,mdss-dsi-dimming-4frame-command-state = "dsi_lp_mode";
-
-			mi,mdss-dsi-4pulse-command = [
-				39 00 00 40 00 00 03 51 01 46
-				39 00 00 40 00 00 06 F0 55 AA 52 08 00
-				15 00 00 40 00 00 02 6F 11
-				39 00 00 00 00 00 04 B2 03 23 47
-			];
-			mi,mdss-dsi-4pulse-command-state = "dsi_hs_mode";
-			mi,mdss-dsi-8pulse-command = [
-				39 00 00 40 00 00 03 51 01 45
-				39 00 00 40 00 00 06 F0 55 AA 52 08 00
-				15 00 00 40 00 00 02 6F 11
-				39 00 00 00 00 00 04 B2 07 27 4F
-			];
-			mi,mdss-dsi-8pulse-command-state = "dsi_hs_mode";
-			mi,mdss-dsi-16pulse-command = [
-				39 00 00 40 00 00 06 F0 55 AA 52 08 00
-				15 00 00 40 00 00 02 6F 11
-				39 00 00 00 00 00 04 B2 0F 2F 5F
-			];
-			mi,mdss-dsi-16pulse-command-state = "dsi_hs_mode";
 
 			/* round corner */
 			mi,mdss-dsi-round-corner-on-command = [
@@ -215,3 +188,8 @@
 			];
 			mi,mdss-dsi-round-corner-off-command-state = "dsi_lp_mode";
 
+			mi,mdss-dsi-auto-update-gamma-command = [
+				39 00 00 40 00 00 06 F0 55 AA 52 08 02
+				15 00 00 00 00 00 02 CC 00
+			];
+			mi,mdss-dsi-auto-update-gamma-command-state = "dsi_hs_mode";
