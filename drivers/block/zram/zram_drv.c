@@ -1268,10 +1268,10 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 		void *mem;
 
 		value = handle ? zram_get_element(zram, index) : 0;
-		mem = kmap_atomic(page);
+		mem = kmap_local_page(page);
 		zram_fill_page(mem, PAGE_SIZE, value);
-		kunmap_atomic(mem);
 		zram_slot_unlock(zram, index);
+		kunmap_local(mem);
 		return 0;
 	}
 
@@ -1282,14 +1282,14 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 
 	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
 	if (size == PAGE_SIZE) {
-		dst = kmap_atomic(page);
+		dst = kmap_local_page(page);
 		copy_page(dst, src);
-		kunmap_atomic(dst);
+		kunmap_local(dst);
 		ret = 0;
 	} else {
-		dst = kmap_atomic(page);
+		dst = kmap_local_page(page);
 		ret = zcomp_decompress(zstrm, src, size, dst);
-		kunmap_atomic(dst);
+		kunmap_local(dst);
 		zcomp_stream_put(zram->comp);
 	}
 	zs_unmap_object(zram->mem_pool, handle);
@@ -1321,12 +1321,12 @@ static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 		goto out;
 
 	if (is_partial_io(bvec)) {
-		void *dst = kmap_atomic(bvec->bv_page);
-		void *src = kmap_atomic(page);
+		void *dst = kmap_local_page(bvec->bv_page);
+		void *src = kmap_local_page(page);
 
 		memcpy(dst + bvec->bv_offset, src + offset, bvec->bv_len);
-		kunmap_atomic(src);
-		kunmap_atomic(dst);
+		kunmap_local(src);
+		kunmap_local(dst);
 	}
 out:
 	if (is_partial_io(bvec))
@@ -1348,21 +1348,21 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 	unsigned long element = 0;
 	enum zram_pageflags flags = 0;
 
-	mem = kmap_atomic(page);
+	mem = kmap_local_page(page);
 	if (page_same_filled(mem, &element)) {
-		kunmap_atomic(mem);
+		kunmap_local(mem);
 		/* Free memory associated with this sector now. */
 		flags = ZRAM_SAME;
 		atomic64_inc(&zram->stats.same_pages);
 		goto out;
 	}
-	kunmap_atomic(mem);
+	kunmap_local(mem);
 
 compress_again:
 	zstrm = zcomp_stream_get(zram->comp);
-	src = kmap_atomic(page);
+	src = kmap_local_page(page);
 	ret = zcomp_compress(zstrm, src, &comp_len);
-	kunmap_atomic(src);
+	kunmap_local(src);
 
 	if (unlikely(ret)) {
 		zcomp_stream_put(zram->comp);
@@ -1417,10 +1417,10 @@ compress_again:
 
 	src = zstrm->buffer;
 	if (comp_len == PAGE_SIZE)
-		src = kmap_atomic(page);
+		src = kmap_local_page(page);
 	memcpy(dst, src, comp_len);
 	if (comp_len == PAGE_SIZE)
-		kunmap_atomic(src);
+		kunmap_local(src);
 
 	zcomp_stream_put(zram->comp);
 	zs_unmap_object(zram->mem_pool, handle);
@@ -1475,11 +1475,11 @@ static int zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 		if (ret)
 			goto out;
 
-		src = kmap_atomic(bvec->bv_page);
-		dst = kmap_atomic(page);
+		src = kmap_local_page(bvec->bv_page);
+		dst = kmap_local_page(page);
 		memcpy(dst + offset, src + bvec->bv_offset, bvec->bv_len);
-		kunmap_atomic(dst);
-		kunmap_atomic(src);
+		kunmap_local(dst);
+		kunmap_local(src);
 
 		vec.bv_page = page;
 		vec.bv_len = PAGE_SIZE;
