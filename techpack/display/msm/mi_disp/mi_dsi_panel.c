@@ -2715,7 +2715,8 @@ static int mi_dsi_panel_update_lhbm_white_param(struct dsi_panel * panel,
 				panel->mi_cfg.whitebuf_110_gir_off[i-18] = panel->mi_cfg.lhbm_rgb_param[i];
 		}
 
-		if (mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L9S_PANEL_PA) {
+		if (mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L9S_PANEL_PA ||
+				mi_get_panel_id(panel->mi_cfg.mi_panel_id) == M11A_PANEL_PA) {
 			for (i = 0; i < sizeof(panel->mi_cfg.lhbm_rgb_param); i++) {
 				if (i < 6) {
 					panel->mi_cfg.whitebuf_1000_gir_on[i] = panel->mi_cfg.lhbm_rgb_param[i];
