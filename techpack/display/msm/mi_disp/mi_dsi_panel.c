@@ -2968,6 +2968,114 @@ int mi_dsi_panel_set_flat_mode_locked(struct dsi_panel *panel, bool enable)
 	return rc;
 }
 
+int mi_dsi_panel_set_gamma_update_reg(struct dsi_panel *panel)
+{
+	int rc = 0;
+	struct mi_dsi_panel_cfg *mi_cfg  = NULL;
+	u32 last_refresh_rate;
+	u32 vsync_period_us;
+	ktime_t cur_time;
+
+	if (!panel) {
+		DISP_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mi_cfg = &panel->mi_cfg;
+
+	if (mi_cfg->panel_state != PANEL_STATE_ON) {
+		DISP_INFO("%s exit when panel state(%d)\n", __func__, mi_cfg->panel_state);
+		return 0;
+	}
+
+	last_refresh_rate = mi_cfg->last_refresh_rate;
+	vsync_period_us = 1000000 / last_refresh_rate;
+
+	if (mi_cfg->nedd_auto_update_gamma) {
+		cur_time = ktime_get();
+		if (last_refresh_rate && (ktime_to_us(cur_time - mi_cfg->last_mode_switch_time)
+				<= vsync_period_us)) {
+			DISP_INFO("sleep before update gamma, vsync_period = %d, diff_time = %llu",
+					vsync_period_us,
+					ktime_to_us(cur_time - mi_cfg->last_mode_switch_time));
+			usleep_range(vsync_period_us, vsync_period_us + 10);
+		}
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_AUTO_UPDATE_GAMMA);
+		DISP_INFO("send auto update gamma cmd\n");
+		if (rc)
+			DISP_ERROR("failed to set DSI_CMD_SET_MI_AUTO_UPDATE_GAMMA\n");
+		else
+			mi_cfg->nedd_auto_update_gamma = false;
+	}
+
+	return rc;
+}
+
+int mi_dsi_panel_set_gamma_update_state(struct dsi_panel *panel)
+{
+	int rc = 0;
+	struct mi_dsi_panel_cfg *mi_cfg  = NULL;
+
+	if (!panel) {
+		DISP_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mi_cfg = &panel->mi_cfg;
+
+	if (mi_cfg->panel_state != PANEL_STATE_ON) {
+		DISP_INFO("%s exit when panel state(%d)\n", __func__, mi_cfg->panel_state);
+		return 0;
+	}
+
+	mutex_lock(&panel->panel_lock);
+
+	mi_cfg->nedd_auto_update_gamma = true;
+	DISP_DEBUG("set auto update gamma state to true\n");
+
+	mutex_unlock(&panel->panel_lock);
+
+	return rc;
+}
+
+int mi_dsi_first_timing_switch(struct dsi_panel *panel)
+{
+	int rc = 0;
+	struct mi_dsi_panel_cfg *mi_cfg  = NULL;
+	u32 last_refresh_rate;
+	u32 vsync_period_us;
+
+	if (!panel) {
+		DISP_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mi_cfg = &panel->mi_cfg;
+
+	if (mi_cfg->panel_state != PANEL_STATE_ON) {
+		DISP_INFO("%s exit when panel state(%d)\n", __func__, mi_cfg->panel_state);
+		return 0;
+	}
+
+	last_refresh_rate = mi_cfg->last_refresh_rate;
+	vsync_period_us = 1000000 / last_refresh_rate;
+
+	if (mi_cfg->first_timing_switch) {
+		if (last_refresh_rate) {
+			DISP_INFO("sleep after timing switch, vsync_period = %d", vsync_period_us);
+			usleep_range(vsync_period_us, vsync_period_us + 10);
+		}
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_AUTO_UPDATE_GAMMA);
+		DISP_INFO("send auto update gamma cmd\n");
+		if (rc)
+			DISP_ERROR("failed to set DSI_CMD_SET_MI_AUTO_UPDATE_GAMMA: %d\n", rc);
+		else
+			mi_cfg->first_timing_switch = false;
+	}
+
+	return rc;
+}
+
 int mi_dsi_panel_set_dc_mode(struct dsi_panel *panel, bool enable)
 {
 	int rc = 0;
