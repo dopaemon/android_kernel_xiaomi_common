@@ -262,6 +262,10 @@ static void balance_irqs(void)
 		if (!update_irq_data(bi, &cpu))
 			continue;
 
+		/* Do not balance IRQs marked as performance critical */
+		if (irqd_has_set(&bi->desc->irq_data, IRQD_PERF_CRITICAL))
+			continue;
+
 		/* Ignore for this run if the IRQ isn't on the expected CPU */
 		if (cpu != bi->prev_cpu) {
 			bi->prev_cpu = cpu;
