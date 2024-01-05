@@ -2974,6 +2974,12 @@ static int goodix_set_cur_value(int gtp_mode, int gtp_value)
 		ts_err("initialization not completed, return");
 		return 0;
 	}
+
+	if (gtp_mode >= Touch_Mode_NUM) {
+		ts_err("gtp mode is error:%d", gtp_mode);
+		return -EINVAL;
+	}
+
 /* N17 code for HQ-290598 by jiangyue at 2023/6/6 start */
 	if (gtp_mode == Touch_Doubletap_Mode && goodix_core_data && gtp_value >= 0) {
 		xiaomi_touch_interfaces.touch_mode[gtp_mode][SET_CUR_VALUE] = gtp_value;
