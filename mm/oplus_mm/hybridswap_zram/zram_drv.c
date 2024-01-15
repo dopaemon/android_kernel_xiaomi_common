@@ -941,7 +941,7 @@ static ssize_t comp_algorithm_show(struct device *dev,
 	return sz;
 }
 
-static ssize_t comp_algorithm_store(struct device *dev,
+static __maybe_unused ssize_t comp_algorithm_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
