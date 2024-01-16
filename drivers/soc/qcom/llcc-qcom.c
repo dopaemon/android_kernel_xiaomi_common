@@ -928,7 +928,6 @@ static int llcc_spad_init(struct llcc_slice_desc *desc)
 	} else if (desc->slice_size == SZ_6MB) {
 		lpi_val = REGION_SZ_6MB;
 		/* Shared LB assigned to LLCC */
-		llcc_val = 0;
 	}
 	lpi_reg = SPAD_LPI_LB_ADDR_REGION_CFG3;
 	ret = regmap_write(drv_data->spad_or_bcast_regmap, lpi_reg, lpi_val);
