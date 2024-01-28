@@ -202,6 +202,10 @@ struct csiphy_cphy_per_lane_info {
  * @csiphy_data_rate_regs   : array of data rate specific reg value pairs
  */
 struct data_rate_reg_info_t {
+	/* xiaomi add for mipi phy backup setting begin*/
+	uint32_t this_setting_max_choice;
+	uint32_t this_setting_current_choice;
+	/* xiaomi add for mipi phy backup setting end*/
 	uint64_t bandwidth;
 	ssize_t  data_rate_reg_array_size;
 	struct   csiphy_cphy_per_lane_info per_lane_info[
@@ -375,6 +379,11 @@ struct csiphy_device {
 	bool                           en_full_phy_reg_dump;
 	bool                           skip_aux_settings;
 	uint16_t                       preamble_enable;
+
+	/* xiaomi add for mipi phy backup setting begin*/
+	char                           phy_dts_name[CAM_PHY_DTS_NAME];
+	uint8_t                        device_has_customized;
+	/* xiaomi add for mipi phy backup setting end*/
 };
 
 /**

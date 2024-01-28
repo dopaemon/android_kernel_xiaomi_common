@@ -27,6 +27,10 @@
 #include <linux/soc/qcom/msm_mmrm.h>
 #endif
 
+/* xiaomi add for mipi phy backup setting begin*/
+#include "cam_context.h"
+/* xiaomi add for mipi phy backup setting end*/
+
 #define NO_SET_RATE  -1
 #define INIT_RATE    -2
 
@@ -273,6 +277,10 @@ struct cam_hw_soc_info {
 	int32_t                         cam_cx_ipeak_bit;
 
 	void                           *soc_private;
+
+	/* xiaomi add for mipi phy backup setting begin*/
+	uint8_t                        phy_cfg_current_index[CAM_PHY_MAX_CTRL_NO];
+	/* xiaomi add for mipi phy backup setting end*/
 
 	int32_t                         aggregate_clk[CAM_SOC_MAX_CLK][2];
 	uint32_t                        aggregate_clk_mask;

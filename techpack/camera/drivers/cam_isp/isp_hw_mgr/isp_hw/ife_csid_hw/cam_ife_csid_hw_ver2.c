@@ -26,6 +26,10 @@
 #include "cam_cdm_util.h"
 #include "cam_common_util.h"
 #include "cam_subdev.h"
+/* xiaomi add for mipi phy backup setting begin*/
+#include "cam_csiphy_core.h"
+#include "cam_context.h"
+/* xiaomi add for mipi phy backup setting end*/
 
 /* CSIPHY TPG VC/DT values */
 #define CAM_IFE_CPHY_TPG_VC_VAL                         0x0
@@ -975,6 +979,11 @@ static int cam_ife_csid_ver2_rx_err_bottom_half(
 	uint32_t                                    total_crc;
 	uint32_t                                    data_idx;
 
+	/* xiaomi add for mipi phy backup setting begin*/
+	const char *p = NULL;
+	u8 phy_index = 0;
+	/* xiaomi add for mipi phy backup setting end*/
+
 	if (!handler_priv || !evt_payload_priv) {
 		CAM_ERR(CAM_ISP, "Invalid params");
 		return -EINVAL;
@@ -1090,6 +1099,19 @@ static int cam_ife_csid_ver2_rx_err_bottom_half(
 					total_crc, long_pkt_ftr_val & 0xffff,
 					long_pkt_ftr_val >> 16);
 			}
+			/* xiaomi add for mipi phy backup setting begin*/
+			p = soc_info->dev->of_node->name;
+			p += strlen(soc_info->dev->of_node->name) - 1;
+			if (p) {
+				kstrtou8(p, 0, &phy_index);
+				CAM_INFO(CAM_ISP, "PHY_CRC_ERROR phy_index[%d]", phy_index);
+				soc_info->phy_cfg_current_index[phy_index]++;
+				if (soc_info->phy_cfg_current_index[phy_index] >= 0xF) {
+					soc_info->phy_cfg_current_index[phy_index] = 0xF;
+				}
+				XM_MIPI_KMD_SET_CTRL_FLAG_VAL(phy_index, soc_info->phy_cfg_current_index[phy_index]);
+			}
+			/* xiaomi add for mipi phy backup setting end*/
 		}
 
 		CAM_ERR(CAM_ISP, "Fatal Errors: %s", log_buf);
