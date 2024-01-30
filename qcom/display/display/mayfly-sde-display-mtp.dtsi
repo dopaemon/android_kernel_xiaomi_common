@@ -66,6 +66,7 @@
 
 			qcom,default-topology-index = <0>;
 		};
+		/delete-node/ timing@2;
 	};
 };
 
