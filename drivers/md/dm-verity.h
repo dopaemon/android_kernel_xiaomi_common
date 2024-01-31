@@ -83,7 +83,6 @@ struct dm_verity_io {
 	bool in_tasklet;
 
 	struct work_struct work;
-	struct tasklet_struct tasklet;
 
 	/*
 	 * Three variably-size fields follow this struct:
