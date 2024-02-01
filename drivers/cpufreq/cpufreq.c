@@ -867,8 +867,25 @@ static ssize_t store_scaling_min_freq_limit
 	return count;
 }
 
-store_one(scaling_min_freq, min);
+store_one(raw_scaling_min_freq, min);
 store_one(scaling_max_freq, max);
+
+static ssize_t store_scaling_min_freq
+(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	unsigned long val;
+	int ret;
+
+	if (!strcmp(policy->governor->name, "schedhorizon"))
+		return count;
+
+	ret = sscanf(buf, "%lu", &val);
+	if (ret != 1)
+		return -EINVAL;
+	
+	ret = freq_qos_update_request(policy->min_freq_req, val);
+	return ret >= 0 ? count : ret;
+}
 
 /*
  * show_cpuinfo_cur_freq - current CPU frequency as detected by hardware
@@ -1056,6 +1073,7 @@ cpufreq_freq_attr_ro(related_cpus);
 cpufreq_freq_attr_ro(affected_cpus);
 cpufreq_freq_attr_rw(scaling_min_freq);
 cpufreq_freq_attr_rw(scaling_min_freq_limit);
+cpufreq_freq_attr_wo(raw_scaling_min_freq);
 cpufreq_freq_attr_rw(scaling_max_freq);
 cpufreq_freq_attr_rw(scaling_governor);
 cpufreq_freq_attr_rw(scaling_setspeed);
@@ -1066,6 +1084,7 @@ static struct attribute *default_attrs[] = {
 	&cpuinfo_transition_latency.attr,
 	&scaling_min_freq.attr,
 	&scaling_min_freq_limit.attr,
+	&raw_scaling_min_freq.attr,
 	&scaling_max_freq.attr,
 	&affected_cpus.attr,
 	&related_cpus.attr,
