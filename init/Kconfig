@@ -233,6 +233,31 @@ config LOCALVERSION_AUTO
 
 	  which is done within the script "scripts/setlocalversion".)
 
+config UNAME_OVERRIDE
+	bool "Override the uname release for matching processes"
+	help
+	  Allow uname() to report a configured kernel release for processes
+	  whose command line contains a configured string.
+	  The override only affects the release field returned by uname().
+	  Other processes continue to see the usual release.
+
+	  If unsure, say N.
+
+if UNAME_OVERRIDE
+
+config UNAME_OVERRIDE_TARGET
+	string "Command line substring to match"
+	help
+	  Leave this empty to disable the override.
+
+config UNAME_OVERRIDE_STRING
+	string "Kernel release to report for matching processes"
+	help
+	  Use a release string of at most 64 characters. Leave this empty
+	  to disable the override.
+
+endif
+
 config BUILD_SALT
 	string "Build ID Salt"
 	default ""

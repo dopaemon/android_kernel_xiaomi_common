@@ -44,6 +44,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/version.h>
 #include <linux/ctype.h>
+#include <linux/string_helpers.h>
 #include <linux/syscall_user_dispatch.h>
 
 #include <linux/compat.h>
@@ -1292,6 +1293,26 @@ DECLARE_RWSEM(uts_sem);
 #define override_architecture(name)	0
 #endif
 
+static void override_custom_release(struct new_utsname *name)
+{
+#ifdef CONFIG_UNAME_OVERRIDE
+	char *cmdline;
+
+	static_assert(sizeof(CONFIG_UNAME_OVERRIDE_STRING) <= sizeof(name->release));
+	if (!CONFIG_UNAME_OVERRIDE_TARGET[0] || !CONFIG_UNAME_OVERRIDE_STRING[0])
+		return;
+
+	cmdline = kstrdup_quotable_cmdline(current, GFP_KERNEL);
+	if (!cmdline)
+		return;
+
+	if (strstr(cmdline, CONFIG_UNAME_OVERRIDE_TARGET))
+		strscpy_pad(name->release, CONFIG_UNAME_OVERRIDE_STRING,
+			    sizeof(name->release));
+	kfree(cmdline);
+#endif
+}
+
 /*
  * Work around broken programs that cannot handle "Linux 3.0".
  * Instead we map 3.x to 2.6.40+x, so e.g. 3.0 would be 2.6.40
@@ -1340,6 +1361,7 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 		susfs_spoof_uname(&tmp);
 #endif
 	up_read(&uts_sem);
+	override_custom_release(&tmp);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
 
