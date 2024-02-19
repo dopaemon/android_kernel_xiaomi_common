@@ -27,6 +27,10 @@
 #include <linux/dccp.h>
 #include <linux/sctp.h>
 #include <linux/lsm_audit.h>
+#include <linux/module.h>
+
+static uint __read_mostly disable_audit_log = 1;
+module_param(disable_audit_log, uint, 0644);
 
 /**
  * ipv4_skb_to_auditdata : fill auditdata from skb
