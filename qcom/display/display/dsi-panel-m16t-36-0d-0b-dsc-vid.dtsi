@@ -197,15 +197,15 @@ qcom,mdss-dsi-display-timings {
 			];
 			qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
 			mi,mdss-dsi-fps-120-gamma-command = [
-				39 00 00 00 00 00 02 6C 02
+				39 00 00 10 00 00 02 6C 02
 			];
 			mi,mdss-dsi-fps-120-gamma-command-state = "dsi_hs_mode";
 			mi,mdss-dsi-fps-90-gamma-command = [
-				39 00 00 00 00 00 02 6C 01
+				39 00 00 10 00 00 02 6C 01
 			];
 			mi,mdss-dsi-fps-90-gamma-command-state = "dsi_hs_mode";
 			mi,mdss-dsi-fps-60-gamma-command = [
-				39 00 00 00 00 00 02 6C 00
+				39 00 00 10 00 00 02 6C 00
 			];
 			mi,mdss-dsi-fps-60-gamma-command-state = "dsi_hs_mode";
 		};
