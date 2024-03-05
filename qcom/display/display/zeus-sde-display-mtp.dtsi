@@ -106,7 +106,7 @@
 &dsi_l2_38_0c_0a_dsc_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_L2>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,mdss-dsi-bl-min-level = <4>;
+	qcom,mdss-dsi-bl-min-level = <8>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,mdss-brightness-max-level = <8191>;
 	qcom,mdss-brightness-init-level = <804>;
