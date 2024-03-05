@@ -237,6 +237,7 @@
 					39 00 00 00 00 00 02 BE 45
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-version = <0x12>;
@@ -438,6 +439,7 @@
 					39 00 00 00 00 00 02 BE 45
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-version = <0x12>;
@@ -640,6 +642,7 @@
 					39 00 00 00 00 00 02 BE 45
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-version = <0x12>;
