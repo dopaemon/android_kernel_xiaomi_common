@@ -13,6 +13,11 @@
 #define CAM_SENSOR_PINCTRL_STATE_SLEEP "cam_suspend"
 #define CAM_SENSOR_PINCTRL_STATE_DEFAULT "cam_default"
 
+#ifdef CONFIG_WL2866D
+extern int wl2866d_camera_power_up(int out_iotype, int out_out_delay);
+extern int wl2866d_camera_power_down(int out_iotype, int out_out_delay);
+#endif
+
 #define VALIDATE_VOLTAGE(min, max, config_val) ((config_val) && \
 	(config_val >= min) && (config_val <= max))
 
@@ -2210,6 +2215,24 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 				goto power_up_failed;
 			}
 			break;
+#ifdef CONFIG_WL2866D
+		case SENSOR_WL2866D_DVDD1:
+		case SENSOR_WL2866D_DVDD2:
+		case SENSOR_WL2866D_AVDD1:
+		case SENSOR_WL2866D_AVDD2:
+			//wl2866 out port num :
+			//OUT_DVDD1 = 0
+			//OUT_DVDD2 = 1
+			//OUT_AVDD1 = 2
+			//OUT_AVDD2 = 3
+			//but we pre set SENSOR_WL2866D_DVDD1 = 13.
+			rc = wl2866d_camera_power_up(((int)power_setting->seq_type),((int)power_setting->delay));
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,"wl2866d_camera_power_up_io_type [%d] failed",power_setting->seq_type);
+				goto power_up_failed;
+			}
+			break;
+#endif
 		default:
 			CAM_ERR(CAM_SENSOR, "error power seq type %d",
 				power_setting->seq_type);
@@ -2386,7 +2409,12 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 		}
 
 		ps = NULL;
+#ifdef CONFIG_WL2866D
+		CAM_DBG(CAM_SENSOR, "seq_type %d, seq_val %d config_val %ld delay %d",\
+			pd->seq_type, pd->seq_val,pd->config_val, pd->delay);
+#else
 		CAM_DBG(CAM_SENSOR, "seq_type %d",  pd->seq_type);
+#endif
 		switch (pd->seq_type) {
 		case SENSOR_MCLK:
 			for (i = soc_info->num_clk - 1; i >= 0; i--) {
@@ -2469,6 +2497,25 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 				CAM_ERR(CAM_SENSOR,
 					"Error disabling VREG GPIO");
 			break;
+#ifdef CONFIG_WL2866D
+		case SENSOR_WL2866D_DVDD1:
+		case SENSOR_WL2866D_DVDD2:
+		case SENSOR_WL2866D_AVDD1:
+		case SENSOR_WL2866D_AVDD2:
+			//wl2866 out port num :
+			//OUT_DVDD1 = 0
+			//OUT_DVDD2 = 1
+			//OUT_AVDD1 = 2
+			//OUT_AVDD2 = 3
+			//but we pre set SENSOR_WL2866D_DVDD1 = 13.
+			ret = wl2866d_camera_power_down(((int)pd->seq_type),((int)pd->delay));
+			if (ret < 0) {
+				CAM_ERR(CAM_SENSOR,"wl2866d_camera_power_down iotype [%d] failed", pd->seq_type);
+				break;
+			}
+			break;
+#endif
+
 		default:
 			CAM_ERR(CAM_SENSOR, "error power seq type %d",
 				pd->seq_type);
