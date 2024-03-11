@@ -41,6 +41,7 @@
 #define WLS_FW_UPDATE_TIME_MS		1000
 #define WLS_FW_BUF_SIZE			128
 #define DEFAULT_RESTRICT_FCC_UA		1000000
+#define CHG_DEBUG_DATA_LEN		200
 
 #if defined(CONFIG_BQ_FG_2S)
 #define BATTERY_DIGEST_LEN 20
@@ -65,6 +66,12 @@ enum uvdm_state {
 	USBPD_UVDM_REVERSE_AUTHEN,
 	USBPD_UVDM_CONNECT,
 };
+
+enum usb_connector_type {
+	USB_CONNECTOR_TYPE_TYPEC,
+	USB_CONNECTOR_TYPE_MICRO_USB,
+};
+
 enum psy_type {
 	PSY_TYPE_BATTERY,
 	PSY_TYPE_USB,
@@ -142,9 +149,11 @@ enum wireless_property_id {
 	WLS_TYPE,
 	WLS_BOOST_EN,
 	WLS_HBOOST_VMAX,
+#ifndef CONFIG_MI_CHARGE_PROPERTY
 	WLS_INPUT_CURR_LIMIT,
 	WLS_ADAP_TYPE,
 	WLS_CONN_TEMP,
+#endif
 	WLS_PROP_MAX,
 };
 
@@ -153,9 +162,11 @@ enum xm_property_id {
 	XM_PROP_VERIFY_DIGEST,
 	XM_PROP_CONNECTOR_TEMP,
 	XM_PROP_AUTHENTIC,
+	XM_PROP_BATTERY_ADAPT_POWER_MATCH,
 	XM_PROP_CHIP_OK,
 	XM_PROP_VBUS_DISABLE,
 	XM_PROP_REAL_TYPE,
+	XM_PROP_THERMAL_BOARD_TEMP,
 	/*used for pd authentic*/
 	XM_PROP_VERIFY_PROCESS,
 	XM_PROP_VDM_CMD_CHARGER_VERSION,
@@ -195,12 +206,21 @@ enum xm_property_id {
 	XM_PROP_SOC_DECIMAL_RATE,
 	XM_PROP_QUICK_CHARGE_TYPE,
 	XM_PROP_APDO_MAX,
+	XM_PROP_POWER_MAX,
 	XM_PROP_DIE_TEMPERATURE,
 	XM_PROP_SLAVE_DIE_TEMPERATURE,
+	XM_PROP_FG_RAW_SOC,
 	/* wireless charge infor */
-	XM_PROP_WLS_START = 50,
+	XM_PROP_WLS_START,
 	XM_PROP_TX_MACL,
 	XM_PROP_TX_MACH,
+	XM_PROP_PEN_MACL,
+	XM_PROP_PEN_MACH,
+	XM_PROP_TX_IOUT,
+	XM_PROP_TX_VOUT,
+	XM_PROP_PEN_SOC,
+	XM_PROP_PEN_HALL3,
+	XM_PROP_PEN_HALL4,
 	XM_PROP_RX_CRL,
 	XM_PROP_RX_CRH,
 	XM_PROP_RX_CEP,
@@ -217,12 +237,12 @@ enum xm_property_id {
 	XM_PROP_WLSCHARGE_CONTROL_LIMIT,
 	XM_PROP_FW_VER,
 	XM_PROP_WLS_THERMAL_REMOVE,
-	XM_PROP_WLS_DEBUG,
+	XM_PROP_CHG_DEBUG,
 	XM_PROP_WLS_FW_STATE,
 	XM_PROP_WLS_CAR_ADAPTER,
 	XM_PROP_WLS_TX_SPEED,
 	XM_PROP_WLS_FC_FLAG,
-	XM_PROP_WLS_END = 80,
+	XM_PROP_WLS_END,
 	/**********************/
 	XM_PROP_SHUTDOWN_DELAY,
 	XM_PROP_FAKE_TEMP,
@@ -232,11 +252,17 @@ enum xm_property_id {
 	XM_PROP_THERMAL_TEMP,
 	XM_PROP_FB_BLANK_STATE,
 	XM_PROP_SMART_BATT,
+	XM_PROP_SMART_CHG,
 	XM_PROP_SHIPMODE_COUNT_RESET,
 	XM_PROP_SPORT_MODE,
 	XM_PROP_BATT_CONNT_ONLINE,
 	XM_PROP_FAKE_CYCLE,
 	XM_PROP_FAKE_SOH,
+	XM_PROP_DELTAFV,
+	XM_PROP_OTG_UI_SUPPORT,
+	XM_PROP_CID_STATUS,
+	XM_PROP_CC_TOGGLE,
+	XM_PROP_HIFI_CONNECT,
 	/*********nvt fuelgauge feature*********/
 	XM_PROP_NVTFG_MONITOR_ISC,
 	XM_PROP_NVTFG_MONITOR_SOA,
@@ -273,6 +299,8 @@ enum xm_property_id {
 	XM_PROP_FG1_CURRENT_MAX,
 	XM_PROP_FG1_VOL_MAX,
 	XM_PROP_FG1_TSIM,
+	XM_PROP_FG1_CELL1_RASCALE,
+	XM_PROP_FG1_AVG_CURRENT,
 	XM_PROP_FG1_TAMBIENT,
 	XM_PROP_FG1_TREMQ,
 	XM_PROP_FG1_TFULLQ,
@@ -304,6 +332,8 @@ enum xm_property_id {
 	XM_PROP_FG2_CURRENT_MAX,
 	XM_PROP_FG2_VOL_MAX,
 	XM_PROP_FG2_TSIM,
+	XM_PROP_FG2_CELL1_RASCALE,
+	XM_PROP_FG2_AVG_CURRENT,
 	XM_PROP_FG2_TAMBIENT,
 	XM_PROP_FG2_TREMQ,
 	XM_PROP_FG2_TFULLQ,
@@ -311,6 +341,27 @@ enum xm_property_id {
 	XM_PROP_FG2_GaugingStatus,
 	XM_PROP_FG2_FullChargeFlag,
 	XM_PROP_FG2_RSOC,
+	XM_PROP_FG2_OVER_PEAK_FLAG,
+	XM_PROP_FG2_CURRENT_DEVIATION,
+	XM_PROP_FG2_POWER_DEVIATION,
+	XM_PROP_FG2_AVERAGE_CURRENT,
+	XM_PROP_FG2_AVERAGE_TEMPERATURE,
+	XM_PROP_FG2_START_LEARNING,
+	XM_PROP_FG2_STOP_LEARNING,
+	XM_PROP_FG2_SET_LEARNING_POWER,
+	XM_PROP_FG2_GET_LEARNING_POWER,
+	XM_PROP_FG2_GET_LEARNING_POWER_DEV,
+	XM_PROP_FG2_GET_LEARNING_TIME_DEV,
+	XM_PROP_FG2_SET_CONSTANT_POWER,
+	XM_PROP_FG2_GET_REMAINING_TIME,
+	XM_PROP_FG2_SET_REFERANCE_POWER,
+	XM_PROP_FG2_GET_REFERANCE_CURRENT,
+	XM_PROP_FG2_GET_REFERANCE_POWER,
+	XM_PROP_FG2_START_LEARNING_B,
+	XM_PROP_FG2_STOP_LEARNING_B,
+	XM_PROP_FG2_SET_LEARNING_POWER_B,
+	XM_PROP_FG2_GET_LEARNING_POWER_B,
+	XM_PROP_FG2_GET_LEARNING_POWER_DEV_B,
 	XM_PROP_FG_VENDOR_ID,
 	/*begin dual fuel high temperature intercept feature */
 	XM_PROP_FG_VOLTAGE_MAX,
@@ -333,6 +384,7 @@ enum xm_property_id {
 	XM_PROP_SERVER_RESULT,
 	XM_PROP_ADSP_RESULT,
 #endif
+	XM_PROP_LAST_NODE,
 	XM_PROP_MAX,
 };
 
@@ -378,10 +430,17 @@ struct wls_fw_resp_msg {
 	char                    version[MAX_STR_LEN - 32];
 };
 
-struct wls_debug_msg {
+enum xm_chg_debug_type {
+	CHG_WLS_DEBUG,
+	CHG_ADSP_LOG,
+	CHG_DEBUG_TYPE_MAX,
+};
+
+struct chg_debug_msg {
 	struct pmic_glink_hdr   hdr;
 	u32                     property_id;
-	char                    data[MAX_STR_LEN];
+	u8                      type;
+	char                    data[CHG_DEBUG_DATA_LEN];
 };
 
 struct battery_model_resp_msg {
@@ -521,13 +580,13 @@ struct battery_chg_dev {
 	u32				restrict_fcc_ua;
 	u32				last_fcc_ua;
 	u32				usb_icl_ua;
+	u32				reverse_chg_flag;
+	u32				boost_mode;
 	u32				thermal_fcc_step;
 	bool				restrict_chg_en;
 	u8				chg_ctrl_start_thr;
 	u8				chg_ctrl_end_thr;
 	bool				chg_ctrl_en;
-	u32				reverse_chg_flag;
-	u32				boost_mode;
 	struct delayed_work		xm_prop_change_work;
 	struct delayed_work		charger_debug_info_print_work;
 #if defined(CONFIG_BQ_FG_UPDATE)
@@ -542,20 +601,38 @@ struct battery_chg_dev {
 	const struct battery_chg_match_data	*match_data;
 	u8				*digest;
 	u32				*ss_auth_data;
-	char				wls_debug_data[MAX_STR_LEN];
+	char				wls_debug_data[CHG_DEBUG_DATA_LEN];
 	/*shutdown delay is supported*/
 	bool				shutdown_delay_en;
 	bool				support_2s_charging;
 	bool				report_power_absent;
+	bool				report_connector_temp;
 	bool				support_dual_panel;
 	/*dual battery authentic flag*/
 	bool				slave_fg_verify_flag;
 
 	/*soc update flag*/
 	bool				support_soc_update;
+	bool				support_screen_update;
 
 	/*battery auth check for ssr*/
 	bool				battery_auth;
 	bool				slave_battery_auth;
 	int				mtbf_current;
+	bool				notify_en;
+	bool				error_prop;
+	struct work_struct pen_notifier_work;
+	struct work_struct current_battery_level_notifier_work;
+	int thermal_board_temp;
+	struct notifier_block chg_nb;
 };
+
+enum charger_notifier_events {
+	/* thermal board temp */
+	 THERMAL_BOARD_TEMP = 0,
+};
+
+extern struct srcu_notifier_head charger_notifier;
+extern int charger_reg_notifier(struct notifier_block *nb);
+extern int charger_unreg_notifier(struct notifier_block *nb);
+extern int charger_notifier_call_cnain(unsigned long event,int val);
