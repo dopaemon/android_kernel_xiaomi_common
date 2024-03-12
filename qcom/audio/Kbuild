@@ -58,7 +58,9 @@ dtbo-$(CONFIG_ARCH_CAPE) += cape-audio.dtbo \
                  unicorn-audio.dtbo \
                  thor-audio.dtbo \
                  mayfly-audio.dtbo \
-                 mondrian-audio.dtbo
+                 mondrian-audio.dtbo \
+                 marble-audio.dtbo
+
 
  always-y    := $(dtb-y) $(dtbo-y)
  subdir-y    := $(dts-dirs)
