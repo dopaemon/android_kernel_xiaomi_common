@@ -52,6 +52,15 @@
 	};
 };
 
+&pm8350b_gpios {
+	pm8350b_rear_tof_therm {
+		pm8350b_rear_tof_therm_default: pm8350b_rear_tof_therm_default {
+			pins = "gpio2";
+			bias-high-impedance;
+		};
+	};
+};
+
 &pm8350c_gpios {
 	lcd_backlight_ctrl {
 		lcd_backlight_ctrl_default: lcd_backlight_ctrl_default {
@@ -117,7 +126,7 @@
 
 &pmk8350_vadc {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pm8350_rear_tof_therm_default>;
+	pinctrl-0 = <&pm8350b_rear_tof_therm_default>;
 
 	pm8350b_chg_temp {
 		reg = <PM8350B_ADC7_CHG_TEMP>;
