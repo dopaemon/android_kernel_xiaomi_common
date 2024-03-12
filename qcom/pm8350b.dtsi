@@ -61,7 +61,7 @@
 			qcom,vmax-mv = <1250>;
 			qcom,brake-mode = <BRAKE_CLOSE_LOOP>;
 			qcom,brake-pattern = /bits/ 8 <0xff 0x3f 0x1f>;
-			qcom,lra-period-us = <6667>;
+			qcom,lra-period-us = <5882>;
 			qcom,drv-sig-shape = <WF_SINE>;
 			qcom,brake-sig-shape = <WF_SINE>;
 			status = "disabled";
