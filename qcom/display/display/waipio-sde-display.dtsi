@@ -33,6 +33,16 @@
 		pinctrl-0 = <&display_panel_avee_default>;
 	};
 
+	display_panel_vci: display_panel_vci {
+		compatible = "regulator-fixed";
+		regulator-name = "display_panel_vci";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+		gpio = <&tlmm 75 0>;
+		enable-active-high;
+		regulator-boot-on;
+	};
+
 	sde_wb: qcom,wb-display@0 {
 		compatible = "qcom,wb-display";
 		cell-index = <0>;
