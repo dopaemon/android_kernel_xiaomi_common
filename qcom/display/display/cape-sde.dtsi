@@ -220,6 +220,7 @@
 
 	qcom,sde-ib-bw-vote = <2500000 0 800000>;
 	qcom,sde-has-idle-pc;
+	qcom,sde-wakeup-with-touch;
 	qcom,sde-dspp-ltm-version = <0x00010001>;
 	/* offsets are based off dspp 0 and dspp 1 */
 	qcom,sde-dspp-ltm-off = <0x15300 0x14300>;
