@@ -475,7 +475,7 @@
 			config {
 				pins = "gpio124";
 				drive-strength = <8>;   /* 8 mA */
-				bias-disable;           /* NO PULL */
+				bias-pull-down;         /* PULL DOWN */
 			};
 		};
 	};
