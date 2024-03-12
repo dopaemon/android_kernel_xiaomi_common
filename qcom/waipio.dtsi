@@ -3235,9 +3235,9 @@
 		qcom,xo-clk-gpio = <&tlmm 204 0>;
 
 		vdd-wlan-aon-supply = <&S2E>;
-		qcom,vdd-wlan-aon-config = <1012000 1012000 0 0 1>;
+		qcom,vdd-wlan-aon-config = <1012000 1012000 0 0 0>;
 		vdd-wlan-dig-supply = <&S11B>;
-		qcom,vdd-wlan-dig-config = <966000 966000 0 0 1>;
+		qcom,vdd-wlan-dig-config = <966000 966000 0 0 0>;
 		vdd-wlan-io-supply = <&S10B>;
 		qcom,vdd-wlan-io-config = <1800000 1800000 0 0 1>;
 		vdd-wlan-rfa1-supply = <&S1C>;
