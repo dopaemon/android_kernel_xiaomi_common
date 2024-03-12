@@ -22,7 +22,8 @@ dtbo-$(CONFIG_ARCH_WAIPIO) += display/waipio-sde.dtbo \
 		display/waipio-sde-display-hdk-overlay.dtbo \
 		display/waipio-sde-display-waipio-lemur-cdp-overlay.dtbo \
 		display/waipio-sde-display-waipio-lemur-mtp-overlay.dtbo \
-		display/waipio-sde-display-rumi-overlay.dtbo
+		display/waipio-sde-display-rumi-overlay.dtbo \
+		display/zeus-sde-display-mtp-overlay.dtbo
 else
 dtbo-$(CONFIG_ARCH_WAIPIO) += display/trustedvm-waipio-sde-display-mtp-overlay.dtbo \
 		display/trustedvm-waipio-sde-display-cdp-overlay.dtbo \
