@@ -75,7 +75,7 @@
 			snps,ssp-u3-u0-quirk;
 			tx-fifo-resize;
 			dr_mode = "otg";
-			maximum-speed = "super-speed-plus";
+			maximum-speed = "high-speed";
 		};
 	};
 
