@@ -1014,7 +1014,7 @@
 
 			config {
 				pins = "gpio91";
-				bias-disable;
+				bias-pull-down;         /* PULL DOWN */
 				drive-strength = <2>;
 			};
 		};
