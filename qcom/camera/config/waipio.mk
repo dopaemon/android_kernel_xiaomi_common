@@ -21,5 +21,6 @@ dtbo-$(CONFIG_ARCH_CAPE) += cape-camera-sensor-mtp.dtbo \
 
 dtbo-$(CONFIG_ARCH_CAPE) += ukee-camera-sensor-mtp.dtbo \
 				ukee-camera-sensor-cdp.dtbo \
-				ukee-camera-sensor-qrd.dtbo
+				ukee-camera-sensor-qrd.dtbo \
+				marble-sm7475-camera-sensor.dtbo
 dtbo-$(CONFIG_ARCH_CAPE) += ukee-camera.dtbo
