@@ -169,6 +169,7 @@
 					39 00 00 00 00 00 07 51 00 00 00 00 00 00
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 0 6>;
 
 				/* DSC CONFIG*/
 				qcom,compression-mode = "dsc";
