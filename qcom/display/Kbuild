@@ -41,7 +41,8 @@ dtbo-$(CONFIG_ARCH_CAPE) += display/cape-sde.dtbo \
 		display/cape-sde-display-mtp-120fps-overlay.dtbo \
 		display/cape-sde-display-mtp-nodisplay-overlay.dtbo \
 		display/cape-sde-display-qrd-overlay.dtbo \
-		display/thor-sde-display-cape-mtp-overlay.dtbo
+		display/thor-sde-display-cape-mtp-overlay.dtbo \
+		display/unicorn-sde-display-mtp-overlay.dtbo
 else
 dtbo-$(CONFIG_ARCH_CAPE) += display/trustedvm-cape-sde-display-qrd-overlay.dtbo \
 		display/trustedvm-cape-sde-display-cdp-overlay.dtbo \
