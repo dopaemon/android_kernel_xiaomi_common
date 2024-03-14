@@ -45,7 +45,8 @@ dtbo-$(CONFIG_ARCH_CAPE) += display/cape-sde.dtbo \
 		display/unicorn-sde-display-mtp-overlay.dtbo \
 		display/zizhan-sde-display-cape-mtp-overlay.dtbo \
 		display/mayfly-sde-display-mtp-overlay.dtbo \
-		display/mondrian-sde-display-mtp-overlay.dtbo
+		display/mondrian-sde-display-mtp-overlay.dtbo \
+		display/marble-sde-display-mtp-overlay.dtbo
 else
 dtbo-$(CONFIG_ARCH_CAPE) += display/trustedvm-cape-sde-display-qrd-overlay.dtbo \
 		display/trustedvm-cape-sde-display-cdp-overlay.dtbo \
