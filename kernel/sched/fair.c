@@ -10477,15 +10477,15 @@ static inline bool update_newidle_cost(struct sched_domain *sd, u64 cost)
 		 * next wakeup on the CPU.
 		 */
 		sd->max_newidle_lb_cost = cost;
-		sd->last_decay_max_lb_cost = jiffies;
-	} else if (time_after(jiffies, sd->last_decay_max_lb_cost + HZ)) {
+		sd->next_decay_max_lb_cost = jiffies;
+	} else if (time_after(jiffies, sd->next_decay_max_lb_cost + HZ)) {
 		/*
 		 * Decay the newidle max times by ~1% per second to ensure that
 		 * it is not outdated and the current max cost is actually
 		 * shorter.
 		 */
 		sd->max_newidle_lb_cost = (sd->max_newidle_lb_cost * 253) / 256;
-		sd->last_decay_max_lb_cost = jiffies;
+		sd->next_decay_max_lb_cost = jiffies;
 
 		return true;
 	}
