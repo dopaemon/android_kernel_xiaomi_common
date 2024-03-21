@@ -16,7 +16,7 @@
 
 static unsigned int default_efficient_freq[] = {0};
 static u64 default_up_delay[] = {0};
-static u64 restrict_escape_until = 0;
+static u64 __read_mostly restrict_escape_until = 0;
 
 struct sugov_tunables {
 	struct gov_attr_set	attr_set;
