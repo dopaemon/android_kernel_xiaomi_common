@@ -100,6 +100,11 @@ static inline void do_freq_limit(struct sugov_policy *sg_policy, unsigned int *f
 		return;
 	}
 
+	/* No restricting when escape is activated */
+	if (unlikely(time < restrict_escape_until)) {
+		return;
+	}
+
 	if (*freq < sg_policy->tunables->efficient_freq[sg_policy->tunables->current_step]) {
 		/* It's already under current efficient frequency */
 		/* Goto a lower one */
