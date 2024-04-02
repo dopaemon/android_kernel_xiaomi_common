@@ -9,6 +9,7 @@ dtbo-$(CONFIG_ARCH_WAIPIO) += waipio-camera-overlay-v2.dtbo \
 dtbo-$(CONFIG_ARCH_DIWALI) += diwali-camera.dtbo
 dtbo-$(CONFIG_ARCH_DIWALI) += diwali-camera-sensor-idp.dtbo
 dtbo-$(CONFIG_ARCH_DIWALI) += diwali-camera-sensor-qrd.dtbo
+dtbo-$(CONFIG_ARCH_DIWALI) += ziyi-sm7450-camera-sensor.dtbo
 
 dtbo-$(CONFIG_ARCH_CAPE) += cape-camera.dtbo
 dtbo-$(CONFIG_ARCH_CAPE) += cape-camera-sensor-mtp.dtbo \
