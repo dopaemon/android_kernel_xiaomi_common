@@ -60,7 +60,8 @@ dtbo-$(CONFIG_ARCH_DIWALI) += display/diwali-sde.dtbo \
 		display/diwali-sde-display-idp-overlay.dtbo \
 		display/diwali-sde-display-idp-amoled-overlay.dtbo \
 		display/diwali-sde-display-qrd-overlay.dtbo \
-		display/diwali-sde-display-rumi-overlay.dtbo
+		display/diwali-sde-display-rumi-overlay.dtbo \
+		display/ziyi-sde-display-idp-overlay.dtbo
 else
 dtbo-$(CONFIG_ARCH_DIWALI) += display/trustedvm-diwali-sde-display-idp-overlay.dtbo \
 		display/trustedvm-diwali-sde-display-qrd-overlay.dtbo
