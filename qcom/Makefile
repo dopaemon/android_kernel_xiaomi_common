@@ -250,7 +250,8 @@ dtbo-$(CONFIG_ARCH_DIWALI) += diwali-rumi-overlay.dtbo \
 	diwali-idp-hsp-overlay.dtbo \
 	diwali-idp-nopmi-overlay.dtbo \
 	diwali-qrd-nopmi-overlay.dtbo \
-	diwali-qrd-pm8350b-overlay.dtbo
+	diwali-qrd-pm8350b-overlay.dtbo \
+	ziyi-sm7450-overlay.dtbo
 
 diwali-rumi-overlay.dtbo-base := diwali.dtb
 diwali-idp-overlay.dtbo-base := diwali.dtb diwalip.dtb diwali-lte.dtb
@@ -262,6 +263,7 @@ diwali-idp-hsp-overlay.dtbo-base := diwali-hsp.dtb diwalip.dtb diwali-lte.dtb
 diwali-idp-nopmi-overlay.dtbo-base := diwali.dtb diwalip.dtb diwali-lte.dtb
 diwali-qrd-nopmi-overlay.dtbo-base := diwali.dtb diwalip.dtb diwali-lte.dtb
 diwali-qrd-pm8350b-overlay.dtbo-base := diwali.dtb diwalip.dtb diwali-lte.dtb
+ziyi-sm7450-overlay.dtbo-base := diwali.dtb diwalip.dtb diwali-lte.dtb
 else
 dtb-$(CONFIG_ARCH_DIWALI) += diwali-rumi.dtb \
 	diwali-idp.dtb \
