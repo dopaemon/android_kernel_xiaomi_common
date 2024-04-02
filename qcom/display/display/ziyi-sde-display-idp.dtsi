@@ -222,7 +222,7 @@
 &dsi_l9s_42_02_0a_mp_amoled_dsc_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_l9s_0a>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,mdss-dsi-bl-min-level = <3>;
+	qcom,mdss-dsi-bl-min-level = <8>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,mdss-brightness-max-level = <4095>;
 	qcom,mdss-dsi-factory-bl-max-level = <2047>;
@@ -236,7 +236,7 @@
 &dsi_l9s_36_02_0b_mp_amoled_dsc_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_l9s_0b>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,mdss-dsi-bl-min-level = <3>;
+	qcom,mdss-dsi-bl-min-level = <8>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,mdss-brightness-max-level = <4095>;
 	qcom,mdss-dsi-factory-bl-max-level = <2047>;
@@ -250,7 +250,7 @@
 &dsi_l9s_42_02_0c_mp_amoled_dsc_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_l9s_0c>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,mdss-dsi-bl-min-level = <3>;
+	qcom,mdss-dsi-bl-min-level = <8>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,mdss-brightness-max-level = <4095>;
 	qcom,mdss-dsi-factory-bl-max-level = <2047>;
