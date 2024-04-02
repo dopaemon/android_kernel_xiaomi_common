@@ -17,7 +17,8 @@ dtbo-$(CONFIG_ARCH_DIWALI) += diwali-audio.dtbo \
                  diwali-audio-qrd.dtbo \
                  diwali-audio-atp.dtbo \
                  diwali-audio-idp-hsp.dtbo \
-                 diwali-audio-idp-usbc.dtbo
+                 diwali-audio-idp-usbc.dtbo \
+                 ziyi-audio-idp.dtbo
 
 dtbo-$(CONFIG_ARCH_PARROT) += parrot-audio.dtbo \
                  parrot-audio-idp.dtbo \
