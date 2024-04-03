@@ -115,3 +115,4 @@ qti_battery_charger_main-y += qti_battery_charger.o qti_battery_charger_xiaomi.o
 obj-$(CONFIG_CHARGER_QCOM_SMB2)	+= qcom_pmi8998_charger.o
 obj-$(CONFIG_SCHGM_FLASH)       += schgm-flash.o
 obj-$(CONFIG_QCOM_POWER_SUPPLY)	+= qcom/
+obj-$(CONFIG_XM_POWER_SUPPLY)		+= xiaomi/
