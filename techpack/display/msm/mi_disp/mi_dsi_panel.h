@@ -94,6 +94,11 @@ struct flat_mode_cfg {
 	u8 flat_off_data[4];
 };
 
+struct vdc_cfg {
+	bool update_done;
+	u8 vdc_param[8];
+};
+
 struct mi_panel_flatmode_config {
 	struct dsi_panel_cmd_set offset_cmd;
 	struct dsi_panel_cmd_set status_cmd;
@@ -225,9 +230,15 @@ struct mi_dsi_panel_cfg {
 	bool flat_update_several_gamma;
 	struct flat_mode_cfg flat_cfg;
 
+	struct vdc_cfg vdc_cfg;
+
     /* record the last refresh_rate */
 	u32 last_refresh_rate;
 	u32 last_fps;
+
+	bool update_vdc_param_enabled;
+	int dsi_on_e9_index;
+	int dsi_on_b9_index;
 
 	/* Dimming */
 	u32 panel_on_dimming_delay;
@@ -415,6 +426,8 @@ int mi_dsi_panel_aod_to_normal_optimize_locked(struct dsi_panel *panel, bool ena
 int mi_dsi_panel_set_gamma_update_reg(struct dsi_panel *panel);
 
 int mi_dsi_panel_set_gamma_update_state(struct dsi_panel *panel);
+
+int mi_dsi_panel_update_vdc_param(struct dsi_panel * panel);
 
 int mi_dsi_first_timing_switch(struct dsi_panel *panel);
 

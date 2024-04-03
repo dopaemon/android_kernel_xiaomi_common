@@ -8878,6 +8878,12 @@ int dsi_display_enable(struct dsi_display *display)
 			mi_dsi_display_manufacturer_info_init(display);
 		}
 
+		if (mi_get_panel_id_by_dsi_panel(display->panel) == L9S_PANEL_PC) {
+			rc = mi_dsi_panel_update_vdc_param(display->panel);
+			if (rc != 0)
+				DSI_ERR("[%s] failed to update vdc_enabled param, rc=%d\n", display->name, rc);
+		}
+
 		return 0;
 	}
 

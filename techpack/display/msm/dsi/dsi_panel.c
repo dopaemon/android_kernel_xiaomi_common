@@ -5567,6 +5567,16 @@ int dsi_panel_switch(struct dsi_panel *panel)
 		mi_cfg->last_refresh_rate == 90) {
 		DISP_INFO("%s panel: DSI_CMD_SET_MI_EXIT_90FPS_TIMING_SWITCH\n", panel->type);
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_EXIT_90FPS_TIMING_SWITCH);
+	} else if (mi_get_panel_id(mi_cfg->mi_panel_id) == L9S_PANEL_PC) {
+		if (mi_cfg->flat_cfg.cur_flat_state == 1) {
+			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_TIMING_SWITCH);
+		}
+		else if (mi_cfg->flat_cfg.cur_flat_state == 0) {
+			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_TIMING_SWITCH);
+		} else {
+			rc = 0;
+			goto cleanup;
+		}
 	} else {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_TIMING_SWITCH);
 	}
@@ -5578,6 +5588,7 @@ int dsi_panel_switch(struct dsi_panel *panel)
 		mi_dsi_first_timing_switch(panel);
 	}
 
+cleanup:
 	mi_cfg->last_refresh_rate = panel->cur_mode->timing.refresh_rate;
 
 	mi_cfg->last_mode_switch_time = ktime_get();

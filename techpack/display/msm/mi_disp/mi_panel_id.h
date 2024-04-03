@@ -29,6 +29,7 @@
 #define L18_38_0C_SA_PANEL_ID  0x004C313853380C00
 #define L9S_42_02_0A_PANEL_ID  0x004C395300420200
 #define L9S_36_02_0B_PANEL_ID  0x004C395300360200
+#define L9S_42_02_0C_PANEL_ID  0x004C395300420201
 #define L12_42_02_0A_PANEL_ID  0x004C313200420200
 #define L12_36_02_0B_PANEL_ID  0x004C313200360200
 #define M11A_42_02_0A_PANEL_ID 0x4D31314100420200
@@ -56,6 +57,7 @@ enum mi_project_panel_id {
 	L18_PANEL_SA,
 	L9S_PANEL_PA,
 	L9S_PANEL_PB,
+	L9S_PANEL_PC,
 	L12_PANEL_PA,
 	L12_PANEL_PB,
 	M11A_PANEL_PA,
@@ -92,6 +94,8 @@ static inline enum mi_project_panel_id mi_get_panel_id(u64 mi_panel_id)
 		return L9S_PANEL_PA;
 	case L9S_36_02_0B_PANEL_ID:
 		return L9S_PANEL_PB;
+	case L9S_42_02_0C_PANEL_ID:
+		return L9S_PANEL_PC;
 	case L12_42_02_0A_PANEL_ID:
 		return L12_PANEL_PA;
 	case L12_36_02_0B_PANEL_ID:
@@ -138,6 +142,8 @@ static inline const char *mi_get_panel_id_name(u64 mi_panel_id)
 		return "L9S_PANEL_PA";
 	case L9S_PANEL_PB:
 		return "L9S_PANEL_PB";
+	case L9S_PANEL_PC:
+		return "L9S_PANEL_PC";
 	case M11A_PANEL_PA:
 		return "M11A_PANEL_PA";
 	case M16T_PANEL_PA:
@@ -163,6 +169,7 @@ static inline bool is_use_nvt_dsc_config(u64 mi_panel_id)
 	case L10_42_02_0A_PANEL_ID:
 	case L9S_42_02_0A_PANEL_ID:
 	case L9S_36_02_0B_PANEL_ID:
+	case L9S_42_02_0C_PANEL_ID:
 	case L12_42_02_0A_PANEL_ID:
 	case L12_36_02_0B_PANEL_ID:
 	case M11A_42_02_0A_PANEL_ID:

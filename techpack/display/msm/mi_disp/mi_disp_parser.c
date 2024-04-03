@@ -20,6 +20,7 @@
 #define SMEM_SW_DISPLAY_LHBM_TABLE 498
 #define SMEM_SW_DISPLAY_GRAY_SCALE_TABLE 499
 #define SMEM_SW_DISPLAY_LOCKDOWN_TABLE 500
+#define SMEM_SW_DISPLAY_VDC_TABLE 501
 
 int mi_dsi_panel_parse_esd_gpio_config(struct dsi_panel *panel)
 {
@@ -142,6 +143,7 @@ static void mi_dsi_panel_parse_lhbm_config(struct dsi_panel *panel)
 			mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L3S_PANEL_PA ||
 			mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L9S_PANEL_PA ||
 			mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L9S_PANEL_PB ||
+			mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L9S_PANEL_PC ||
 			mi_get_panel_id(panel->mi_cfg.mi_panel_id) == M11A_PANEL_PA||
 			mi_get_panel_id(panel->mi_cfg.mi_panel_id) == N16_PANEL_PA ||
 			mi_get_panel_id(panel->mi_cfg.mi_panel_id) == N16_PANEL_PB) {
@@ -205,6 +207,42 @@ static void mi_dsi_panel_parse_gray_scale_config(struct dsi_panel *panel)
 				DISP_INFO("index %d = 0x%02X\n", i, tmp);
 			}
 			mi_cfg->uefi_read_gray_scale_success = true;
+		}
+	}
+}
+
+static void mi_dsi_panel_parse_vdc_config(struct dsi_panel *panel) {
+	int rc;
+	size_t item_size;
+	void *vdc_ptr = NULL;
+	struct dsi_parser_utils *utils = &panel->utils;
+	struct mi_dsi_panel_cfg *mi_cfg = &panel->mi_cfg;
+
+	if (mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L9S_PANEL_PC) {
+		vdc_ptr = qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_SW_DISPLAY_VDC_TABLE, &item_size);
+		if (!IS_ERR(vdc_ptr) && item_size > 0) {
+			memcpy(mi_cfg->vdc_cfg.vdc_param, vdc_ptr, item_size);
+			DISP_INFO("vdc data to mi_cfg->vdc_cfg.vdc_param info= %s\n", mi_cfg->vdc_cfg.vdc_param);
+
+			mi_cfg->update_vdc_param_enabled = utils->read_bool(utils->data, "mi,update-vdc-param-enabled");
+
+			if (mi_cfg->update_vdc_param_enabled) {
+				rc = utils->read_u32(utils->data, "mi,dsi-on-e9-index", &mi_cfg->dsi_on_e9_index);
+				if (rc) {
+					mi_cfg->dsi_on_e9_index = -1;
+					DISP_INFO("mi,dsi-on-e9-index not specified\n");
+				} else {
+					DISP_ERROR("mi,dsi-on-e9-index is %d\n", mi_cfg->dsi_on_e9_index);
+				}
+
+				rc = utils->read_u32(utils->data, "mi,dsi-on-b9-index", &mi_cfg->dsi_on_b9_index);
+				if (rc) {
+					mi_cfg->dsi_on_b9_index = -1;
+					DISP_INFO("mi,dsi-on-b9-index not specified\n");
+				} else {
+					DISP_ERROR("mi,dsi-on-b9-index is %d\n", mi_cfg->dsi_on_b9_index);
+				}
+			}
 		}
 	}
 }
@@ -448,6 +486,7 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 	mi_dsi_panel_parse_round_corner_config(panel);
 	mi_dsi_panel_parse_lhbm_config(panel);
 	mi_dsi_panel_parse_lockdown_config(panel);
+	mi_dsi_panel_parse_vdc_config(panel);
 	mi_dsi_panel_parse_gray_scale_config(panel);
 	mi_dsi_panel_parse_flat_config(panel);
 	rc |= mi_dsi_panel_parse_dc_config(panel);

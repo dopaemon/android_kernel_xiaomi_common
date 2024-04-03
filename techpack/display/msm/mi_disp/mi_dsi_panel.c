@@ -1847,6 +1847,116 @@ int mi_dsi_update_51_mipi_cmd(struct dsi_panel *panel,
 	return 0;
 }
 
+int mi_dsi_panel_update_vdc_param(struct dsi_panel *panel)
+{
+	int rc = 0;
+	struct dsi_display_mode_priv_info *priv_info;
+	struct dsi_display *display;
+	struct dsi_display_mode *mode;
+	struct dsi_cmd_desc *cmds = NULL;
+	struct vdc_cfg *vdc_cfg= NULL;
+	u32 num_display_modes;
+	int i = 0;
+	u32 count;
+	u8 *tx_buf;
+
+	if (!panel || !panel->host) {
+		DISP_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+	mutex_lock(&panel->panel_lock);
+
+	vdc_cfg = &panel->mi_cfg.vdc_cfg;
+
+	if (vdc_cfg->update_done) {
+		DISP_DEBUG("vdc param already updated\n");
+		rc = 0;
+		goto exit;
+	}
+
+	if (!panel->panel_initialized) {
+		DISP_ERROR("[%s] Panel not initialized\n", panel->type);
+		rc = -EINVAL;
+		goto exit;
+	}
+
+	DISP_INFO("[%s] vdc update param start\n", panel->type);
+
+	num_display_modes = panel->num_display_modes;
+	display = to_dsi_display(panel->host);
+	if (!display || !display->modes) {
+		DISP_ERROR("invalid display or display->modes ptr\n");
+		rc = -EINVAL;
+		goto exit;
+	}
+
+	for (i = 0; i < num_display_modes; i++) {
+		mode = &display->modes[i];
+		priv_info = mode->priv_info;
+		cmds = priv_info->cmd_sets[DSI_CMD_SET_ON].cmds;
+		count = priv_info->cmd_sets[DSI_CMD_SET_ON].count;
+		if(cmds && count >= panel->mi_cfg.dsi_on_e9_index){
+			tx_buf = (u8 *)cmds[panel->mi_cfg.dsi_on_e9_index].msg.tx_buf;
+			if(tx_buf && tx_buf[0] == 0xE9) {
+				tx_buf[1] = vdc_cfg->vdc_param[0];
+				tx_buf[2] = vdc_cfg->vdc_param[1];
+				tx_buf[3] = vdc_cfg->vdc_param[2];
+				tx_buf[4] = vdc_cfg->vdc_param[3];
+				DISP_INFO("panel vdc cmd[0x%02x] = 0x%02x 0x%02x 0x%02x 0x%02x\n",
+							tx_buf[0], tx_buf[1], tx_buf[2], tx_buf[3], tx_buf[4]);
+			} else {
+				if (tx_buf){
+					DISP_ERROR("%s panel vdc index = %d, tx_buf[0] = 0x%02X, check cmd[%s] index\n",
+						panel->type, panel->mi_cfg.dsi_on_e9_index, tx_buf[0],
+						cmd_set_prop_map[DSI_CMD_SET_ON]);
+				} else {
+					DISP_ERROR("%s panel tx_buf is NULL pointer\n", panel->type);
+				}
+				rc = -EINVAL;
+				goto exit;
+			}
+		} else {
+			DISP_ERROR("[%s] panel cmd[%s] index error\n",
+				panel->type, cmd_set_prop_map[DSI_CMD_SET_ON]);
+			rc = -EINVAL;
+			goto exit;
+		}
+
+		if(cmds && count >= panel->mi_cfg.dsi_on_b9_index){
+			tx_buf = (u8 *)cmds[panel->mi_cfg.dsi_on_b9_index].msg.tx_buf;
+			if(tx_buf && tx_buf[0] == 0xB9) {
+				tx_buf[1] = vdc_cfg->vdc_param[4];
+				tx_buf[2] = vdc_cfg->vdc_param[5];
+				tx_buf[3] = vdc_cfg->vdc_param[6];
+				tx_buf[4] = vdc_cfg->vdc_param[7];
+				DISP_INFO("panel vdc cmd[0x%02x] = 0x%02x 0x%02x 0x%02x 0x%02x\n",
+							tx_buf[0], tx_buf[1], tx_buf[2], tx_buf[3], tx_buf[4]);
+			} else {
+				if (tx_buf){
+					DISP_ERROR("%s panel vdc index = %d, tx_buf[0] = 0x%02X, check cmd[%s] index\n",
+						panel->type, panel->mi_cfg.dsi_on_b9_index, tx_buf[0],
+						cmd_set_prop_map[DSI_CMD_SET_ON]);
+				} else {
+					DISP_ERROR("%s panel tx_buf is NULL pointer\n", panel->type);
+				}
+				rc = -EINVAL;
+				goto exit;
+			}
+		} else {
+			DISP_ERROR("[%s] panel cmd[%s] index error\n",
+				panel->type, cmd_set_prop_map[DSI_CMD_SET_ON]);
+			rc = -EINVAL;
+			goto exit;
+		}
+
+	}
+	vdc_cfg->update_done = true;
+	DISP_INFO(" panel vdc param update done\n");
+exit:
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
 static int mi_dsi_update_lhbm_cmd_87reg(struct dsi_panel *panel,
 			enum dsi_cmd_set_type type, int bl_lvl)
 {
@@ -1923,6 +2033,11 @@ static int mi_dsi_update_lhbm_cmd_87reg(struct dsi_panel *panel,
 			alpha_buf[0] = (aa_alpha_L9S_PANEL_PB[bl_lvl] >> 8) & 0xff;
 			alpha_buf[1] = aa_alpha_L9S_PANEL_PB[bl_lvl] & 0xff;
 		}
+	} else if (mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L9S_PANEL_PC) {
+		DISP_INFO("[%s] bl_lvl = %d, alpha = 0x%x\n",
+				  panel->type, bl_lvl, aa_alpha_L9S_PANEL_PC[bl_lvl]);
+		alpha_buf[0] = (aa_alpha_L9S_PANEL_PC[bl_lvl] >> 8) & 0xff;
+		alpha_buf[1] = aa_alpha_L9S_PANEL_PC[bl_lvl] & 0xff;
 	} else if (mi_get_panel_id(panel->mi_cfg.mi_panel_id) == M11A_PANEL_PA) {
 		if (bl_lvl > 327) {
 			DISP_INFO("[%s] bl_lvl = %d, alpha = 0x%x\n",
@@ -2777,6 +2892,25 @@ static int mi_dsi_panel_update_lhbm_white_param(struct dsi_panel * panel,
 					panel->mi_cfg.whitebuf_110_gir_off[i-6] = panel->mi_cfg.lhbm_rgb_param[i];
 				} else if (i < 18) {
 					panel->mi_cfg.greenbuf_500nit[i-12] = panel->mi_cfg.lhbm_rgb_param[i];
+				}
+			}
+			for(i = 2;i < 4;i++){
+				panel->mi_cfg.greenbuf_500nit[i-2] = 0;
+				panel->mi_cfg.greenbuf_500nit[i+2] = 0;
+			}
+		}
+
+		if (mi_get_panel_id(panel->mi_cfg.mi_panel_id) == L9S_PANEL_PC) {
+			for (i = 0; i < sizeof(panel->mi_cfg.lhbm_rgb_param); i++) {
+				if (i < 6) {
+					panel->mi_cfg.whitebuf_1000_gir_on[i] = panel->mi_cfg.lhbm_rgb_param[i];
+					panel->mi_cfg.whitebuf_1000_gir_off[i] = panel->mi_cfg.lhbm_rgb_param[i];
+				} else if (i < 12) {
+					panel->mi_cfg.whitebuf_110_gir_off[i-6] = panel->mi_cfg.lhbm_rgb_param[i];
+				} else if (i < 18) {
+					panel->mi_cfg.whitebuf_110_gir_on[i-12] = panel->mi_cfg.lhbm_rgb_param[i];
+				} else if (i < 20) {
+					panel->mi_cfg.greenbuf_500nit[i-16] = panel->mi_cfg.lhbm_rgb_param[i];
 				}
 			}
 			for(i = 2;i < 4;i++){
