@@ -517,12 +517,13 @@
 		cell-index = <0>;
 		compatible = "qcom,actuator";
 		cci-master = <CCI_MASTER_1>;
+		cam_vio-supply = <&L5I>;
 		cam_vaf-supply = <&L6C>;
-		regulator-names = "cam_vaf";
+		regulator-names = "cam_vio", "cam_vaf";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <2800000>;
-		rgltr-max-voltage = <2800000>;
-		rgltr-load-current = <300000>;
+		rgltr-min-voltage = <1800000 2800000>;
+		rgltr-max-voltage = <1800000 2800000>;
+		rgltr-load-current = <3500 300000>;
 	};
 
 	actuator_triple_front: qcom,actuator1 {
