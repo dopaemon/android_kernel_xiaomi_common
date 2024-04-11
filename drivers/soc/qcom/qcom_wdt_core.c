@@ -255,9 +255,6 @@ static void queue_irq_counts_work(struct work_struct *irq_counts_work)
 {
 	queue_work(system_unbound_wq, irq_counts_work);
 }
-#else
-static void queue_irq_counts_work(struct work_struct *irq_counts_work) { }
-static void compute_irq_stat(struct work_struct *work) { }
 #endif
 
 static int qcom_wdt_hibernation_notifier(struct notifier_block *nb,
@@ -713,7 +710,9 @@ static __ref int qcom_wdt_kthread(void *arg)
 			spin_unlock(&wdog_dd->freeze_lock);
 		}
 
+#ifdef CONFIG_QCOM_IRQ_STAT
 		queue_irq_counts_work(&wdog_dd->irq_counts_work);
+#endif
 	}
 	return 0;
 }
@@ -772,7 +771,9 @@ int qcom_wdt_remove(struct platform_device *pdev)
 	wdog_dd->timer_expired = true;
 	wdog_dd->user_pet_complete = true;
 	kthread_stop(wdog_dd->watchdog_task);
+#ifdef CONFIG_QCOM_IRQ_STAT
 	flush_work(&wdog_dd->irq_counts_work);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(qcom_wdt_remove);
@@ -786,7 +787,9 @@ void qcom_wdt_trigger_bite(void)
 {
 	if (!wdog_data)
 		return;
+#ifdef CONFIG_QCOM_IRQ_STAT
 	compute_irq_stat(&wdog_data->irq_counts_work);
+#endif
 	dev_err(wdog_data->dev, "Causing a QCOM Apps Watchdog bite!\n");
 	wdog_data->ops->show_wdt_status(wdog_data);
 	wdog_data->ops->set_bite_time(1, wdog_data);
@@ -895,8 +898,10 @@ static int qcom_wdt_init(struct msm_watchdog_data *wdog_dd,
 	if (ret)
 		return ret;
 
+#ifdef CONFIG_QCOM_IRQ_STAT
 	INIT_WORK(&wdog_dd->irq_counts_work, compute_irq_stat);
 	atomic_set(&wdog_dd->irq_counts_running, 0);
+#endif
 	delay_time = msecs_to_jiffies(wdog_dd->pet_time);
 	wdog_dd->ops->set_bark_time(wdog_dd->bark_time, wdog_dd);
 	wdog_dd->ops->set_bite_time(wdog_dd->bark_time + 3 * 1000, wdog_dd);
@@ -938,7 +943,9 @@ static int qcom_wdt_init(struct msm_watchdog_data *wdog_dd,
 		}
 
 		del_timer_sync(&wdog_dd->pet_timer);
+#ifdef CONFIG_QCOM_IRQ_STAT
 		flush_work(&wdog_dd->irq_counts_work);
+#endif
 		dev_err(wdog_dd->dev, "Failed Initializing QCOM Apps Watchdog\n");
 		return ret;
 	}
