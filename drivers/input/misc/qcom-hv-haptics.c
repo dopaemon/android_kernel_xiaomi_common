@@ -30,6 +30,7 @@
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 #include <linux/qpnp/qpnp-pbs.h>
+#include <linux/power_supply.h>
 #include <linux/remoteproc/qcom_rproc.h>
 #include <linux/soc/qcom/battery_charger.h>
 #include <linux/soc/qcom/qcom_hv_haptics.h>
@@ -185,6 +186,7 @@
 							GENMASK(5, 2) : GENMASK(6, 2))
 #define AUTORES_EN_DLY(cycles)			((cycles) * 2)
 #define AUTORES_EN_DLY_6_CYCLES			AUTORES_EN_DLY(6)
+#define AUTORES_EN_DLY_7_CYCLES			AUTORES_EN_DLY(7)
 #define AUTORES_EN_DLY_7_CYCLES			AUTORES_EN_DLY(7)
 #define AUTORES_EN_DLY_SHIFT			2
 #define AUTORES_ERR_WINDOW_MASK			GENMASK(1, 0)
@@ -2110,9 +2112,6 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 	if (chip->hw_type == HAP525_HV && play->pattern_src == PATTERN_MEM)
 		val |= FIELD_PREP(PATX_MEM_SEL_MASK, play->effect->pat_sel);
 
-	if (play->brake && !play->brake->disabled)
-		val |= BRAKE_EN_BIT;
-
 	if (en)
 		val |= PLAY_EN_BIT;
 
@@ -2655,7 +2654,7 @@ static int haptics_load_constant_effect(struct haptics_chip *chip, u8 amplitude)
 		goto unlock;
 
 	/* Always enable LRA auto resonance for DIRECT_PLAY */
-	rc = haptics_enable_autores(chip, !chip->config.is_erm);
+	rc = haptics_enable_autores(chip, false);
 	if (rc < 0)
 		goto unlock;
 
@@ -6065,7 +6064,7 @@ static ssize_t lra_frequency_hz_show(const struct class *c,
 	if (chip->config.cl_t_lra_us == 0)
 		return -EINVAL;
 
-	cl_f_lra = USEC_PER_SEC / chip->config.cl_t_lra_us;
+	cl_f_lra = USEC_PER_SEC * 10 / chip->config.cl_t_lra_us;
 	return scnprintf(buf, PAGE_SIZE, "%d Hz\n", cl_f_lra);
 }
 static CLASS_ATTR_RO(lra_frequency_hz);
@@ -6379,6 +6378,7 @@ static int haptics_probe(struct platform_device *pdev)
 	if ((chip->effects_count != 0) || (chip->primitives_count != 0)) {
 		input_set_capability(input_dev, EV_FF, FF_PERIODIC);
 		input_set_capability(input_dev, EV_FF, FF_CUSTOM);
+		input_set_capability(input_dev, EV_FF, FF_DAMPER);
 	}
 
 	if (chip->effects_count + chip->primitives_count > MAX_EFFECT_COUNT)
