@@ -1013,6 +1013,8 @@ else
 CC_FLAGS_LTO	+= -fvisibility=default
 endif
 
+#Enable MLGO for register allocation.
+KBUILD_LDFLAGS += -mllvm -regalloc-enable-advisor=release
 endif
 
 ifdef CONFIG_LTO
