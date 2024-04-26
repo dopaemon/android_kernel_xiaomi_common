@@ -15,6 +15,16 @@
 #include "cam_res_mgr_api.h"
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
+#include "sem1217s.h"
+#include "rumbas4h.h"
+
+#define FIRMWARE_UPDATE_RETRY_TIMES             3
+
+#define FIRMWARE_UPDATE_AS_PLATFORM_VERSION     1
+#define FIRMWARE_UPDATE_EVERY_TIMES             2
+
+static int ois_fw_ctrl = 0;
+module_param(ois_fw_ctrl, int, 0644);
 
 int32_t cam_ois_construct_default_power_setting(
 	struct cam_sensor_power_ctrl_t *power_info)
@@ -356,7 +366,202 @@ static int cam_ois_slaveInfo_pkt_parser(struct cam_ois_ctrl_t *o_ctrl,
 	return rc;
 }
 
-static int cam_ois_fw_download(struct cam_ois_ctrl_t *o_ctrl)
+static int cam_bu24618_eis_fw_download(struct cam_ois_ctrl_t *o_ctrl)
+{
+	uint16_t                           total_bytes = 0;
+	uint8_t                           *ptr = NULL;
+	int32_t                            rc = 0, cnt, i, j;
+	uint32_t                           fw_size;
+	const struct firmware             *fw = NULL;
+	const char                        *fw_name_prog = NULL;
+	const char                        *fw_name_coeff = NULL;
+	const char                        *fw_name_mem = NULL;
+	char                               name_prog[34] = {0};
+	char                               name_coeff[34] = {0};
+	char                               name_mem[34] = {0};
+	struct device                     *dev = &(o_ctrl->pdev->dev);
+	struct cam_sensor_i2c_reg_setting  i2c_reg_setting;
+	void                              *vaddr = NULL;
+	if (!o_ctrl) {
+		CAM_ERR(CAM_OIS, "Invalid Args");
+		return -EINVAL;
+	}
+	snprintf(name_coeff, 34, "%s_eis.coeff", o_ctrl->ois_name);
+
+	snprintf(name_prog, 34, "%s_eis.prog", o_ctrl->ois_name);
+
+	snprintf(name_mem, 34, "%s_eis.mem", o_ctrl->ois_name);
+
+	/* cast pointer as const pointer*/
+	fw_name_prog = name_prog;
+	fw_name_coeff = name_coeff;
+	fw_name_mem = name_mem;
+
+	/* Load FW */
+	rc = request_firmware(&fw, fw_name_prog, dev);
+	if (rc) {
+		CAM_ERR(CAM_OIS, "Failed to locate %s", fw_name_prog);
+		return rc;
+	}
+
+	total_bytes = fw->size;
+	i2c_reg_setting.addr_type = o_ctrl->opcode.fw_addr_type;
+	i2c_reg_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_setting.size = total_bytes;
+	i2c_reg_setting.delay = 0;
+	fw_size = (sizeof(struct cam_sensor_i2c_reg_array) * total_bytes);
+	vaddr = vmalloc(fw_size);
+	if (!vaddr) {
+		CAM_ERR(CAM_OIS,
+			"Failed in allocating i2c_array: fw_size: %u", fw_size);
+		release_firmware(fw);
+		return -ENOMEM;
+	}
+
+	CAM_DBG(CAM_OIS, "FW prog size:%d.", total_bytes);
+
+	i2c_reg_setting.reg_setting = (struct cam_sensor_i2c_reg_array *) (
+		vaddr);
+
+	for (i = 0, ptr = (uint8_t *)fw->data, j = 0; i < total_bytes;) {
+		for (cnt = 0; cnt < OIS_TRANS_SIZE && i < total_bytes;
+			cnt++, ptr++, i++) {
+				i2c_reg_setting.reg_setting[cnt].reg_addr =
+					o_ctrl->opcode.prog + j * OIS_TRANS_SIZE;
+				i2c_reg_setting.reg_setting[cnt].reg_data = *ptr;
+				i2c_reg_setting.reg_setting[cnt].delay = 0;
+				i2c_reg_setting.reg_setting[cnt].data_mask = 0;
+		}
+		i2c_reg_setting.size = cnt;
+
+		if (o_ctrl->opcode.is_addr_increase) {
+			j++;
+		}
+
+		rc = camera_io_dev_write_continuous(&(o_ctrl->io_master_info),
+			&i2c_reg_setting, CAM_SENSOR_I2C_WRITE_BURST);
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS, "OIS FW(prog) size(%d) download failed. %d",
+				total_bytes, rc);
+			goto release_firmware;
+		}
+	}
+	vfree(vaddr);
+	vaddr = NULL;
+	fw_size = 0;
+	release_firmware(fw);
+
+	rc = request_firmware(&fw, fw_name_coeff, dev);
+	if (rc) {
+		CAM_ERR(CAM_OIS, "Failed to locate %s", fw_name_coeff);
+		return rc;
+	}
+
+	total_bytes = fw->size;
+	i2c_reg_setting.addr_type = o_ctrl->opcode.fw_addr_type;
+	i2c_reg_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_setting.size = total_bytes;
+	i2c_reg_setting.delay = 0;
+	fw_size = (sizeof(struct cam_sensor_i2c_reg_array) * total_bytes);
+	vaddr = vmalloc(fw_size);
+	if (!vaddr) {
+		CAM_ERR(CAM_OIS,
+			"Failed in allocating i2c_array: fw_size: %u", fw_size);
+		release_firmware(fw);
+		return -ENOMEM;
+	}
+
+	CAM_DBG(CAM_OIS, "FW coeff size:%d", total_bytes);
+
+	i2c_reg_setting.reg_setting = (struct cam_sensor_i2c_reg_array *) (
+		vaddr);
+
+	for (i = 0, ptr = (uint8_t *)fw->data, j = 0; i < total_bytes;) {
+		for (cnt = 0; cnt < OIS_TRANS_SIZE && i < total_bytes;
+			cnt++, ptr++, i++) {
+				i2c_reg_setting.reg_setting[cnt].reg_addr =
+					o_ctrl->opcode.coeff + j * OIS_TRANS_SIZE;
+				i2c_reg_setting.reg_setting[cnt].reg_data = *ptr;
+				i2c_reg_setting.reg_setting[cnt].delay = 0;
+				i2c_reg_setting.reg_setting[cnt].data_mask = 0;
+		}
+		i2c_reg_setting.size = cnt;
+
+		if (o_ctrl->opcode.is_addr_increase) {
+			j++;
+		}
+
+		rc = camera_io_dev_write_continuous(&(o_ctrl->io_master_info),
+			&i2c_reg_setting, CAM_SENSOR_I2C_WRITE_BURST);
+
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS, "OIS FW(coeff) size(%d) download failed rc: %d",
+				total_bytes, rc);
+			goto release_firmware;
+		}
+	}
+	vfree(vaddr);
+	vaddr = NULL;
+	fw_size = 0;
+	release_firmware(fw);
+
+	rc = request_firmware(&fw, fw_name_mem, dev);
+	if (rc) {
+		CAM_ERR(CAM_OIS, "Failed to locate %s", fw_name_mem);
+		return rc;
+	}
+
+	total_bytes = fw->size;
+	i2c_reg_setting.addr_type = o_ctrl->opcode.fw_addr_type;
+	i2c_reg_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_setting.size = total_bytes;
+	i2c_reg_setting.delay = 0;
+	fw_size = (sizeof(struct cam_sensor_i2c_reg_array) * total_bytes);
+	vaddr = vmalloc(fw_size);
+	if (!vaddr) {
+		CAM_ERR(CAM_OIS,
+			"Failed in allocating i2c_array: fw_size: %u", fw_size);
+		release_firmware(fw);
+		return -ENOMEM;
+	}
+
+	CAM_DBG(CAM_OIS, "FW mem size:%d", total_bytes);
+
+	i2c_reg_setting.reg_setting = (struct cam_sensor_i2c_reg_array *) (
+		vaddr);
+
+	for (i = 0, ptr = (uint8_t *)fw->data, j = 0; i < total_bytes;) {
+		for (cnt = 0; cnt < OIS_TRANS_SIZE && i < total_bytes;
+			cnt++, ptr++, i++) {
+				i2c_reg_setting.reg_setting[cnt].reg_addr =
+					o_ctrl->opcode.memory + j * OIS_TRANS_SIZE;
+				i2c_reg_setting.reg_setting[cnt].reg_data = *ptr;
+				i2c_reg_setting.reg_setting[cnt].delay = 0;
+				i2c_reg_setting.reg_setting[cnt].data_mask = 0;
+		}
+		i2c_reg_setting.size = cnt;
+
+		if (o_ctrl->opcode.is_addr_increase) {
+			j++;
+		}
+
+		rc = camera_io_dev_write_continuous(&(o_ctrl->io_master_info),
+			&i2c_reg_setting, CAM_SENSOR_I2C_WRITE_BURST);
+
+		if (rc < 0)
+			CAM_ERR(CAM_OIS, "OIS FW(mem) size(%d) download failed rc: %d",
+				total_bytes, rc);
+	}
+
+release_firmware:
+	vfree(vaddr);
+	vaddr = NULL;
+	fw_size = 0;
+	release_firmware(fw);
+	return rc;
+}
+
+static int cam_default_ois_fw_download(struct cam_ois_ctrl_t *o_ctrl)
 {
 	uint16_t                           total_bytes = 0;
 	uint8_t                           *ptr = NULL;
@@ -550,6 +755,574 @@ release_firmware:
 	vaddr = NULL;
 	fw_size = 0;
 	release_firmware(fw);
+	return rc;
+}
+
+static int cam_sem1217s_ois_fw_download(struct cam_ois_ctrl_t *o_ctrl)
+{
+	uint8_t             txdata[TX_BUFFER_SIZE] = {0};
+	uint8_t             rxdata[RX_BUFFER_SIZE] = {0};
+	uint16_t            tx_buff_size = 0;
+	uint16_t            i = 0;
+	uint16_t            chk_index = 0;
+	uint16_t            idx = 0;
+	uint16_t            check_sum = 0;
+	uint32_t            updated_ver = 0;
+	uint32_t            new_fw_ver = 0;
+	uint32_t            current_fw_ver = 0;
+	char                *fw_name_prog = NULL;
+	char                name_prog[32] = {0};
+	uint8_t             *chk_buffer = NULL;
+	uint8_t             *fw_data = NULL;
+	int32_t             rc = 0;
+	uint32_t            current_fw_ver_temp = 0;
+
+	chk_buffer = vmalloc(APP_FW_SIZE);
+	fw_data = vmalloc(APP_FW_SIZE);
+
+	if (NULL == chk_buffer || NULL == fw_data) {
+		rc = -ENOMEM;
+		goto memory_free;
+	}
+
+	/* Get FW Ver from Binary File */
+	snprintf(name_prog, 32, "%s.prog", o_ctrl->ois_name);
+	fw_name_prog = name_prog;
+
+	rc = load_fw_buff(o_ctrl, fw_name_prog, fw_data, APP_FW_SIZE);
+
+	if (rc) {
+		CAM_ERR(CAM_OIS, "[SEM1217S] Failed to load firmware: %s", fw_name_prog);
+		goto memory_free;
+	}
+
+	new_fw_ver = *(uint32_t *)&fw_data[APP_FW_SIZE - 12];  /* 0x7FF4 ~ 0x7FF7 */
+
+	rc = i2c_read_data(o_ctrl, REG_APP_VER, 4, rxdata);
+
+	if (rc) {
+
+		CAM_ERR(CAM_OIS, "[SEM1217S] Failed to read REG_APP_VER:0x%x", REG_APP_VER);
+		rc = -EIO;
+		goto memory_free;
+
+	}
+
+	current_fw_ver = *(uint32_t *)rxdata;
+	CAM_INFO(CAM_OIS, "[SEM1217S] Current firmware version = %d, new firmware version = %d", current_fw_ver, new_fw_ver);
+
+	if( ((current_fw_ver < new_fw_ver) && (0 == ois_fw_ctrl)) ||
+	    ((current_fw_ver != new_fw_ver) && (FIRMWARE_UPDATE_AS_PLATFORM_VERSION == ois_fw_ctrl)) ||
+	    (FIRMWARE_UPDATE_EVERY_TIMES == ois_fw_ctrl)) {
+
+		/* If there is firmware that needs to be updated, turn off OIS and AF */
+		if (0 != current_fw_ver) {
+
+			rc = i2c_read_data(o_ctrl, REG_OIS_STS, 1, rxdata); /* Read REG_OIS_STS */
+
+			if (rc) {
+				CAM_ERR(CAM_OIS, "[SEM1217S] Failed to read REG_OIS_STS:0x%x", REG_OIS_STS);
+				rc = -EIO;
+				goto memory_free;
+			}
+
+			if (rxdata[0] != STATE_READY) {
+				txdata[0] = OIS_OFF; /* Set OIS_OFF */
+				rc = i2c_write_data(o_ctrl, REG_OIS_CTRL, 1, txdata, 0); /* Write REG_OIS_CTRL information */
+				if (rc) {
+					CAM_ERR(CAM_OIS, "[SEM1217S] Failed to set REG_OIS_CTRL:0x%x,0x%x", REG_OIS_CTRL, txdata[0]);
+					rc = -EIO;
+					goto memory_free;
+				}
+			}
+
+			rc = i2c_read_data(o_ctrl, REG_AF_STS, 1, rxdata); /* Read REG_AF_STS */
+
+			if (rc) {
+				CAM_ERR(CAM_OIS, "[SEM1217S] Failed to read REG_AF_STS:0x%x", REG_AF_STS);
+				rc = -EIO;
+				goto memory_free;
+			}
+
+			if (rxdata[0] != STATE_READY) {
+				txdata[0] = AF_OFF; /* Set AF_OFF */
+				rc = i2c_write_data(o_ctrl, REG_AF_CTRL, 1, txdata, 0); /* Write REG_AF_CTRL information */
+				if (rc) {
+					CAM_ERR(CAM_OIS, "[SEM1217S] Failed to set REG_AF_CTRL:0x%x,0x%x", REG_AF_CTRL, txdata[0]);
+					rc = -EIO;
+					goto memory_free;
+				}
+			}
+		}
+
+		/* PAYLOAD_LEN = Packet size, FW_UPEN = TRUE */
+		tx_buff_size = TX_SIZE_256_BYTE;
+		switch (tx_buff_size) {
+			case TX_SIZE_32_BYTE:
+				txdata[0] = FWUP_CTRL_32_SET;
+				break;
+			case TX_SIZE_64_BYTE:
+				txdata[0] = FWUP_CTRL_64_SET;
+				break;
+			case TX_SIZE_128_BYTE:
+				txdata[0] = FWUP_CTRL_128_SET;
+				break;
+			case TX_SIZE_256_BYTE:
+				txdata[0] = FWUP_CTRL_256_SET;
+				break;
+			default:
+				/* Tx data size is not set, warning message */
+				break;
+		}
+
+		/* Set the firmware version update control register */
+		rc = i2c_write_data(o_ctrl, REG_FWUP_CTRL, 1, txdata, 0);
+		if (rc) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to set REG_FWUP_CTRL:0x%x,0x%x", REG_AF_CTRL, txdata[0]);
+			rc = -EIO;
+			goto memory_free;
+		}
+
+		msleep(60);
+
+		rc = i2c_read_data(o_ctrl, REG_OIS_STS, 1, rxdata);
+		if (rc) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to read REG_OIS_STS:0x%x", REG_OIS_STS);
+			rc = -EIO;
+			goto memory_free;
+		}
+
+		if (STATE_FW_UPDATE != rxdata[0]) {
+			CAM_INFO(CAM_OIS, "[SEM1217S] OIS firmware upgrade status check failed");
+			rc = -EINVAL;
+			goto memory_free;
+		}
+
+		rc = i2c_read_data(o_ctrl, REG_APP_VER, 4, rxdata);
+		if (rc) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to read REG_APP_VER:0x%x", REG_APP_VER);
+			rc = -EIO;
+			goto memory_free;
+		}
+
+		current_fw_ver_temp = *(uint32_t *)rxdata;
+
+		if (0x00 != current_fw_ver_temp) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] OIS firmware version check failed");
+			goto memory_free;
+		}
+
+		for (i = 0; i < (APP_FW_SIZE / tx_buff_size); i++) {
+
+			CAM_INFO(CAM_OIS, "[SEM1217S] Write REG_DATA_BUF i = %d",i);
+			memcpy(&chk_buffer[tx_buff_size * i], &fw_data[idx], tx_buff_size);
+
+			for (chk_index = 0; chk_index < tx_buff_size; chk_index += 2) {
+				check_sum += ((chk_buffer[chk_index + 1 + (tx_buff_size * i)] << 8) |
+				chk_buffer[chk_index + (tx_buff_size * i)]);
+			}
+
+			memcpy(txdata, &fw_data[idx], tx_buff_size);
+
+			rc = i2c_write_data(o_ctrl, REG_DATA_BUF, tx_buff_size, txdata, 0);
+			if (rc) {
+				CAM_ERR(CAM_OIS, "[SEM1217S] Failed to write REG_DATA_BUF:0x%x, index = %d", REG_DATA_BUF, i);
+				rc = -EIO;
+				goto memory_free;
+			}
+			idx += tx_buff_size;
+			msleep(20);
+
+		}
+
+		*(uint16_t *)txdata = check_sum;
+
+		rc = i2c_write_data(o_ctrl, REG_FWUP_CHKSUM, 2, txdata, 0);
+		if (rc) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to set REG_FWUP_CTRL:0x%x,0x%x", REG_AF_CTRL, txdata[0]);
+			rc = -EIO;
+			goto memory_free;
+		}
+
+		msleep(200);
+
+		rc = i2c_read_data(o_ctrl, REG_FWUP_CHKSUM, 2, rxdata);
+		if (rc) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to read REG_FWUP_CHKSUM:0x%x", REG_FWUP_CHKSUM);
+			rc = -EIO;
+			goto memory_free;
+		}
+
+		CAM_INFO(CAM_OIS, "[SEM1217S] REG_FWUP_CHKSUM = 0x%x, 0x%x", rxdata[0], rxdata[1]);
+
+		rc = i2c_read_data(o_ctrl, REG_FWUP_ERR, 1, rxdata);
+		if (rc) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to read REG_FWUP_ERR:0x%x", REG_FWUP_ERR);
+			rc = -EIO;
+			goto memory_free;
+		}
+
+		CAM_INFO(CAM_OIS, "[SEM1217S] REG_FWUP_ERR = 0x%x", rxdata[0]);
+
+		if (rxdata[0] != NO_ERROR) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to update firmware");
+			rc = -EINVAL;
+			goto memory_free;
+		}
+
+		txdata[0] = RESET_REQ;
+		rc = i2c_write_data(o_ctrl, REG_FWUP_CTRL, 1, txdata, 0);
+		if (rc) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to set REG_FWUP_CTRL:0x%x,0x%x", REG_FWUP_CTRL, txdata[0]);
+			rc = -EIO;
+			goto memory_free;
+		}
+
+		msleep(200);
+
+		rc = i2c_read_data(o_ctrl, REG_APP_VER, 4, rxdata);
+		if (rc) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] Failed to read REG_APP_VER:0x%x", REG_APP_VER);
+			rc = -EIO;
+			goto memory_free;
+		}
+
+		updated_ver = *(uint32_t *)rxdata;
+		CAM_INFO(CAM_OIS, "[SEM1217S] firmware version = %d, new firmware version = %d", updated_ver, new_fw_ver);
+
+		if (updated_ver != new_fw_ver) {
+			CAM_ERR(CAM_OIS, "[SEM1217S] updated_ver != new_fw_ver");
+			rc = -EINVAL;
+			goto memory_free;
+		}
+
+		CAM_INFO(CAM_OIS, "[SEM1217S] Firmware update success");
+	}
+
+memory_free:
+
+	if (NULL != chk_buffer) {
+		vfree(chk_buffer);
+	}
+
+	if (NULL != fw_data) {
+		vfree(fw_data);
+	}
+
+	return rc;
+}
+
+static int cam_rumbas4h_ois_fw_download(struct cam_ois_ctrl_t *o_ctrl)
+{
+	uint8_t             txdata[TX_BUFFER_SIZE] = {0};
+	uint8_t             rxdata[RX_BUFFER_SIZE] = {0};
+	uint16_t            i = 0;
+	uint16_t            idx = 0;
+	uint16_t            check_sum = 0;
+	uint32_t            updated_ver = 0;
+	uint32_t            new_fw_ver = 0;
+	uint32_t            current_fw_ver = 0;
+	char                *fw_name_prog = NULL;
+	char                name_prog[32] = {0};
+	uint8_t             *chk_buffer = NULL;
+	uint8_t             *fw_data = NULL;
+	int32_t             rc = 0;
+	int32_t             fw_update_state = NEEDRETRY;
+	int32_t             update_retry_time = 0;
+
+	if (!o_ctrl) {
+		CAM_ERR(CAM_OIS, "Invalid Args");
+		return -EINVAL;
+	}
+
+	chk_buffer = vmalloc(APP_RUMBAS4HFW_SIZE);
+	fw_data = vmalloc(APP_RUMBAS4HFW_SIZE);
+
+	if (NULL == chk_buffer || NULL == fw_data)
+	{
+		rc = -ENOMEM;
+		goto memory_free;
+	}
+
+	/* Step1 Get FW Ver from Binary File */
+	snprintf(name_prog, 32, "%s.prog", o_ctrl->ois_name);
+	fw_name_prog = name_prog;
+	rc = load_fw_buff_burst(o_ctrl, fw_name_prog, fw_data, APP_RUMBAS4HFW_SIZE);
+	if (rc) {
+		CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to locate %s",fw_name_prog);
+		goto memory_free;
+	}
+	new_fw_ver = *(uint32_t *)&fw_data[APP_RUMBAS4HFW_SIZE - 12];  /* 0x7FF4 ~ 0x7FF7 */
+
+	/* Step2 Read OIS FW current version*/
+	rc = i2c_read_data_burst(o_ctrl, RUMBAS4H_REG_APP_VER, 4, rxdata);
+	current_fw_ver = *(uint32_t *)rxdata;
+	if (rc < 0) {
+		CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to read OIS FW current version %s", current_fw_ver);
+		goto memory_free;
+	}
+	CAM_DBG(CAM_OIS, "[RUMBAS4H] current firmware version = %d, new firmware version = %d", current_fw_ver, new_fw_ver);
+	/* Step3 Adjust whether to run download process */
+	if(current_fw_ver != new_fw_ver){
+		CAM_ERR(CAM_OIS, "[RUMBAS4H] current firmware version = %d is not expect need update or abnormal", current_fw_ver);
+	}
+	if((current_fw_ver >= new_fw_ver) && (ois_fw_ctrl == 0)){
+		CAM_DBG(CAM_OIS, "[RUMBAS4H] do not need do fw update");
+		//add ois off cmd for save power
+		txdata[0] = 0x00;
+		rc = i2c_write_data_burst(o_ctrl, 0x0000, 1, txdata, 0);
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write ois off cmd");
+		}
+		goto memory_free;
+	}
+	//if((current_fw_ver == new_fw_ver) && (ois_fw_ctrl == 0)){
+	//	CAM_DBG(CAM_OIS, "[RUMBAS4H] do not need do fw update");
+	//	goto memory_free;
+	//}
+	else {
+		while ((fw_update_state == NEEDRETRY) && (update_retry_time < 3))
+		{
+			/* Step4 If there is firmware that needs to be updated, check OIS now status */
+			if (current_fw_ver != 0)
+			{
+				rc = i2c_read_data_burst(o_ctrl, RUMBAS4H_REG_OIS_STS, 1, rxdata); /* Read RUMBAS4H_REG_OIS_STS */
+				if (rxdata[0] != STATE_IDLE || rc < 0)
+				{
+					CAM_ERR(CAM_OIS, "[RUMBAS4H] not in idle status");
+					goto memory_free;
+				}
+				CAM_DBG(CAM_OIS, "[RUMBAS4H] in idle status begin FW update");
+			} else {
+				goto memory_free;
+			}
+			/* Step5 Set the firmware version update control register */
+			txdata[0] = 0x75;
+			rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_FWUP_CTRL, 1, txdata, 0);
+			if (rc < 0) {
+				CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write firmware version update control register");
+				goto memory_free;
+			}
+			CAM_DBG(CAM_OIS, "[RUMBAS4H] write firmware version update control register");
+			msleep(65);
+
+			/* Step6 Downloading */
+			for (i = 0; i < (APP_RUMBAS4HFW_SIZE / 256); i++)
+			{
+				CAM_DBG(CAM_OIS, "[RUMBAS4H] Write RUMBAS4H_REG_DATA_BUF i = %d",i);
+				memcpy(txdata, &fw_data[idx], 256);
+				rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_DATA_BUF, 256, txdata, 0);
+				if (rc < 0) {
+					CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_DATA_BUF i = %d", i);
+					goto memory_free;
+				}
+				idx += 256;
+				msleep(13);
+			}
+
+			/*Step7 calculate checksum*/
+			rc = i2c_read_data_burst(o_ctrl, RUMBAS4H_REG_FWUP_ERR, 2, rxdata);
+			if (rc < 0) {
+				CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to read RUMBAS4H_REG_FWUP_ERR");
+				goto memory_free;
+			}
+			if(RUMBAS4H_SUCCESS_STATE == *(uint16_t *)rxdata)
+			{
+				for (i = 0; i < (APP_RUMBAS4HFW_SIZE); i+=2)
+				{
+					check_sum += ((((uint16_t)fw_data[i+1]) << 8) | (uint16_t)fw_data[i]);
+				}
+				CAM_DBG(CAM_OIS, "[RUMBAS4H] Write check_sum = %d i = %d",check_sum,i);
+				txdata[0] = (check_sum & 0x00FF);
+				txdata[1] = (check_sum & 0xFF00) >> 8;
+				txdata[2] = 0x0;
+				txdata[3] = 0x80;
+				CAM_DBG(CAM_OIS, "[RUMBAS4H] Write check_sum = 0x%x",*((uint32_t*)txdata));
+
+				/* step8 Write checksum Reg value */
+				rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_FWUP_CHKSUM, 4, txdata, 0);
+				if (rc < 0) {
+					CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write checksum Reg value");
+					goto memory_free;
+				}
+				msleep(210);
+
+				/* step9 read checksum err status */
+				rc = i2c_read_data_burst(o_ctrl, RUMBAS4H_REG_FWUP_ERR, 2, rxdata);
+				if (rc < 0) {
+					CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to read checksum err status");
+					goto memory_free;
+				}
+				CAM_DBG(CAM_OIS, "[RUMBAS4H] CHKSUM err status = 0x%x", *((uint16_t*)rxdata));
+				if (*((uint16_t*)rxdata) == RUMBAS4H_SUCCESS_STATE)
+				{
+					txdata[0] = 0x41;
+					rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_CHECK_SAVE, 1, txdata, 0);
+					if (rc < 0) {
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_CHECK_SAVE");
+						goto memory_free;
+					}
+					msleep(200);
+
+					txdata[0] = 0x01;
+					rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_SW_RESET1, 1, txdata, 0);
+					if (rc < 0) {
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_SW_RESET1");
+						goto memory_free;
+					}
+
+					txdata[0] = 0x06;
+					rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_SW_RESET2, 1, txdata, 0);
+					if (rc < 0) {
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_SW_RESET2");
+						goto memory_free;
+					}
+					msleep(20);
+					/* Step10 check new OIS FW version */
+					rc = i2c_read_data_burst(o_ctrl, RUMBAS4H_REG_APP_VER, 4, rxdata);
+					updated_ver = *(uint32_t *)rxdata;
+					if (rc < 0) {
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to check new OIS FW version: %d", updated_ver);
+						goto memory_free;
+					}
+					CAM_DBG(CAM_OIS, "[RUMBAS4H] current firmware version = %d, new firmware version = %d", updated_ver, new_fw_ver);
+					if (updated_ver == new_fw_ver)
+					{
+						fw_update_state = UPDATESUCCESS;
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] FW update success");
+					} else {
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] FW update fail");
+						update_retry_time++;
+						if (update_retry_time > 3)
+						{
+							rc = -EINVAL;
+							fw_update_state = OUTRETRYTIME;
+							CAM_ERR(CAM_OIS, "[RUMBAS4H] FW update fail retry time is %d", update_retry_time);
+							goto memory_free;
+						} else {
+							// retry need reset ois status
+							CAM_DBG(CAM_OIS, "[RUMBAS4H] FW update fail need retry now time is %d", update_retry_time);
+							fw_update_state = NEEDRETRY;
+							txdata[0] = 0x01;
+							rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_SW_RESET1, 1, txdata, 0);
+							if (rc < 0) {
+								CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_SW_RESET1");
+								goto memory_free;
+							}
+							txdata[0] = 0x06;
+							rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_SW_RESET2, 1, txdata, 0);
+							if (rc < 0) {
+								CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_SW_RESET2");
+								goto memory_free;
+							}
+							msleep(20);
+						}
+					}
+				} else {
+					CAM_ERR(CAM_OIS, "[RUMBAS4H] FW update fail");
+					update_retry_time++;
+					if (update_retry_time > 3)
+					{
+						rc = -EINVAL;
+						fw_update_state = OUTRETRYTIME;
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] FW update fail retry time is %d", update_retry_time);
+						goto memory_free;
+					} else {
+						// retry need reset ois status
+						CAM_DBG(CAM_OIS, "[RUMBAS4H] FW update fail need retry now time is %d", update_retry_time);
+						fw_update_state = NEEDRETRY;
+						txdata[0] = 0x01;
+						rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_SW_RESET1, 1, txdata, 0);
+						if (rc < 0) {
+							CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_SW_RESET1");
+							goto memory_free;
+						}
+						txdata[0] = 0x06;
+						rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_SW_RESET2, 1, txdata, 0);
+						if (rc < 0) {
+							CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_SW_RESET2");
+							goto memory_free;
+						}
+						msleep(20);
+					}
+				}
+			} else {
+				CAM_ERR(CAM_OIS, "[RUMBAS4H] FW update fail");
+				update_retry_time++;
+				if (update_retry_time > 3)
+				{
+					rc = -EINVAL;
+					fw_update_state = OUTRETRYTIME;
+					CAM_ERR(CAM_OIS, "[RUMBAS4H] FW update fail retry time is %d", update_retry_time);
+					goto memory_free;
+				} else {
+					// retry need reset ois status
+					CAM_DBG(CAM_OIS, "[RUMBAS4H] FW update fail need retry now time is %d", update_retry_time);
+					fw_update_state = NEEDRETRY;
+					txdata[0] = 0x01;
+					rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_SW_RESET1, 1, txdata, 0);
+					if (rc < 0) {
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_SW_RESET1");
+						goto memory_free;
+					}
+					txdata[0] = 0x06;
+					rc = i2c_write_data_burst(o_ctrl, RUMBAS4H_REG_SW_RESET2, 1, txdata, 0);
+					if (rc < 0) {
+						CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write RUMBAS4H_REG_SW_RESET2");
+						goto memory_free;
+					}
+					msleep(20);
+				}
+			}
+		}
+	}
+	//add ois off cmd for save power
+	txdata[0] = 0x00;
+	txdata[1] = 0x00;
+	txdata[2] = 0x00;
+	txdata[3] = 0x00;
+	rc = i2c_write_data_burst(o_ctrl, 0x0000, 1, txdata, 0);
+	if (rc < 0) {
+		CAM_ERR(CAM_OIS, "[RUMBAS4H] Failed to write ois off cmd");
+		goto memory_free;
+	}
+memory_free:
+	if (NULL != chk_buffer)
+	{
+		vfree(chk_buffer);
+	}
+	if (NULL != fw_data)
+	{
+		vfree(fw_data);
+	}
+	return rc;
+}
+
+
+static int cam_ois_fw_download(struct cam_ois_ctrl_t *o_ctrl)
+{
+	int32_t   rc         = 0;
+	uint16_t  i          = 0;
+
+	if(121 == o_ctrl->opcode.is_addr_indata) {
+		CAM_INFO(CAM_OIS, "Apply sem1217s OIS firmware update function");
+		for (i = 0, rc = -EINVAL; i < FIRMWARE_UPDATE_RETRY_TIMES && rc; ++i) {
+			rc = cam_sem1217s_ois_fw_download(o_ctrl);
+			if (rc) {
+				CAM_ERR(CAM_OIS, "Failed to update sem1217s firmware at times: %d", i);
+			}
+		}
+	} else if (122 == o_ctrl->opcode.is_addr_indata) {
+		CAM_DBG(CAM_OIS, "Apply rumbas4h OIS firmware update function");
+		rc = cam_rumbas4h_ois_fw_download(o_ctrl);
+	} else if(24 == o_ctrl->opcode.is_addr_indata) {
+		CAM_DBG(CAM_OIS, "Apply bu24618 EIS SYNC firmware update function");
+		rc = cam_bu24618_eis_fw_download(o_ctrl);
+	} else {
+		CAM_DBG(CAM_OIS, "Apply default firmware update function");
+		rc = cam_default_ois_fw_download(o_ctrl);
+	}
+
 	return rc;
 }
 
