@@ -12,6 +12,7 @@
 #include <cam_req_mgr_util.h>
 #include "cam_sensor_soc.h"
 #include "cam_soc_util.h"
+#include "hwid.h"
 
 int32_t cam_sensor_get_sub_module_index(struct device_node *of_node,
 	struct cam_sensor_board_info *s_info)
@@ -20,6 +21,8 @@ int32_t cam_sensor_get_sub_module_index(struct device_node *of_node,
 	uint32_t val = 0;
 	struct device_node *src_node = NULL;
 	struct cam_sensor_board_info *sensor_info;
+	uint32_t hw_platform_ver = 0;
+	uint32_t hw_country_ver = 0;
 
 	sensor_info = s_info;
 
@@ -71,7 +74,19 @@ int32_t cam_sensor_get_sub_module_index(struct device_node *of_node,
 		of_node_put(src_node);
 	}
 
-	src_node = of_parse_phandle(of_node, "led-flash-src", 0);
+	src_node = NULL;
+	hw_country_ver = get_hw_country_version();
+	hw_platform_ver = get_hw_version_platform();
+
+	if (HARDWARE_PROJECT_L9S == hw_platform_ver && (((uint32_t)CountryGlobal == hw_country_ver) || ((uint32_t)CountryIndia == hw_country_ver))) {
+		src_node = of_parse_phandle(of_node, "led-flash-src-gl", 0);
+		CAM_DBG(CAM_SENSOR, "parse phandle  led-flash-src-gl");
+	}
+	if (!src_node) {
+		src_node = of_parse_phandle(of_node, "led-flash-src", 0);
+		CAM_DBG(CAM_SENSOR, "parse phandle  led-flash-src");
+	}
+
 	if (!src_node) {
 		CAM_DBG(CAM_SENSOR, " src_node NULL");
 	} else {

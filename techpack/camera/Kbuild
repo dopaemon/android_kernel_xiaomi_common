@@ -70,6 +70,7 @@ ccflags-$(CONFIG_MSM_GLOBAL_SYNX) += -I$(KERNEL_ROOT)/drivers/media/platform/msm
 
 # After creating lists, add content of 'ccflags-m' variable to 'ccflags-y' one.
 ccflags-y += ${ccflags-m}
+ccflags-y += -I$(srctree)/drivers/misc/hwid/
 
 camera-y := \
 	drivers/cam_req_mgr/cam_req_mgr_core.o \
