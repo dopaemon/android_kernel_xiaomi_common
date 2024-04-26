@@ -23,6 +23,7 @@
 #define CAM_FLUSH_REQ                           (CAM_COMMON_OPCODE_BASE + 0x8)
 #define CAM_QUERY_CAP_V2                        (CAM_COMMON_OPCODE_BASE + 0x9)
 #define CAM_COMMON_OPCODE_MAX                   (CAM_COMMON_OPCODE_BASE + 0xa)
+#define CAM_ISPV3_CONTROL                       (CAM_COMMON_OPCODE_MAX + 0xf)
 
 #define CAM_COMMON_OPCODE_BASE_v2           0x150
 #define CAM_ACQUIRE_HW                      (CAM_COMMON_OPCODE_BASE_v2 + 0x1)
@@ -31,6 +32,14 @@
 
 #define CAM_EXT_OPCODE_BASE                     0x200
 #define CAM_CONFIG_DEV_EXTERNAL                 (CAM_EXT_OPCODE_BASE + 0x1)
+#define ISP_OPCODE_DISABLE_PCIE_LINK            (CAM_EXT_OPCODE_BASE + 0x4)
+#define ISP_OPCODE_PWR_ON                       (CAM_EXT_OPCODE_BASE + 0x5)
+#define ISP_OPCODE_PWR_OFF                      (CAM_EXT_OPCODE_BASE + 0x6)
+#define ISP_OPCODE_READ                         (CAM_EXT_OPCODE_BASE + 0x7)
+#define ISP_OPCODE_WRITE                        (CAM_EXT_OPCODE_BASE + 0x8)
+#define ISP_OPCODE_CHANGE_SPI_SPEED             (CAM_EXT_OPCODE_BASE + 0x9)
+#define ISP_OPCODE_MISN_CONFIG                  (CAM_EXT_OPCODE_BASE + 0xa)
+#define ISP_OPCODE_POLL_EXIT                    (CAM_EXT_OPCODE_BASE + 0xb)
 
 /* camera handle type */
 #define CAM_HANDLE_USER_POINTER                 1

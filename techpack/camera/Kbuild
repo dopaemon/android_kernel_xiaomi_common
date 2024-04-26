@@ -242,6 +242,12 @@ camera-$(CONFIG_SPECTRA_SENSOR) += \
 	drivers/cam_sensor_module/cam_flash/cam_flash_core.o \
 	drivers/cam_sensor_module/cam_flash/cam_flash_soc.o
 
+ifneq (,$(filter $(CONFIG_ISPV3),y m))
+camera-$(CONFIG_SPECTRA_SENSOR) += \
+	drivers/cam_sensor_module/cam_ispv3/cam_ispv3_dev.o \
+	drivers/cam_sensor_module/cam_ispv3/cam_ispv3_core.o
+endif
+
 camera-$(CONFIG_SPECTRA_CUSTOM) += \
 	drivers/cam_cust/cam_custom_hw_mgr/cam_custom_hw1/cam_custom_sub_mod_soc.o \
 	drivers/cam_cust/cam_custom_hw_mgr/cam_custom_hw1/cam_custom_sub_mod_dev.o \

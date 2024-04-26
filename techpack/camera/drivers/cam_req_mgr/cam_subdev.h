@@ -21,6 +21,10 @@ enum cam_subdev_message_type_t {
 	CAM_SUBDEV_MESSAGE_REG_DUMP = 0x1,
 	CAM_SUBDEV_MESSAGE_APPLY_CSIPHY_AUX,
 	CAM_SUBDEV_MESSAGE_CLOCK_UPDATE
+#if IS_ENABLED(CONFIG_ISPV3)
+	,CAM_SUBDEV_MESSAGE_SOF    = 0x4,
+	CAM_SUBDEV_MESSAGE_REQ_ID  = 0x5
+#endif
 };
 
 /* Enum for close sequence priority */

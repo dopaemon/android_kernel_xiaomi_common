@@ -13,6 +13,9 @@
 
 #define MAX_SHARED_GPIO_SIZE         16
 #define MAX_SHARED_PCTRL_GPIO_SIZE   10
+#if IS_ENABLED(CONFIG_ISPV3)
+#define VIDEO_NIGHT_MIPISWITCH_GPIO  481
+#endif
 
 /**
  * enum pinctrl_status - Enum for pinctrl status

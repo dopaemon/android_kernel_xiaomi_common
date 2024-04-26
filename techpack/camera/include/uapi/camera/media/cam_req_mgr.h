@@ -34,6 +34,7 @@
 #define CAM_TFE_DEVICE_TYPE       (CAM_DEVICE_TYPE_BASE + 16)
 #define CAM_CRE_DEVICE_TYPE       (CAM_DEVICE_TYPE_BASE + 17)
 #define CAM_TPG_DEVICE_TYPE       (CAM_DEVICE_TYPE_BASE + 18)
+#define CAM_ISPV3_DEVICE_TYPE     (CAM_DEVICE_TYPE_BASE + 20)
 
 /* cam_req_mgr hdl info */
 #define CAM_REQ_MGR_HDL_IDX_POS           8
@@ -61,6 +62,10 @@
 #define V4L_EVENT_CAM_REQ_MGR_CUSTOM_EVT                                3
 #define V4L_EVENT_CAM_REQ_MGR_NODE_EVENT                                4
 #define V4L_EVENT_CAM_REQ_MGR_SOF_UNIFIED_TS                            5
+#define V4L_EVENT_CAM_REQ_MGR_ISPV3_MISN_SOF                            6
+#define V4L_EVENT_CAM_REQ_MGR_ISPV3_MISN_LSC                            7
+#define V4L_EVENT_CAM_REQ_MGR_ISPV3_TXLM_SOF                            8
+#define V4L_EVENT_CAM_REQ_MGR_POLL_EXIT                                 9
 
 /* SOF Event status */
 #define CAM_REQ_MGR_SOF_EVENT_SUCCESS           0

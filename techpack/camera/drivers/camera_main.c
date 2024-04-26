@@ -26,6 +26,10 @@
 #include "cam_tpg_dev.h"
 #include "cam_flash_dev.h"
 
+#if IS_ENABLED(CONFIG_ISPV3)
+#include "cam_ispv3_dev.h"
+#endif
+
 #include "a5_core.h"
 #include "lx7_dev.h"
 #include "ipe_core.h"
@@ -113,6 +117,11 @@ static const struct camera_submodule_component camera_sensor[] = {
 	{&cam_eeprom_driver_init, &cam_eeprom_driver_exit},
 	{&cam_ois_driver_init, &cam_ois_driver_exit},
 	{&cam_flash_init_module, &cam_flash_exit_module},
+
+#if IS_ENABLED(CONFIG_ISPV3)
+	{&cam_ispv3_driver_init, &cam_ispv3_driver_exit},
+#endif
+
 #endif
 };
 

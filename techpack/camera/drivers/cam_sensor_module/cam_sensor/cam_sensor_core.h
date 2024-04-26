@@ -15,6 +15,21 @@
  */
 int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl);
 
+#if IS_ENABLED(CONFIG_ISPV3)
+/**
+ * @s_ctrl: Sensor ctrl structure
+ *
+ * This API powers up extra the camera sensor module
+ */
+int cam_sensor_power_up_extra(struct cam_sensor_ctrl_t *s_ctrl);
+/**
+ * @s_ctrl: Sensor ctrl structure
+ *
+ * This API powers down extra the camera sensor module
+ */
+int cam_sensor_power_down_extra(struct cam_sensor_ctrl_t *s_ctrl);
+#endif
+
 /**
  * @s_ctrl: Sensor ctrl structure
  *

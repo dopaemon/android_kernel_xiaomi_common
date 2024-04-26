@@ -675,17 +675,31 @@ int cam_res_mgr_gpio_set_value(unsigned int gpio, int value)
 	/*
 	 * Set the value directly if can't find the gpio from
 	 * gpio_res_list, otherwise, need add ref count support
+     * GPIO 180(481) is dedicated for video night MIPI switch
 	 **/
 	if (!found) {
 		gpio_set_value_cansleep(gpio, value);
 	} else {
 		if (value) {
-			gpio_res->power_on_count++;
-			if (gpio_res->power_on_count < 2) {
-				gpio_set_value_cansleep(gpio, value);
-				CAM_DBG(CAM_RES,
-					"Shared GPIO(%d) : HIGH", gpio);
+#if IS_ENABLED(CONFIG_ISPV3)
+			if (VIDEO_NIGHT_MIPISWITCH_GPIO == gpio) {
+				if (gpio_res->power_on_count < 1) {
+					gpio_res->power_on_count++;
+					gpio_set_value_cansleep(gpio, value);
+					CAM_DBG(CAM_RES,
+						"Shared GPIO(%d) : HIGH", gpio);
+				}
+			} else{
+#endif
+				gpio_res->power_on_count++;
+				if (gpio_res->power_on_count < 2) {
+					gpio_set_value_cansleep(gpio, value);
+					CAM_DBG(CAM_RES,
+						"Shared GPIO(%d) : HIGH", gpio);
+				}
+#if IS_ENABLED(CONFIG_ISPV3)
 			}
+#endif
 		} else {
 			gpio_res->power_on_count--;
 			if (gpio_res->power_on_count < 1) {

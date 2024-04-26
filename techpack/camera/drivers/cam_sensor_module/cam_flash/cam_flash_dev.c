@@ -59,6 +59,13 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			goto release_mutex;
 		}
 
+#if IS_ENABLED(CONFIG_ISPV3)
+		if (flash_acq_dev.reserved)
+			fctrl->trigger_source = CAM_REQ_MGR_TRIG_SRC_EXTERNAL;
+		else
+			fctrl->trigger_source = CAM_REQ_MGR_TRIG_SRC_INTERNAL;
+#endif
+
 		bridge_params.session_hdl = flash_acq_dev.session_handle;
 		bridge_params.ops = &fctrl->bridge_intf.ops;
 		bridge_params.v4l2_sub_dev_flag = 0;
@@ -78,6 +85,13 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		fctrl->bridge_intf.session_hdl =
 			flash_acq_dev.session_handle;
 		fctrl->apply_streamoff = false;
+
+#if IS_ENABLED(CONFIG_ISPV3)
+		CAM_DBG(CAM_FLASH, "Device Handle: %d trigger_source: %s",
+			flash_acq_dev.device_handle,
+			(fctrl->trigger_source == CAM_REQ_MGR_TRIG_SRC_INTERNAL) ?
+			"internal" : "external");
+#endif
 
 		rc = copy_to_user(u64_to_user_ptr(cmd->handle),
 			&flash_acq_dev,

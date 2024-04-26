@@ -402,15 +402,28 @@ static int cam_actuator_update_req_mgr(
 
 int32_t cam_actuator_publish_dev_info(struct cam_req_mgr_device_info *info)
 {
+#if IS_ENABLED(CONFIG_ISPV3)
+	struct cam_actuator_ctrl_t *a_ctrl;
+#endif
+
 	if (!info) {
 		CAM_ERR(CAM_ACTUATOR, "Invalid Args");
 		return -EINVAL;
 	}
 
+#if IS_ENABLED(CONFIG_ISPV3)
+	a_ctrl = (struct cam_actuator_ctrl_t *)
+		cam_get_device_priv(info->dev_hdl);
+#endif
+
 	info->dev_id = CAM_REQ_MGR_DEVICE_ACTUATOR;
 	strlcpy(info->name, CAM_ACTUATOR_NAME, sizeof(info->name));
 	info->p_delay = 1;
 	info->trigger = CAM_TRIGGER_POINT_SOF;
+#if IS_ENABLED(CONFIG_ISPV3)
+	info->trigger_source = a_ctrl->trigger_source;
+	info->latest_frame_id = -1;
+#endif
 
 	return 0;
 }
@@ -885,6 +898,13 @@ int32_t cam_actuator_driver_cmd(struct cam_actuator_ctrl_t *a_ctrl,
 		bridge_params.priv = a_ctrl;
 		bridge_params.dev_id = CAM_ACTUATOR;
 
+#if IS_ENABLED(CONFIG_ISPV3)
+		if (actuator_acq_dev.reserved)
+			a_ctrl->trigger_source = CAM_REQ_MGR_TRIG_SRC_EXTERNAL;
+		else
+			a_ctrl->trigger_source = CAM_REQ_MGR_TRIG_SRC_INTERNAL;
+#endif
+
 		actuator_acq_dev.device_handle =
 			cam_create_device_hdl(&bridge_params);
 		if (actuator_acq_dev.device_handle <= 0) {
@@ -896,8 +916,16 @@ int32_t cam_actuator_driver_cmd(struct cam_actuator_ctrl_t *a_ctrl,
 		a_ctrl->bridge_intf.session_hdl =
 			actuator_acq_dev.session_handle;
 
+#if IS_ENABLED(CONFIG_ISPV3)
+		CAM_DBG(CAM_ACTUATOR, "Device Handle: %d trigger_source: %s",
+			actuator_acq_dev.device_handle,
+			(a_ctrl->trigger_source == CAM_REQ_MGR_TRIG_SRC_INTERNAL) ?
+			"internal" : "external");
+#else
 		CAM_DBG(CAM_ACTUATOR, "Device Handle: %d",
 			actuator_acq_dev.device_handle);
+#endif
+
 		if (copy_to_user(u64_to_user_ptr(cmd->handle),
 			&actuator_acq_dev,
 			sizeof(struct cam_sensor_acquire_dev))) {

@@ -106,6 +106,7 @@ struct cam_sensor_dev_res_info {
  * @sensor_name: Sensor name
  * @is_aon_user: To determine whether sensor is AON user or not
  * @hw_no_ops: To determine whether HW operations need to be disabled
+ * @trigger_source: Indicate the trigger source
  */
 struct cam_sensor_ctrl_t {
 	char                           device_name[
@@ -139,6 +140,9 @@ struct cam_sensor_ctrl_t {
 		CAM_SENSOR_NAME_MAX_SIZE];
 	bool                           is_aon_user;
 	bool                           hw_no_ops;
+#if IS_ENABLED(CONFIG_ISPV3)
+	enum cam_req_mgr_trigger_source trigger_source;
+#endif
 };
 
 /**

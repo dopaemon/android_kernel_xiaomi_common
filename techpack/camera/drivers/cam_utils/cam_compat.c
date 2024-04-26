@@ -228,10 +228,20 @@ static inline int camera_component_compare_dev(struct device *dev, void *data)
 	return dev == data;
 }
 
+#if IS_ENABLED(CONFIG_ISPV3)
+static inline int camera_component_compare_ispv3_dev(struct device *dev, void *data)
+{
+	return !strcmp(dev_name(dev), "ispv3-cam");
+}
+#endif
+
 /* Add component matches to list for master of aggregate driver */
 int camera_component_match_add_drivers(struct device *master_dev,
 	struct component_match **match_list)
 {
+#if IS_ENABLED(CONFIG_ISPV3)
+	struct device_node *np;
+#endif
 	int i, rc = 0;
 	struct platform_device *pdev = NULL;
 	struct i2c_client *client = NULL;
@@ -247,6 +257,14 @@ int camera_component_match_add_drivers(struct device *master_dev,
 		rc = -EINVAL;
 		goto end;
 	}
+
+#if IS_ENABLED(CONFIG_ISPV3)
+	np = of_find_node_by_path("/soc/ispv3_vdd1_ldo");
+	if(np) {
+		component_match_add(master_dev, match_list,
+							camera_component_compare_ispv3_dev, NULL);
+	}
+#endif
 
 	for (i = 0; i < ARRAY_SIZE(cam_component_platform_drivers); i++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)

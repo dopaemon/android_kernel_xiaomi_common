@@ -9,6 +9,9 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/ratelimit.h>
+#if IS_ENABLED(CONFIG_ISPV3)
+#include <media/cam_sensor.h>
+#endif
 
 #include "cam_mem_mgr.h"
 #include "cam_sync_api.h"
@@ -24,6 +27,13 @@
 #include "cam_cpas_api.h"
 #include "cam_ife_hw_mgr.h"
 #include "cam_subdev.h"
+#if IS_ENABLED(CONFIG_ISPV3)
+#include "cam_csiphy_dev.h"
+#include "cam_req_mgr_dev.h"
+#include "cam_csiphy_soc.h"
+#include "cam_csiphy_core.h"
+#include "camera_main.h"
+#endif
 
 static const char isp_dev_name[] = "cam-isp";
 
@@ -690,6 +700,9 @@ static int __cam_isp_ctx_notify_trigger_util(
 	notify.req_id = ctx_isp->req_info.last_bufdone_req_id;
 	notify.sof_timestamp_val = ctx_isp->sof_timestamp_val;
 	notify.trigger_id = ctx_isp->trigger_id;
+#if IS_ENABLED(CONFIG_ISPV3)
+	notify.trigger_source = CAM_REQ_MGR_TRIG_SRC_INTERNAL;
+#endif
 
 	CAM_DBG(CAM_ISP,
 		"Notify CRM %s on frame: %llu ctx: %u link: 0x%x last_buf_done_req: %lld",
@@ -828,8 +841,14 @@ static inline void __cam_isp_ctx_update_sof_ts_util(
 	struct cam_isp_context *ctx_isp)
 {
 	/* Delayed update, skip if ts is already updated */
+#if IS_ENABLED(CONFIG_ISPV3)
+	if ((ctx_isp->sof_timestamp_val == sof_event_data->timestamp)
+	   && (ctx_isp->req_isp[0].bubble_report))
+		return;
+#else
 	if (ctx_isp->sof_timestamp_val == sof_event_data->timestamp)
 		return;
+#endif
 
 	ctx_isp->frame_id++;
 	ctx_isp->sof_timestamp_val = sof_event_data->timestamp;
@@ -2925,6 +2944,19 @@ static int __cam_isp_ctx_sof_in_activated_state(
 	CAM_DBG(CAM_ISP, "frame id: %lld time stamp:0x%llx, ctx %u request %llu",
 		ctx_isp->frame_id, ctx_isp->sof_timestamp_val, ctx->ctx_id, request_id);
 
+#if IS_ENABLED(CONFIG_ISPV3)
+	CAM_DBG(CAM_ISP, "SOF in activated_state ctx:%d frame_id:%lld req_id:%lld substate:%s",
+		ctx->ctx_id, ctx_isp->frame_id, ctx_isp->req_info.last_bufdone_req_id,
+		__cam_isp_ctx_substate_val_to_type(
+		ctx_isp->substate_activated));
+
+	cam_subdev_notify_message(CAM_ISPV3_DEVICE_TYPE,
+		CAM_SUBDEV_MESSAGE_SOF, (void *)&ctx_isp->frame_id);
+
+	cam_subdev_notify_message(CAM_ISPV3_DEVICE_TYPE,
+		CAM_SUBDEV_MESSAGE_REQ_ID, (void *)&ctx_isp->req_info.last_bufdone_req_id);
+#endif
+
 	return rc;
 }
 
@@ -3009,8 +3041,13 @@ static int __cam_isp_ctx_epoch_in_applied(struct cam_isp_context *ctx_isp,
 	req_isp->cdm_reset_before_apply = false;
 	atomic_set(&ctx_isp->process_bubble, 1);
 
+#if IS_ENABLED(CONFIG_ISPV3)
+	CAM_INFO_RATE_LIMIT(CAM_ISP, "ctx:%d Report Bubble flag %d req id:%lld, frame id:%lld",
+		ctx->ctx_id, req_isp->bubble_report, req->request_id, ctx_isp->frame_id);
+#else
 	CAM_INFO_RATE_LIMIT(CAM_ISP, "ctx:%d Report Bubble flag %d req id:%lld",
 		ctx->ctx_id, req_isp->bubble_report, req->request_id);
+#endif
 
 	if (req_isp->bubble_report) {
 		__cam_isp_ctx_notify_error_util(CAM_TRIGGER_POINT_SOF, CRM_KMD_ERR_BUBBLE,
@@ -3159,6 +3196,14 @@ static int __cam_isp_ctx_sof_in_epoch(struct cam_isp_context *ctx_isp,
 		ctx->ctx_id, ctx_isp->frame_id,
 		__cam_isp_ctx_substate_val_to_type(
 		ctx_isp->substate_activated));
+
+#if IS_ENABLED(CONFIG_ISPV3)
+	cam_subdev_notify_message(CAM_ISPV3_DEVICE_TYPE,
+		CAM_SUBDEV_MESSAGE_SOF, (void *)&ctx_isp->frame_id);
+
+	cam_subdev_notify_message(CAM_ISPV3_DEVICE_TYPE,
+		CAM_SUBDEV_MESSAGE_REQ_ID, (void *)&ctx_isp->req_info.last_bufdone_req_id);
+#endif
 
 	return rc;
 }
@@ -6910,6 +6955,10 @@ static int __cam_isp_ctx_get_dev_info_in_acquired(struct cam_context *ctx,
 	struct cam_req_mgr_device_info *dev_info)
 {
 	int rc = 0;
+#if IS_ENABLED(CONFIG_ISPV3)
+	struct cam_isp_context *ctx_isp =
+		(struct cam_isp_context *) ctx->ctx_priv;
+#endif
 
 	dev_info->dev_hdl = ctx->dev_hdl;
 	strlcpy(dev_info->name, CAM_ISP_DEV_NAME, sizeof(dev_info->name));
@@ -6917,6 +6966,11 @@ static int __cam_isp_ctx_get_dev_info_in_acquired(struct cam_context *ctx,
 	dev_info->p_delay = 1;
 	dev_info->trigger = CAM_TRIGGER_POINT_SOF;
 	dev_info->trigger_on = true;
+#if IS_ENABLED(CONFIG_ISPV3)
+	/* ISP is always controlled by internal trigger */
+	dev_info->trigger_source = CAM_REQ_MGR_TRIG_SRC_INTERNAL;
+	dev_info->latest_frame_id = ctx_isp->frame_id;
+#endif
 
 	return rc;
 }

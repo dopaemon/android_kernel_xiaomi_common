@@ -32,6 +32,10 @@
 #define CAM_OIS_NAME       "cam-ois"
 #define CAM_TPG_NAME       "cam-tpg"
 
+#if IS_ENABLED(CONFIG_ISPV3)
+#define CAM_ISPV3_NAME	   "cam-ispv3"
+#endif
+
 #define MAX_SYSTEM_PIPELINE_DELAY 2
 
 #define CAM_PKT_NOP_OPCODE 127

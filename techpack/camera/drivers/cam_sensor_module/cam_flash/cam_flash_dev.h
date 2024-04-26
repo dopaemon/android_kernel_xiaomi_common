@@ -225,6 +225,9 @@ struct cam_flash_ctrl {
 	struct camera_io_master             io_master_info;
 	struct i2c_data_settings            i2c_data;
 	uint32_t                            last_flush_req;
+#if IS_ENABLED(CONFIG_ISPV3)
+	enum cam_req_mgr_trigger_source     trigger_source;
+#endif
 	uint32_t                            streamoff_count;
 	int32_t                             apply_streamoff;
 };
