@@ -30,7 +30,7 @@
 #define FORCE_ENABLE_RECOVERY   1
 #define AUTO_RECOVERY           0
 
-#define CRM_WORKQ_NUM_TASKS 60
+#define CRM_WORKQ_NUM_TASKS 120
 
 #define MAX_SYNC_COUNT 65535
 
