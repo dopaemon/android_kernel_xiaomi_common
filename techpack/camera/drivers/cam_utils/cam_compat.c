@@ -12,6 +12,7 @@
 #include "cam_debug_util.h"
 #include "cam_cpas_api.h"
 #include "camera_main.h"
+#include "hwid.h"
 
 #if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
 #include <soc/qcom/socinfo.h>
@@ -235,6 +236,11 @@ int camera_component_match_add_drivers(struct device *master_dev,
 	struct platform_device *pdev = NULL;
 	struct i2c_client *client = NULL;
 	struct device *start_dev = NULL, *match_dev = NULL;
+	uint32_t hw_platform_ver = 0;
+	uint32_t hw_country_ver = 0;
+	hw_country_ver = get_hw_country_version();
+	hw_platform_ver = get_hw_version_platform();
+	CAM_INFO(CAM_SENSOR, "debugforflashsrc  hw_country_ver:%d, hw_platform_ver %d", hw_country_ver, hw_platform_ver);
 
 	if (!master_dev || !match_list) {
 		CAM_ERR(CAM_UTIL, "Invalid parameters for component match add");
@@ -273,6 +279,30 @@ int camera_component_match_add_drivers(struct device *master_dev,
 		struct device_driver *drv = &cam_component_i2c_drivers[i]->driver;
 		void *drv_ptr = (void *)drv;
 #endif
+
+		if (HARDWARE_PROJECT_L9S == hw_platform_ver && (uint32_t)CountryCN == hw_country_ver) {
+			if (i == 1) //flash driver
+			{
+				int flashCount = 0;
+				CAM_INFO(CAM_UTIL, "qctest start time");
+				do {
+					start_dev = NULL;
+					flashCount = 0;
+					while ((match_dev = bus_find_device(&i2c_bus_type,
+								start_dev, drv_ptr, &camera_i2c_compare_dev))) {
+						put_device(start_dev);
+						start_dev = match_dev;
+						flashCount++;
+					}
+					put_device(start_dev);
+					if (flashCount != 2)
+					{
+						msleep(1000);
+					}
+				} while(flashCount != 2);
+			}
+		}
+
 		start_dev = NULL;
 		while ((match_dev = bus_find_device(&i2c_bus_type,
 			start_dev, drv_ptr, &camera_i2c_compare_dev))) {
