@@ -4185,7 +4185,9 @@ static int cam_ife_csid_ver2_enable_hw(
 		rc = -EINVAL;
 		goto unsubscribe_top_err;
 	}
-
+#if IS_ENABLED(ZIZHAN_CAMERA)
+	memset(&csid_hw->timestamp, 0, sizeof(struct cam_ife_csid_timestamp));
+#endif
 	csid_hw->flags.device_enabled = true;
 	csid_hw->flags.fatal_err_detected = false;
 	CAM_DBG(CAM_ISP, "CSID:%d CSID HW version: 0x%x",
