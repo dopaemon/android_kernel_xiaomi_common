@@ -2538,6 +2538,9 @@ int cam_soc_util_regulator_disable(struct regulator *rgltr,
 	return rc;
 }
 
+#ifdef CONFIG_S12B
+static uint32_t cam_power_vana1_volt = 1300000;
+#endif
 
 int cam_soc_util_regulator_enable(struct regulator *rgltr,
 	const char *rgltr_name,
@@ -2554,6 +2557,12 @@ int cam_soc_util_regulator_enable(struct regulator *rgltr,
 	if (regulator_count_voltages(rgltr) > 0) {
 		CAM_DBG(CAM_UTIL, "voltage min=%d, max=%d",
 			rgltr_min_volt, rgltr_max_volt);
+
+#ifdef CONFIG_S12B
+		if (!strcmp(rgltr_name, "cam_vana1")) {
+			rgltr_min_volt = cam_power_vana1_volt;
+		}
+#endif
 
 		rc = regulator_set_voltage(
 			rgltr, rgltr_min_volt, rgltr_max_volt);
