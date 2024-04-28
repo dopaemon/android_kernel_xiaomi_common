@@ -1397,6 +1397,8 @@ config TOUCHSCREEN_HIMAX_HX83112B
 source "drivers/input/touchscreen/fts_spi/Kconfig"
 
 	  If unsure, say N.
+source "drivers/input/touchscreen/fst2/Kconfig"
+
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called himax_hx83112b.
