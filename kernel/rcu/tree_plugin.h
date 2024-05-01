@@ -1218,7 +1218,7 @@ static void rcu_initiate_boost(struct rcu_node *rnp, unsigned long flags)
  */
 static void rcu_preempt_boost_start_gp(struct rcu_node *rnp)
 {
-	rnp->boost_time = jiffies + RCU_BOOST_DELAY_JIFFIES;
+	rnp->boost_time = jiffies;
 }
 
 /*
