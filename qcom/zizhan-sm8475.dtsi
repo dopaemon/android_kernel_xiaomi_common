@@ -132,6 +132,15 @@
 	};
 };
 
+&pm8350b_haptics {
+	qcom,vmax-mv = <3250>;
+	qcom,lra-period-us = <5102>;
+	qcom,lra-f0-min = <185>;
+	qcom,lra-f0-max = <200>;
+	qcom,lra-f0-default = <196>;
+	qcom,lra-f0-cal-count = <592>;
+};
+
 &thermal_zones {
 	cpu_therm {
 		polling-delay-passive = <0>;
@@ -655,4 +664,3 @@ cs35l41_1: cs35l41@42 {
         mi,support-soc-update;
         qcom,shutdown-voltage = <3350>;
 };
-
