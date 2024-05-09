@@ -15,6 +15,7 @@
 #include "cam_cx_ipeak.h"
 #include "cam_mem_mgr.h"
 #include "cam_presil_hw_access.h"
+#include "hwid.h"
 
 #define CAM_TO_MASK(bitn)          (1 << (int)(bitn))
 #define CAM_IS_BIT_SET(mask, bit)  ((mask) & CAM_TO_MASK(bit))
@@ -2538,9 +2539,7 @@ int cam_soc_util_regulator_disable(struct regulator *rgltr,
 	return rc;
 }
 
-#ifdef CONFIG_S12B
 static uint32_t cam_power_vana1_volt = 1300000;
-#endif
 
 int cam_soc_util_regulator_enable(struct regulator *rgltr,
 	const char *rgltr_name,
@@ -2548,6 +2547,8 @@ int cam_soc_util_regulator_enable(struct regulator *rgltr,
 	uint32_t rgltr_op_mode, uint32_t rgltr_delay)
 {
 	int32_t rc = 0;
+	uint32_t hw_project = 0;
+	hw_project = get_hw_version_platform();
 
 	if (!rgltr) {
 		CAM_ERR(CAM_UTIL, "Invalid NULL parameter");
@@ -2558,11 +2559,9 @@ int cam_soc_util_regulator_enable(struct regulator *rgltr,
 		CAM_DBG(CAM_UTIL, "voltage min=%d, max=%d",
 			rgltr_min_volt, rgltr_max_volt);
 
-#ifdef CONFIG_S12B
-		if (!strcmp(rgltr_name, "cam_vana1")) {
+		if (hw_project == HARDWARE_PROJECT_L18 && !strcmp(rgltr_name, "cam_vana1")) {
 			rgltr_min_volt = cam_power_vana1_volt;
 		}
-#endif
 
 		rc = regulator_set_voltage(
 			rgltr, rgltr_min_volt, rgltr_max_volt);
