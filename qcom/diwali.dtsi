@@ -1536,6 +1536,10 @@
 		compatible = "qcom,logbuf-vendor-hooks";
 	};
 
+	microdump_modem {
+		compatible = "qcom,microdump_modem";
+	};
+
 	mini_dump_node {
 		compatible = "qcom,minidump";
 	};
