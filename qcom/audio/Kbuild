@@ -61,7 +61,8 @@ dtbo-$(CONFIG_ARCH_CAPE) += cape-audio.dtbo \
                  mayfly-audio.dtbo \
                  mondrian-audio.dtbo \
                  marble-audio.dtbo \
-                 zizhan-audio.dtbo
+                 zizhan-audio.dtbo \
+                 diting-audio.dtbo
 
 
  always-y    := $(dtb-y) $(dtbo-y)
