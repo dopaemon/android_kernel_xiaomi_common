@@ -279,13 +279,14 @@
 					/*AOD Mode off*/
 					15 00 00 00 00 00 02 65 00
 					15 00 00 00 00 00 02 38 00
-					39 00 00 00 00 00 07 51 00 00 00 00 03 FF
+					39 00 00 00 00 00 07 51 00 FC 00 00 03 FF
 					15 00 00 00 00 00 02 2C 00
 					/* ERR Flag enable */
 					39 00 00 00 00 00 06 F0 55 AA 52 08 00
 					39 00 00 00 00 00 02 6F 01
 					39 00 00 00 00 00 02 BE 45
 				];
+				qcom,mdss-dsi-nolp-command-update = <0x51 4 2>;
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
 
 				qcom,compression-mode = "dsc";
@@ -532,13 +533,14 @@
 					/*AOD Mode off*/
 					15 00 00 00 00 00 02 65 00
 					15 00 00 00 00 00 02 38 00
-					39 00 00 00 00 00 07 51 00 00 00 00 03 FF
+					39 00 00 00 00 00 07 51 00 FC 00 00 03 FF
 					15 00 00 00 00 00 02 2C 00
 					/* ERR Flag enable */
 					39 00 00 00 00 00 06 F0 55 AA 52 08 00
 					39 00 00 00 00 00 02 6F 01
 					39 00 00 00 00 00 02 BE 45
 				];
+				qcom,mdss-dsi-nolp-command-update = <0x51 4 2>;
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
 
 				qcom,compression-mode = "dsc";
@@ -785,13 +787,14 @@
 					/*AOD Mode off*/
 					15 00 00 00 00 00 02 65 00
 					15 00 00 00 00 00 02 38 00
-					39 00 00 00 00 00 07 51 00 00 00 00 03 FF
+					39 00 00 00 00 00 07 51 00 FC 00 00 03 FF
 					15 00 00 00 00 00 02 2C 00
 					/* ERR Flag enable */
 					39 00 00 00 00 00 06 F0 55 AA 52 08 00
 					39 00 00 00 00 00 02 6F 01
 					39 00 00 00 00 00 02 BE 45
 				];
+				qcom,mdss-dsi-nolp-command-update = <0x51 4 2>;
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
 
 				qcom,compression-mode = "dsc";
@@ -968,10 +971,11 @@
 			mi,mdss-dsi-local-hbm-normal-green-500nit-command-state = "dsi_lp_mode";
 
 			mi,mdss-dsi-local-hbm-off-to-normal-command = [
+				39 00 00 00 00 00 02 53 20
 				39 00 00 40 00 00 03 51 07 FF
 				39 00 00 00 00 00 02 87 00
 			];
-			mi,mdss-dsi-local-hbm-off-to-normal-command-update = <0x51 0 2>;
+			mi,mdss-dsi-local-hbm-off-to-normal-command-update = <0x51 1 2>;
 			mi,mdss-dsi-local-hbm-off-to-normal-command-state = "dsi_hs_mode";
 
 			mi,mdss-dsi-local-hbm-off-to-hbm-command= [
@@ -1044,7 +1048,7 @@
 				/*AOD Mode off*/
 				15 00 00 00 00 00 02 65 00
 				15 00 00 00 00 00 02 38 00
-				39 00 00 00 00 00 07 51 00 00 00 00 03 FF
+				39 00 00 00 00 00 07 51 00 FC 00 00 03 FF
 				15 00 00 00 00 00 02 2C 00
 				/* ERR Flag enable */
 				39 00 00 00 00 00 06 F0 55 AA 52 08 00
@@ -1059,7 +1063,7 @@
 				/*AOD Mode off*/
 				15 00 00 00 00 00 02 65 00
 				15 00 00 00 00 00 02 38 00
-				39 00 00 00 00 00 07 51 00 00 00 00 01 FF
+				39 00 00 00 00 00 07 51 00 14 00 00 01 FF
 				15 00 00 00 00 00 02 2C 00
 				/* ERR Flag enable */
 				39 00 00 00 00 00 06 F0 55 AA 52 08 00
@@ -1243,10 +1247,11 @@
 			mi,mdss-dsi-local-hbm-normal-green-500nit-command-state = "dsi_lp_mode";
 
 			mi,mdss-dsi-local-hbm-off-to-normal-command = [
+				39 00 00 00 00 00 02 53 20
 				39 00 00 40 00 00 03 51 07 FF
 				39 00 00 00 00 00 02 87 00
 			];
-			mi,mdss-dsi-local-hbm-off-to-normal-command-update = <0x51 0 2>;
+			mi,mdss-dsi-local-hbm-off-to-normal-command-update = <0x51 1 2>;
 			mi,mdss-dsi-local-hbm-off-to-normal-command-state = "dsi_hs_mode";
 
 			mi,mdss-dsi-local-hbm-off-to-hbm-command= [
@@ -1319,7 +1324,7 @@
 				/*AOD Mode off*/
 				15 00 00 00 00 00 02 65 00
 				15 00 00 00 00 00 02 38 00
-				39 00 00 00 00 00 07 51 00 00 00 00 03 FF
+				39 00 00 00 00 00 07 51 00 FC 00 00 03 FF
 				15 00 00 00 00 00 02 2C 00
 				/* ERR Flag enable */
 				39 00 00 00 00 00 06 F0 55 AA 52 08 00
@@ -1334,7 +1339,7 @@
 				/*AOD Mode off*/
 				15 00 00 00 00 00 02 65 00
 				15 00 00 00 00 00 02 38 00
-				39 00 00 00 00 00 07 51 00 00 00 00 01 FF
+				39 00 00 00 00 00 07 51 00 14 00 00 01 FF
 				15 00 00 00 00 00 02 2C 00
 				/* ERR Flag enable */
 				39 00 00 00 00 00 06 F0 55 AA 52 08 00
@@ -1520,10 +1525,11 @@
 			mi,mdss-dsi-local-hbm-normal-green-500nit-command-state = "dsi_lp_mode";
 
 			mi,mdss-dsi-local-hbm-off-to-normal-command = [
+				39 00 00 00 00 00 02 53 20
 				39 00 00 40 00 00 03 51 07 FF
 				39 00 00 00 00 00 02 87 00
 			];
-			mi,mdss-dsi-local-hbm-off-to-normal-command-update = <0x51 0 2>;
+			mi,mdss-dsi-local-hbm-off-to-normal-command-update = <0x51 1 2>;
 			mi,mdss-dsi-local-hbm-off-to-normal-command-state = "dsi_hs_mode";
 
 			mi,mdss-dsi-local-hbm-off-to-hbm-command= [
@@ -1596,7 +1602,7 @@
 				/*AOD Mode off*/
 				15 00 00 00 00 00 02 65 00
 				15 00 00 00 00 00 02 38 00
-				39 00 00 00 00 00 07 51 00 00 00 00 03 FF
+				39 00 00 00 00 00 07 51 00 FC 00 00 03 FF
 				15 00 00 00 00 00 02 2C 00
 				/* ERR Flag enable */
 				39 00 00 00 00 00 06 F0 55 AA 52 08 00
@@ -1611,7 +1617,7 @@
 				/*AOD Mode off*/
 				15 00 00 00 00 00 02 65 00
 				15 00 00 00 00 00 02 38 00
-				39 00 00 00 00 00 07 51 00 00 00 00 01 FF
+				39 00 00 00 00 00 07 51 00 14 00 00 01 FF
 				15 00 00 00 00 00 02 2C 00
 				/* ERR Flag enable */
 				39 00 00 00 00 00 06 F0 55 AA 52 08 00
