@@ -333,7 +333,8 @@ dtbo-$(CONFIG_ARCH_CAPE) += cape-mtp-pm8008-overlay.dtbo \
 	mayfly-sm8475-pm8008-overlay.dtbo \
 	mondrian-sm8475-pm8008-overlay.dtbo \
 	marble-sm7475-pm8008-overlay.dtbo \
-	zizhan-sm8475-pm8008-overlay.dtbo
+	zizhan-sm8475-pm8008-overlay.dtbo \
+	diting-sm8475-pm8008-overlay.dtbo
 
 cape-mtp-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
 cape-mtp-120fps-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
@@ -373,6 +374,7 @@ mayfly-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
 mondrian-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
 marble-sm7475-pm8008-overlay.dtbo-base := ukee.dtb
 zizhan-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
+diting-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
 
 else
 dtb-$(CONFIG_ARCH_CAPE) += cape-mtp-pm8008.dtb \
