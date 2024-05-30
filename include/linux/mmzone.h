@@ -510,6 +510,11 @@ struct lruvec {
 #ifdef CONFIG_MEMCG
 	struct pglist_data *pgdat;
 #endif
+#ifndef __GENKSYMS__
+	// HACK: CRC ABI fixups
+	/* per lruvec lru_lock for memcg */
+	spinlock_t			lru_lock;
+#endif
 };
 
 /* Isolate unmapped pages */
@@ -1018,6 +1023,13 @@ typedef struct pglist_data {
 	/* Write-intensive fields used by page reclaim */
 	ZONE_PADDING(_pad1_)
 	spinlock_t		lru_lock;
+
+	/* HACK: KABI preservation, DO NOT USE! */
+#ifdef __GENKSYMS__
+	spinlock_t		lru_lock;
+#else
+	spinlock_t		unused;
+#endif
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 	/*
