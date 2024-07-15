@@ -52,6 +52,7 @@ config PAGE_OWNER
 	select STACKTRACE
 	select STACKDEPOT
 	select PAGE_EXTENSION
+	default n
 	help
 	  This keeps track of what call chain is the owner of a page, may
 	  help to find bare alloc_page(s) leaks. Even if you include this
@@ -69,6 +70,7 @@ config PAGE_PINNER
 	select STACKTRACE
 	select STACKDEPOT
 	select PAGE_EXTENSION
+	default n
 	help
 	  This keeps track of what call chain is the pinner of a page, may
 	  help to find page migration failures. Even if you include this

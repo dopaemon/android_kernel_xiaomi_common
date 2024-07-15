@@ -510,6 +510,7 @@ config CMA_DEBUG
 config CMA_DEBUGFS
 	bool "CMA debugfs interface"
 	depends on CMA && DEBUG_FS
+	default n
 	help
 	  Turns on the DebugFS interface for CMA.
 
