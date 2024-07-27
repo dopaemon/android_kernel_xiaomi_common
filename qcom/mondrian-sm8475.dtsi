@@ -25,11 +25,11 @@
 	pinctrl-1 = <&mi_ts_spi_sleep &mi_ts_cs_suspend>;
 	xiaomi_touch@0 {
 		status = "ok";
-		compatible = "xiaomi,m11a-spi";
+		compatible = "goodix,gt9916S";
 		reg = <0>;
 		spi-max-frequency = <15000000>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <21 0x2008>;
+		interrupts = <21 IRQ_TYPE_LEVEL_LOW>;
 		//goodix,avdd-name = "avdd";
 		//avdd-supply = <&L7C>;
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
@@ -39,18 +39,15 @@
 		goodix,avdd-gpio = <&tlmm 71 0x0>;
 		goodix,iovdd-name = "vdd";
 		vdd-supply = <&L2C>;
-		goodix,irq-gpio = <&tlmm 21 0x2008>;
-		goodix,reset-gpio = <&tlmm 20 0x00>;
-		goodix,irq-flags = <2>;
+		goodix,irq-gpio = <&tlmm 21 GPIO_TRANSITORY>;
+		goodix,reset-gpio = <&tlmm 20 GPIO_ACTIVE_HIGH>;
+		goodix,irq-flags = <IRQ_TYPE_EDGE_FALLING>;
 		goodix,panel-max-x = <14400>;
 		goodix,panel-max-y = <32000>;
 		goodix,panel-max-w = <255>;
 		goodix,panel-max-p = <4096>;
-		goodix,firmware-name = "goodix_firmware_m11a";
-		goodix,config-name = "goodix_cfg_group_m11a";
-		goodix,touch-expert-array = <2 3 2 2
-					     4 3 3 2
-					     3 3 4 2>;
+		goodix,firmware-name = "goodix_firmware_m11a.bin";
+		goodix,config-name = "goodix_cfg_group_m11a.bin";
 	};
 };
 
