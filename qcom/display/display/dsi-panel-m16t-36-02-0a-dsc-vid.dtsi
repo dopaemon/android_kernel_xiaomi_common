@@ -259,12 +259,12 @@
 			mi,mdss-dsi-doze-lbm-command-state = "dsi_hs_mode";
 
 			mi,mdss-dsi-doze-hbm-nolp-command = [
-				39 00 00 00 00 00 07 51 00 00 00 00 00 00
+				39 00 00 00 00 00 07 51 00 f5 07 ff 03 ff
 			];
 			mi,mdss-dsi-doze-hbm-nolp-command-state = "dsi_hs_mode";
 
 			mi,mdss-dsi-doze-lbm-nolp-command = [
-				39 00 00 00 00 00 07 51 00 00 00 00 00 00
+				39 00 00 00 00 00 07 51 00 14 07 ff 01 ff
 			];
 			mi,mdss-dsi-doze-lbm-nolp-command-state = "dsi_hs_mode";
 
