@@ -507,7 +507,7 @@
 	pinctrl-1 = <&mi_ts_spi_suspend_sec &mi_ts_cs_suspend_sec>;
 	fts-sec@0 {
 		status = "ok";
-		compatible = "st,spi-sec";
+		compatible = "st,spi";
 		reg = <0x0>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <119 0x2008>;
