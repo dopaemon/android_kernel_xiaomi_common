@@ -545,7 +545,7 @@ uvc_v4l2_subscribe_event(struct v4l2_fh *fh,
 	if (sub->type == UVC_EVENT_SETUP && uvc->func_connected)
 		return -EBUSY;
 
-	ret = v4l2_event_subscribe(fh, sub, 2, &uvc_v4l2_event_ch_ops);
+	ret = v4l2_event_subscribe(fh, sub, 10, &uvc_v4l2_event_ch_ops);
 	if (ret < 0)
 		return ret;
 
