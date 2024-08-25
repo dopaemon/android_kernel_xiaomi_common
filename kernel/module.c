@@ -2406,7 +2406,8 @@ static int simplify_symbols(struct module *mod, const struct load_info *info)
 			ksym = resolve_symbol_wait(mod, info, name);
 			/* Ok if resolved.  */
 			if (ksym && !IS_ERR(ksym)) {
-				sym[i].st_value = kernel_symbol_value(ksym);
+				sym[i].st_value = gki_quirks_get_hooked_symbol_value(mod, name,
+					kernel_symbol_value(ksym));
 				break;
 			}
 
