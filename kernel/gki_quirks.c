@@ -2,6 +2,17 @@
 
 #include <linux/module.h>
 
+static struct pid *find_get_pid_global_ns(pid_t nr)
+{
+	struct pid *pid;
+
+	rcu_read_lock();
+	pid = get_pid(find_pid_ns(nr, &init_pid_ns));
+	rcu_read_unlock();
+
+	return pid;
+}
+
 struct gki_quirks_hook {
 	const char *module_name;
 	const char *symbol_name;
@@ -9,6 +20,12 @@ struct gki_quirks_hook {
 };
 
 static const struct gki_quirks_hook gki_quirks_list[] = {
+	/*
+	 * Pixel 6/7: mali_kbase mistakenly uses find_get_pid
+	 * with the global ids from task_struct of "current".
+	 */
+	{ "mali_kbase", "find_get_pid", find_get_pid_global_ns },
+
 	{ } /* terminating entry must be last */
 };
 
