@@ -21,10 +21,8 @@ cqhci.ko
 crypto-qti-common.ko
 crypto-qti-hwkm.ko
 dcvs_fp.ko
-dispcc-diwali.ko
-dispcc-waipio.ko
-gcc-diwali.ko
 gdsc-regulator.ko
+dispcc-waipio.ko
 gh_arm_drv.ko
 gh_ctrl.ko
 gh_dbl.ko
@@ -35,14 +33,11 @@ hwkm.ko
 icc-bcm-voter.ko
 icc-debug.ko
 iommu-logger.ko
-kryo_arm64_edac.ko
 llcc-qcom.ko
 mac80211.ko
 mem_buf_dev.ko
 mem_buf.ko
 mem-hooks.ko
-memory_dump_v2.ko
-minidump.ko
 msm_dma_iommu_mapping.ko
 pinctrl-waipio.ko
 qnoc-waipio.ko
@@ -53,10 +48,8 @@ nvmem_qcom-spmi-sdam.ko
 phy-generic.ko
 phy-qcom-ufs.ko
 phy-qcom-ufs-qmp-v4-waipio.ko
-phy-qcom-ufs-qmp-v4-diwali.ko
 phy-qcom-ufs-qmp-v4-cape.ko
 pinctrl-cape.ko
-pinctrl-diwali.ko
 pinctrl-msm.ko
 proxy-consumer.ko
 qcom-dcvs.ko
@@ -75,7 +68,6 @@ qcom-reboot-reason.ko
 qcom_rpmh.ko
 qcom-scm.ko
 qcom_wdt_core.ko
-qnoc-diwali.ko
 qnoc-qos.ko
 qrtr.ko
 regmap-spmi.ko
@@ -89,7 +81,6 @@ ufshcd-crypto-qti.ko
 ufs_qcom.ko
 arm_smmu.ko
 msm-geni-se.ko
-mem-offline.ko
 qcom_aoss.ko
 msm_qmp.ko
 qcom_rimps.ko
