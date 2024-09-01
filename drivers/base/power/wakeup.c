@@ -648,9 +648,9 @@ static bool check_for_block(struct wakeup_source *ws)
 			return false;
 
 		// check if wakelock is in wake lock list to be blocked
-		sprintf(wakelock_name, ";%s;", ws->name);
+		sprintf(wakelock_name, "%s", ws->name);
 
-		if(strstr(list_wl_search, wakelock_name) == NULL)
+		if (!strstr(list_wl_search, wakelock_name))
 			return false;
 
 		// wake lock is in list, print it if debug mode on
