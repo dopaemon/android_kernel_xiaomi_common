@@ -169,6 +169,7 @@ struct mi_dsi_panel_cfg {
 	u32 normal_max_brightness_clone;
 	u32 thermal_max_brightness_clone;
 	bool thermal_dimming_enabled;
+	bool unknown_flag;
 
 	/* software build id */
 	bool panel_build_id_read_needed;
@@ -176,6 +177,7 @@ struct mi_dsi_panel_cfg {
 
 	/* AOD control */
 	u32 doze_brightness;
+	u32 last_doze_brightness;
 	struct mutex doze_lock;
 	struct wakeup_source *disp_wakelock;
 	int doze_hbm_dbv_level;
