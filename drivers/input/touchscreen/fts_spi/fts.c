@@ -172,10 +172,9 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type);
 static irqreturn_t fts_event_handler(int irq, void *ts_info);
 static int fts_enable_reg(struct fts_ts_info *info, bool enable);
 extern int power_supply_is_system_supplied(void);
-
+extern void touch_irq_boost(void);
 #ifdef CONFIG_FTS_BOOST
 #define EVENT_INPUT 0x1
-extern void touch_irq_boost(void);
 extern void lpm_disable_for_dev(bool on, char event_dev);
 #endif
 #ifdef CONFIG_FTS_POWERSUPPLY_CB
@@ -4524,10 +4523,6 @@ static irqreturn_t fts_event_handler(int irq, void *ts_info)
 		logError(1, "%s %s debug for sleep", tag, __func__);
 	}
 
-#ifdef CONFIG_FTS_BOOST
-	touch_irq_boost();
-#endif
-
 	if (!info->tp_pm_suspend) {
 		pm_stay_awake(info->dev);
 	} else {
@@ -4545,6 +4540,7 @@ static irqreturn_t fts_event_handler(int irq, void *ts_info)
 		return IRQ_HANDLED;
 	}
 #endif
+	touch_irq_boost();
 #ifdef CONFIG_FTS_BOOST
 	lpm_disable_for_dev(true, EVENT_INPUT);
 #endif
