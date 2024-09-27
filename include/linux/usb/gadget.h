@@ -125,9 +125,8 @@ struct usb_request {
 
 	int			status;
 	unsigned		actual;
-	bool			explicit_status;
 
-	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_USE(1, bool explicit_status);
 };
 
 /*-------------------------------------------------------------------------*/
