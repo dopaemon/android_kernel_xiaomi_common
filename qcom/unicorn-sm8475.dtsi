@@ -315,7 +315,7 @@
 		fts,fod-x-size = <2680>;
 		fts,fod-y-size = <2660>;
 		fts,support-fod;
-		fts,support-thp;
+		/*fts,support-thp;*/
 		fts,support-thp-fw;
 		spi-max-frequency = <12000000>;
 		fts,support-super-resolution = <1>;
