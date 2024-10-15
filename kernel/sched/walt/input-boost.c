@@ -15,6 +15,7 @@
 #include <linux/time.h>
 #include <linux/sysfs.h>
 #include <linux/pm_qos.h>
+#include <linux/soc/qcom/panel_event_notifier.h>
 
 #include "walt.h"
 
@@ -215,7 +216,7 @@ static void inputboost_input_event(struct input_handle *handle,
 	if (now - last_input_time < MIN_INPUT_INTERVAL)
 		return;
 
-	if (type == EV_KEY && code == KEY_POWER) {
+	if (type == EV_KEY && (code == KEY_POWER || code == KEY_WAKEUP)) {
 		if (work_pending(&powerkey_input_boost_work))
 			return;
 
@@ -331,10 +332,31 @@ static struct input_handler inputboost_input_handler = {
 	.id_table	= inputboost_ids,
 };
 
+static void input_boost_panel_event_notifier_callback(enum panel_event_notifier_tag tag,
+			struct panel_event_notification *notification, void *data)
+{
+	if (!notification) {
+		pr_err("%s: Invalid panel notification\n", __func__);
+		return;
+	}
+
+	pr_debug("%s: panel event received, type: %d\n", __func__, notification->notif_type);
+	switch (notification->notif_type) {
+		case DRM_PANEL_EVENT_UNBLANK:
+			if (!work_pending(&powerkey_input_boost_work))
+				queue_work(input_boost_wq, &powerkey_input_boost_work);
+			break;
+		default:
+			pr_debug("%s: ignore panel event: %d\n", __func__, notification->notif_type);
+			break;
+	}
+}
+
 struct kobject *input_boost_kobj;
 int input_boost_init(void)
 {
 	int cpu, ret;
+	void *cookie;
 	struct cpu_sync *s;
 	struct cpufreq_policy *policy;
 	struct freq_qos_request *req;
@@ -368,5 +390,16 @@ int input_boost_init(void)
 	}
 
 	ret = input_register_handler(&inputboost_input_handler);
+	if (ret < 0) {
+		pr_err("%s: Failed to register input handler\n", __func__);
+		return ret;
+	}
+
+	cookie = panel_event_notifier_register(
+			PANEL_EVENT_NOTIFICATION_PRIMARY, PANEL_EVENT_NOTIFIER_CLIENT_CPU_BOOST,
+			NULL /* active_panel */, input_boost_panel_event_notifier_callback, NULL);
+	if (!cookie)
+		pr_err("%s: Failed to register panel notifier\n", __func__);
+
 	return 0;
 }
