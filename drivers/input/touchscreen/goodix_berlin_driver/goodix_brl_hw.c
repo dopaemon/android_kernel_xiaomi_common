@@ -97,8 +97,8 @@ static int brl_dev_confirm(struct goodix_ts_core *cd)
 	}
 
 	if (retry < 0) {
-		ret = -EINVAL;
 		ts_err("device confirm failed, rx_buf:%*ph", 8, rx_buf);
+		return -EINVAL;
 	}
 
 	ts_info("device connected");
