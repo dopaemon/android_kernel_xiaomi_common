@@ -17,6 +17,8 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
+#include <hwid.h>
+#define L12_ID_DET (301+119)
 
 #include "goodix_ts_core.h"
 #define TS_DRIVER_NAME		"gtx8_spi"
@@ -202,6 +204,23 @@ static const struct of_device_id spi_matchs[] = {
 static int goodix_spi_probe(struct spi_device *spi)
 {
 	int ret = 0;
+
+	int gpio_119;
+	uint32_t hw_project;
+	hw_project = get_hw_version_platform();
+
+	/* diting (L12) has two touch variants, check for goodix */
+	if (hw_project == HARDWARE_PROJECT_L12) {
+		gpio_direction_input(L12_ID_DET);
+		gpio_119 = gpio_get_value(L12_ID_DET);
+		ts_info("gpio_119 = %d\n", gpio_119);
+		if (!gpio_119) {
+			ts_info("TP is goodix\n");
+		} else {
+			ts_err("TP is FTS\n");
+			return -ENODEV;
+		}
+	}
 
 	ts_info("goodix spi probe in");
 
