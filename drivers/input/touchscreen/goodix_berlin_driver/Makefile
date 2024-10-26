@@ -1,3 +1,4 @@
+ccflags-y += -I$(srctree)/drivers/misc/hwid/
 obj-$(CONFIG_TOUCHSCREEN_GOODIX_BRL) += goodix_core.o
 goodix_core-y := \
 				goodix_brl_i2c.o \
