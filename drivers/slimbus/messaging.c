@@ -6,6 +6,7 @@
 
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
+#include <linux/io.h>
 #include "slimbus.h"
 #include <linux/io.h>
 
@@ -44,7 +45,7 @@ void slim_msg_response(struct slim_controller *ctrl, u8 *reply, u8 tid, u8 len)
 	}
 
 	slim_free_txn_tid(ctrl, txn);
-	memcpy_fromio(msg->rbuf, reply, len);
+	memcpy_toio(msg->rbuf, reply, len);
 	if (txn->comp)
 		complete(txn->comp);
 
