@@ -65,7 +65,7 @@
 
 	fingerprint_goodix {
 		compatible = "goodix,fingerprint";
-		l6c_vdd-supply = <&L6C>;
+		vdda-supply = <&L6C>;
 		goodix,gpio-reset = <&tlmm 41 0x0>;
 		goodix,gpio-irq = <&tlmm 40 0x0>;
 		status = "ok";

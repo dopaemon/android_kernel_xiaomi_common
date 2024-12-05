@@ -304,8 +304,8 @@
 &soc {
 	fingerprint_goodix {
 		compatible = "goodix,fingerprint";
-		l1c_vdd-supply = <&L1C>;
-                l3c_vdd-supply = <&L3C>;
+		vdda-supply = <&L1C>;
+		vddb-supply = <&L3C>;
 		goodix,gpio-reset = <&tlmm 41 0x0>;
 		goodix,gpio-irq = <&tlmm 40 0x0>;
 		status = "ok";
