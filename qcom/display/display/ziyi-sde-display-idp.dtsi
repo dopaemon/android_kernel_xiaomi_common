@@ -460,6 +460,12 @@
 			&dsi_l9s_42_02_0a_mp_amoled_dsc_cmd
 			&dsi_r66451_amoled_video>;
 	};
+	xiaomi-touch  {
+		panel-primary = <&dsi_l9s_42_02_0a_mp_amoled_dsc_cmd
+			&dsi_l9s_36_02_0b_mp_amoled_dsc_cmd
+			&dsi_l9s_42_02_0a_mp_amoled_dsc_cmd
+			&dsi_r66451_amoled_video>;
+	};
 };
 
 &sde_dsi1 {

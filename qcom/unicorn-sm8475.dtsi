@@ -244,12 +244,6 @@
 		enable-active-high;
 		gpio = <&tlmm 97 0>;
 	};
-
-	xiaomi_touch {
-		compatible = "xiaomi-touch";
-		status = "ok";
-		touch,name = "xiaomi-touch";
-	};
 };
 
 &tlmm {

@@ -302,6 +302,13 @@
 		panel_sec = <&dsi_l18_38_0c_0a_sec_dsc_cmd
 				&dsi_r66451_amoled_video>;
         };
+
+	xiaomi-touch  {
+		panel-primary = <&dsi_l18_38_0c_0a_prim_dsc_cmd
+			&dsi_r66451_amoled_video>;
+		panel-secondary = <&dsi_l18_38_0c_0a_sec_dsc_cmd
+			&dsi_r66451_amoled_video>;
+	};
 };
 
 &spmi_bus {

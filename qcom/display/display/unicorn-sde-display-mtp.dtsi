@@ -262,6 +262,11 @@
 		panel = <&dsi_l2s_38_0c_0a_dsc_cmd &dsi_l2s_42_02_0b_dsc_cmd
 			&dsi_r66451_amoled_video>;
 	};
+	xiaomi-touch  {
+		panel-primary = <&dsi_l2s_38_0c_0a_dsc_cmd
+			&dsi_l2s_42_02_0b_dsc_cmd
+			&dsi_r66451_amoled_video>;
+	};
 };
 
 &spmi_bus {

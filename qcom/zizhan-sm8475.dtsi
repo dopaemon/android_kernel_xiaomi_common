@@ -366,12 +366,6 @@
 	bcl-ibat {
 		enable-ibatset-16ms;
 	};
-
-	xiaomi_touch {
-		compatible = "xiaomi-touch";
-		status = "ok";
-		touch,name = "xiaomi-touch";
-	};
 };
 
 &S1C {

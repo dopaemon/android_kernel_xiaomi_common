@@ -6,12 +6,6 @@
 #include "mondrian-pinctrl.dtsi"
 #include "xiaomi-sm8475-common.dtsi"
 &soc {
-	xiaomi_touch {
-		compatible = "xiaomi-touch";
-		status = "ok";
-		touch,name = "xiaomi-touch";
-	};
-
         thermal_message: thermal-message {
                 board-sensor = "VIRTUAL-SENSOR";
         };

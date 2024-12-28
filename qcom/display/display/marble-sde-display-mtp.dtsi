@@ -176,6 +176,11 @@
 		panel = <&dsi_m16t_36_02_0a_dsc_vid &dsi_m16t_36_0d_0b_dsc_vid
 		&dsi_r66451_amoled_video>;
 	};
+	xiaomi-touch  {
+		panel-primary = <&dsi_m16t_36_02_0a_dsc_vid
+			&dsi_m16t_36_0d_0b_dsc_vid
+			&dsi_r66451_amoled_video>;
+	};
 };
 
 &spmi_bus {

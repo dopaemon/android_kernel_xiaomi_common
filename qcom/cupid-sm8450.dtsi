@@ -15,12 +15,6 @@
 		status = "ok";
 	};
 
-	xiaomi_touch {
-		compatible = "xiaomi-touch";
-		status = "ok";
-		touch,name = "xiaomi-touch";
-	};
-
 	md_testing_mode {
 		compatible = "modem,md-testing-mode";
 		status-gpio = <&tlmm 83 0x00>,
