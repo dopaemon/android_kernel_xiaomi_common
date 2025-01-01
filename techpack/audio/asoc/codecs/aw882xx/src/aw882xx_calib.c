@@ -48,9 +48,7 @@ static unsigned int g_cali_status = false;
 static struct miscdevice *g_misc_dev = NULL;
 static DEFINE_MUTEX(g_cali_lock);
 
-#ifndef AW_AUDIOREACH_PLATFORM
 #define AW_CALI_STORE_EXAMPLE
-#endif
 
 #ifdef AW_CALI_STORE_EXAMPLE
  /*write cali to persist file example*/
@@ -66,45 +64,13 @@ static void aw_fs_read(struct file *file, char *buf, size_t count, loff_t *pos)
 #endif
 }
 
-static void aw_fs_write(struct file *file, char *buf, size_t count, loff_t *pos)
-{
-#ifdef AW_KERNEL_VER_OVER_5_4_0
-	kernel_write(file, buf, count, pos);
-#else
-	vfs_write(file, buf, count, pos);
-#endif
-}
-
 static int aw_cali_write_cali_re_to_file(int32_t cali_re, int channel)
 {
-	struct file *fp = NULL;
-	char buf[50] = {0};
-	loff_t pos = 0;
-	mm_segment_t fs;
-
-	fp = filp_open(AWINIC_CALI_FILE, O_RDWR | O_CREAT, 0644);
-	if (IS_ERR(fp)) {
-		pr_err("%s:channel:%d open %s failed!\n",
-		__func__, channel, AWINIC_CALI_FILE);
-		return -EINVAL;
-	}
-
-	pos = AW_INT_DEC_DIGIT * channel;
-
-	snprintf(buf, sizeof(buf), "%10d", cali_re);
-
-	fs = get_fs();
-	set_fs(KERNEL_DS);
-
-	aw_fs_write(fp, buf, strlen(buf), &pos);
-
-	set_fs(fs);
-
-	pr_info("%s: channel:%d buf:%s cali_re:%d\n",
-		__func__, channel, buf, cali_re);
-
-	filp_close(fp, NULL);
-	return 0;
+	/*
+	 * Never ever try to overwrite the calibration file,
+	 * otherwise you will have to restore it manually.
+	 */
+	 return 0;
 }
 
 static int aw_cali_get_read_cali_re(int32_t *cali_re, int channel)
