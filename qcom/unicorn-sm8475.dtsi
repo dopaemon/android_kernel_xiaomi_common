@@ -59,7 +59,7 @@
 	clock-frequency = <400000>;
 	status = "ok";
 	aw8697_haptic@5A {
-		compatible = "awinic,awinic_haptic";
+		compatible = "awinic,aw86297_haptic";
 		reg = <0x5a>;
 		reset-gpio = <&tlmm 89 0x00>;
 		irq-gpio = <&tlmm 90 0x00>;
