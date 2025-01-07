@@ -218,6 +218,10 @@
 	};
 };
 
+&pm8350b_haptics {
+	status = "disabled";
+};
+
 &soc {
         fingerprint_goodix {
 		compatible = "goodix,fingerprint";
