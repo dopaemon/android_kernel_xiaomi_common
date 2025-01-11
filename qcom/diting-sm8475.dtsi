@@ -41,10 +41,10 @@
 		// avdd-supply = <&L7C>;
 		goodix,iovdd-name = "vdd";
 		vdd-supply = <&L2C>;
-		goodix,panel-id-gpio-a = <&tlmm 119 GPIO_ACTIVE_LOW>;
-		goodix,panel-id-gpio-b = <&tlmm 117 GPIO_ACTIVE_LOW>;
-		goodix,firmware-namea = "goodix_firmware_l12.bin";
-		goodix,config-namea = "goodix_cfg_group_l12.bin";
+		goodix,ts-id-gpio = <&tlmm 119 GPIO_ACTIVE_LOW>;
+		goodix,ts-id-gpio-match-value = <0>;
+		goodix,firmware-name = "goodix_firmware_l12.bin";
+		goodix,config-name = "goodix_cfg_group_l12.bin";
 
 		fts,avdd-gpio = <&tlmm 71 GPIO_ACTIVE_HIGH>;
 		//avdd-supply = <&L3C>;
