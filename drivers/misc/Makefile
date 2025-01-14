@@ -73,4 +73,5 @@ obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_QSEECOM_PROXY) 	+= qseecom_proxy.o
 obj-$(CONFIG_PKVM_SMC_FILTER)  += pkvm-smc/
 obj-y				+= hwid/
-obj-$(CONFIG_LDO_WL2866D)	+= wl2866d.o
+wl2866d_ldo-y			+= wl2866d.o
+obj-$(CONFIG_LDO_WL2866D)	+= wl2866d_ldo.o
