@@ -393,6 +393,9 @@ struct vm_area_struct {
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
+#ifdef CONFIG_UKSM
+	struct vma_slot *uksm_vma_slot;
+#endif
 } __randomize_layout;
 
 struct core_thread {
