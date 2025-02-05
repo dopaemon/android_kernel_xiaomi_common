@@ -265,8 +265,8 @@ static int qcom_dload_reboot(struct notifier_block *this, unsigned long event,
 			      void *ptr)
 {
 	char *cmd = ptr;
-	struct qcom_dload *poweroff = container_of(this, struct qcom_dload,
-						     reboot_nb);
+//	struct qcom_dload *poweroff = container_of(this, struct qcom_dload,
+//						     reboot_nb);
 
 	pr_info("%s: sys_restart_mode [%s]\n", __func__, sys_restart_mode);
 	if (!strcmp(sys_restart_mode, "panic")) {
