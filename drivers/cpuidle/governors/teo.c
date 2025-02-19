@@ -135,8 +135,6 @@
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/sched/cputime.h>
-#include "../../kernel/sched/sched.h"
 #include <linux/sched/clock.h>
 #include <linux/sched/topology.h>
 #include <linux/tick.h>
@@ -190,12 +188,6 @@ struct teo_cpu {
 	unsigned int tick_hits;
 	unsigned long util_threshold;
 	bool utilized;
-	unsigned long max_cap;
-	u32 rq_cpu_time;
-	u32 ttwu_count;
-	u32 yld_count;
-	u32 sched_count;
-	u64 sleep_id;
 };
 
 static DEFINE_PER_CPU(struct teo_cpu, teo_cpus);
@@ -226,7 +218,7 @@ static bool teo_cpu_is_utilized(int cpu, struct teo_cpu *cpu_data)
 static void teo_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 {
 	struct teo_cpu *cpu_data = per_cpu_ptr(&teo_cpus, dev->cpu);
-	int i, idx_timer = 0, idx_duration = 0, hit = -1;
+	int i, idx_timer = 0, idx_duration = 0;
 	s64 target_residency_ns;
 	u64 measured_ns;
 
@@ -310,13 +302,10 @@ static void teo_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	 * Otherwise, update the "intercepts" metric for the bin fallen into by
 	 * the measured idle duration.
 	 */
-	if (idx_timer == idx_duration) {
+	if (idx_timer == idx_duration)
 		cpu_data->state_bins[idx_timer].hits += PULSE;
-		hit = 1;
-	} else {
+	else
 		cpu_data->state_bins[idx_duration].intercepts += PULSE;
-		hit = 0;
-	}
 
 end:
 	cpu_data->total += PULSE;
@@ -376,17 +365,10 @@ static int teo_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	int prev_intercept_idx;
 	s64 duration_ns = 0;
 	int i;
-	struct rq *rq = cpu_rq(dev->cpu);
-	u32 rq_cpu_time_delta, ttwu_count_delta, yld_count_delta, sched_count_delta;
 
 	if (dev->last_state_idx >= 0) {
 		teo_update(drv, dev);
 		dev->last_state_idx = -1;
-	}
-
-	cpu_data->sleep_id++;
-	if (cpu_data->sleep_id == U64_MAX) {
-		cpu_data->sleep_id = 0;
 	}
 
 	cpu_data->time_span_ns = local_clock();
@@ -395,16 +377,6 @@ static int teo_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	 * return.
 	 */
 	cpu_data->sleep_length_ns = KTIME_MAX;
-
-	rq_cpu_time_delta = rq->rq_cpu_time - cpu_data->rq_cpu_time;
-	ttwu_count_delta = rq->ttwu_count - cpu_data->ttwu_count;
-	sched_count_delta = rq->sched_count - cpu_data->sched_count;
-	yld_count_delta = rq->yld_count - cpu_data->yld_count;
-
-	cpu_data->rq_cpu_time = rq->rq_cpu_time;
-	cpu_data->ttwu_count = rq->ttwu_count;
-	cpu_data->sched_count = rq->sched_count;
-	cpu_data->yld_count = rq->yld_count;
 
 	/* Check if there is any choice in the first place. */
 	if (drv->state_count < 2) {
@@ -654,17 +626,9 @@ static int teo_enable_device(struct cpuidle_driver *drv,
 {
 	struct teo_cpu *cpu_data = per_cpu_ptr(&teo_cpus, dev->cpu);
 	unsigned long max_capacity = arch_scale_cpu_capacity(dev->cpu);
-	struct rq *rq = cpu_rq(dev->cpu);
 
 	memset(cpu_data, 0, sizeof(*cpu_data));
 	cpu_data->util_threshold = max_capacity >> UTIL_THRESHOLD_SHIFT;
-
-	cpu_data->max_cap = max_capacity;
-	cpu_data->sleep_id = 0;
-	cpu_data->rq_cpu_time = rq->rq_cpu_time;
-	cpu_data->ttwu_count = rq->ttwu_count;
-	cpu_data->yld_count = rq->yld_count;
-	cpu_data->sched_count = rq->sched_count;
 
 	return 0;
 }
