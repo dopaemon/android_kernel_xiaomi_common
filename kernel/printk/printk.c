@@ -63,12 +63,6 @@
 #include "braille.h"
 #include "internal.h"
 
-static const char *filter_strings[] = {
-	"[mi_disp",
-	"[drm",
-	"healthd:",
-};
-
 int console_printk[4] = {
 	CONSOLE_LOGLEVEL_DEFAULT,	/* console_loglevel */
 	MESSAGE_LOGLEVEL_DEFAULT,	/* default_message_loglevel */
@@ -1999,7 +1993,6 @@ int vprintk_store(int facility, int level,
 	char *text = textbuf;
 	size_t text_len;
 	enum log_flags lflags = 0;
-	int i;
 
 	/*
 	 * The printf needs to come first; we need the syslog
@@ -2008,10 +2001,12 @@ int vprintk_store(int facility, int level,
 	text_len = vscnprintf(text, sizeof(textbuf), fmt, args);
 
 	/* Filter logs that begin with a specific string */
-	for (i = 0; i < ARRAY_SIZE(filter_strings); i++)
-		if (unlikely(strncmp(text, filter_strings[i],
-		    strlen(filter_strings[i])) == 0))
-			return 0;
+	if (unlikely(strncmp(text, "healthd:", strlen("healthd:")) == 0))
+		return 0;
+	if (unlikely(strncmp(text+1, "[mi_disp", strlen("[mi_disp")) == 0))
+		return 0;
+	if (unlikely(strncmp(text+1, "[drm", strlen("[drm")) == 0))
+		return 0;
 
 	/* mark and strip a trailing newline */
 	if (text_len && text[text_len-1] == '\n') {
