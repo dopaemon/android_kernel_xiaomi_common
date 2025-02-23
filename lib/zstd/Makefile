@@ -32,6 +32,7 @@ zstd_compress-y := \
 		compress/zstd_lazy.o \
 		compress/zstd_ldm.o \
 		compress/zstd_opt.o \
+		compress/zstd_preSplit.o \
 
 zstd_decompress-y := \
 		zstd_decompress_module.o \
