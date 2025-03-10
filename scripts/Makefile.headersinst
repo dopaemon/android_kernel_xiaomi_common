@@ -12,7 +12,7 @@
 PHONY := __headers
 __headers:
 
-include scripts/Kbuild.include
+include $(srctree)/scripts/Kbuild.include
 
 src := $(srctree)/$(obj)
 gen := $(objtree)/$(subst include/,include/generated/,$(obj))
@@ -70,7 +70,7 @@ quiet_cmd_remove = REMOVE  $(unwanted)
 
 __headers: $(all-headers)
 ifneq ($(unwanted),)
-	$(call cmd,remove)
+#	$(call cmd,remove)
 endif
 	@:
 

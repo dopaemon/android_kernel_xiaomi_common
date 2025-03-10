@@ -5,14 +5,12 @@ clk-rpmh.ko
 gcc-waipio.ko
 icc-rpmh.ko
 qcom_ipcc.ko
-qcom_ipc_logging.ko
 qcom-pdc.ko
 qcom_tsens.ko
 rpmh-regulator.ko
 bwmon.ko
 qcom-cpufreq-hw.ko
 sched-walt.ko
-sched-walt-debug.ko
 thermal_pause.ko
 cpu_hotplug.ko
 cfg80211.ko
@@ -23,8 +21,6 @@ cqhci.ko
 crypto-qti-common.ko
 crypto-qti-hwkm.ko
 dcvs_fp.ko
-debug-regulator.ko
-deferred-free-helper.ko
 dispcc-diwali.ko
 dispcc-waipio.ko
 gcc-diwali.ko
@@ -53,8 +49,6 @@ qnoc-waipio.ko
 qti-fixed-regulator.ko
 reboot-mode.ko
 msm_geni_serial.ko
-msm_rtb.ko
-ns.ko
 nvmem_qcom-spmi-sdam.ko
 phy-generic.ko
 phy-qcom-ufs.ko
@@ -84,7 +78,6 @@ qcom_wdt_core.ko
 qnoc-diwali.ko
 qnoc-qos.ko
 qrtr.ko
-qti-regmap-debugfs.ko
 regmap-spmi.ko
 rtc-pm8xxx.ko
 secure_buffer.ko
@@ -104,3 +97,4 @@ c1dcvs_vendor.ko
 c1dcvs_scmi.ko
 bcl_pmic5.ko
 nfc_i2c.ko
+hwid.ko
