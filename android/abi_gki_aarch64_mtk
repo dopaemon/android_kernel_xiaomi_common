@@ -1174,7 +1174,6 @@
   log_buf_len_get
   __log_post_read_mmio
   __log_read_mmio
-  log_threaded_irq_wakeup_reason
   __log_write_mmio
   loops_per_jiffy
   lzo1x_1_compress
