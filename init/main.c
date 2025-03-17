@@ -457,6 +457,18 @@ static void __init setup_boot_config(const char *cmdline)
 		extra_command_line = xbc_make_cmdline("kernel");
 		/* Also, "init." keys are init arguments */
 		extra_init_args = xbc_make_cmdline("init");
+
+		{
+			struct xbc_node *vnode = NULL;
+			const char *value = xbc_find_value(
+				"androidboot.startupmode", &vnode);
+
+			if (value && !strcmp(value, "usb_charger")) {
+				strlcat(boot_command_line,
+					" androidboot.mode=charger",
+					COMMAND_LINE_SIZE);
+			}
+		}
 	}
 	return;
 }
