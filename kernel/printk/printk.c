@@ -714,8 +714,10 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 	if (!user || len > LOG_LINE_MAX)
 		return -EINVAL;
 
-	/* Ignore healthd and bpfloader kmsg */
-	if (!strcmp(current->comm, "health@2.1-serv") || !strcmp(current->comm, "bpfloader"))
+	/* Ignore healthd, bpfloader, and BpfMonitor kmsg */
+	if (!strcmp(current->comm, "health@2.1-serv") ||
+	    !strcmp(current->comm, "bpfloader") ||
+	    !strcmp(current->comm, "BpfMonitor"))
 		return ret;
 
 	/* Ignore when user logging is disabled. */
