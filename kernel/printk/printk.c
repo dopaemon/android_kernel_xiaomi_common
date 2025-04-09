@@ -63,6 +63,10 @@
 #include "braille.h"
 #include "internal.h"
 
+#ifdef CONFIG_SECURITY
+extern uint __read_mostly disable_audit_log;
+#endif
+
 int console_printk[4] = {
 	CONSOLE_LOGLEVEL_DEFAULT,	/* console_loglevel */
 	MESSAGE_LOGLEVEL_DEFAULT,	/* default_message_loglevel */
@@ -761,6 +765,12 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 
 	if (unlikely(strncmp(line, "healthd:", strlen("healthd:")) == 0))
 		goto skip_write;
+
+#ifdef CONFIG_SECURITY
+	if (disable_audit_log)
+		if (unlikely(strncmp(line, "SELinux: avc:", strlen("SELinux: avc:")) == 0))
+			goto skip_write;
+#endif
 
 	devkmsg_emit(facility, level, "%s", line);
 skip_write:
