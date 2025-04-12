@@ -130,10 +130,6 @@ int __init binder_prio_init(void)
 
 void __exit binder_prio_exit(void)
 {
-    unregister_trace_android_vh_binder_set_priority(extend_surfacefinger_binder_set_priority_handler, NULL);
-    unregister_trace_android_vh_binder_trans(extend_surfacefinger_binder_trans_handler, NULL);
-    unregister_trace_android_vh_binder_priority_skip(extend_skip_binder_thread_priority_from_rt_to_normal_handler, NULL);
-
     pr_info("binder_prio: module exit!");
 }
 
