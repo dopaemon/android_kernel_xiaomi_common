@@ -485,9 +485,6 @@ static struct platform_driver qcom_cluster_lpm_driver = {
 
 static void cluster_gov_disable(void)
 {
-#if defined(_TRACE_HOOK_PM_DOMAIN_H)
-	unregister_trace_android_vh_allow_domain_state(android_vh_allow_domain_state, NULL);
-#endif
 	platform_driver_unregister(&qcom_cluster_lpm_driver);
 }
 

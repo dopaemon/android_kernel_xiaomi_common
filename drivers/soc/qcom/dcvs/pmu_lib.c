@@ -785,8 +785,6 @@ static void delete_events(void)
 
 	if (cpuhp_state > 0)
 		cpuhp_remove_state_nocalls(cpuhp_state);
-	unregister_trace_android_vh_cpu_idle_enter(qcom_pmu_idle_enter_notif, NULL);
-	unregister_trace_android_vh_cpu_idle_exit(qcom_pmu_idle_exit_notif, NULL);
 	cpu_pm_unregister_notifier(&memlat_event_pm_nb);
 	for_each_possible_cpu(cpu) {
 		cpu_data = per_cpu(cpu_ev_data, cpu);

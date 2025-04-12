@@ -245,15 +245,12 @@ static int cpu_vendor_hooks_driver_probe(struct platform_device *pdev)
 	ret = register_trace_android_vh_printk_hotplug(printk_hotplug, NULL);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to android_vh_printk_hotplug hook\n");
-		unregister_trace_android_vh_ipi_stop(trace_ipi_stop, NULL);
 		return ret;
 	}
 
 	ret = register_trace_android_vh_timer_calc_index(timer_recalc_index, NULL);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to android_vh_timer_calc_index hook\n");
-		unregister_trace_android_vh_ipi_stop(trace_ipi_stop, NULL);
-		unregister_trace_android_vh_printk_hotplug(printk_hotplug, NULL);
 		return ret;
 	}
 
@@ -273,9 +270,6 @@ static int cpu_vendor_hooks_driver_probe(struct platform_device *pdev)
 static int cpu_vendor_hooks_driver_remove(struct platform_device *pdev)
 {
 	/* Reset all initialized global variables and unregister callbacks. */
-	unregister_trace_android_vh_ipi_stop(trace_ipi_stop, NULL);
-	unregister_trace_android_vh_printk_hotplug(printk_hotplug, NULL);
-	unregister_trace_android_vh_timer_calc_index(timer_recalc_index, NULL);
 	return 0;
 }
 

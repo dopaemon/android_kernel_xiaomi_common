@@ -356,7 +356,6 @@ static int logbuf_vendor_hooks_driver_probe(struct platform_device *pdev)
 	ret = register_trace_android_vh_logbuf_pr_cont(copy_boot_log_pr_cont, NULL);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register android_vh_logbuf_pr_cont hook\n");
-		unregister_trace_android_vh_logbuf(copy_boot_log, NULL);
 		kfree(boot_log_buf);
 	}
 
@@ -365,8 +364,6 @@ static int logbuf_vendor_hooks_driver_probe(struct platform_device *pdev)
 
 static int logbuf_vendor_hooks_driver_remove(struct platform_device *pdev)
 {
-	unregister_trace_android_vh_logbuf_pr_cont(copy_boot_log_pr_cont, NULL);
-	unregister_trace_android_vh_logbuf(copy_boot_log, NULL);
 	release_boot_log_buf();
 	return 0;
 }

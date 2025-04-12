@@ -830,7 +830,6 @@ static int __init qcom_common_init(void)
 	return 0;
 
 unregister_rproc_recovery_vh:
-	unregister_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
 remove_sysfs:
 	sysfs_remove_file(sysfs_kobject, &shutdown_requested_attr.attr);
 remove_kobject:
@@ -842,10 +841,8 @@ module_init(qcom_common_init);
 
 static void __exit qcom_common_exit(void)
 {
-	unregister_trace_android_vh_rproc_recovery_set(rproc_recovery_notifier, NULL);
 	sysfs_remove_file(sysfs_kobject, &shutdown_requested_attr.attr);
 	kobject_put(sysfs_kobject);
-	unregister_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
 }
 module_exit(qcom_common_exit);
 

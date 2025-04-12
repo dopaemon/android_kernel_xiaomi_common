@@ -31,8 +31,6 @@ static inline __maybe_unused void thermal_vendor_hooks_init(void)
 
 static inline __maybe_unused void thermal_vendor_hooks_exit(void)
 {
-	unregister_trace_android_vh_disable_thermal_cooling_stats(
-			disable_cdev_stats, NULL);
 }
 
 /* Generic helpers for thermal zone -> get_trend ops */

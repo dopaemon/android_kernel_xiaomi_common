@@ -739,21 +739,19 @@ static int lpm_enable_device(struct cpuidle_driver *drv,
 			return ret;
 		}
 
-		ret = register_trace_prio_android_vh_cpu_idle_enter(
-					lpm_idle_enter, NULL, INT_MIN);
+		ret = register_trace_android_vh_cpu_idle_enter(
+					lpm_idle_enter, NULL);
 		if (ret) {
 			unregister_trace_ipi_raise(ipi_raise, NULL);
 			unregister_trace_ipi_entry(ipi_entry, NULL);
 			return ret;
 		}
 
-		ret = register_trace_prio_android_vh_cpu_idle_exit(
-					lpm_idle_exit, NULL, INT_MIN);
+		ret = register_trace_android_vh_cpu_idle_exit(
+					lpm_idle_exit, NULL);
 		if (ret) {
 			unregister_trace_ipi_raise(ipi_raise, NULL);
 			unregister_trace_ipi_entry(ipi_entry, NULL);
-			unregister_trace_android_vh_cpu_idle_enter(
-					lpm_idle_enter, NULL);
 			return ret;
 		}
 
@@ -795,10 +793,6 @@ static void lpm_disable_device(struct cpuidle_driver *drv,
 	if (traces_registered) {
 		unregister_trace_ipi_raise(ipi_raise, NULL);
 		unregister_trace_ipi_entry(ipi_entry, NULL);
-		unregister_trace_android_vh_cpu_idle_enter(
-					lpm_idle_enter, NULL);
-		unregister_trace_android_vh_cpu_idle_exit(
-					lpm_idle_exit, NULL);
 		if (cluster_gov_ops && cluster_gov_ops->disable)
 			cluster_gov_ops->disable();
 

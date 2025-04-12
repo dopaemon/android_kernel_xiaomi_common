@@ -230,18 +230,12 @@ static int __init hung_task_enh_init(void)
 	ret = register_trace_android_vh_check_uninterruptible_tasks_dn(
 						qcom_check_tasks_done, NULL);
 	if (ret) {
-		unregister_trace_android_vh_check_uninterruptible_tasks(
-						qcom_before_check_tasks, NULL);
 		return ret;
 	}
 
 	hung_task_enh.ctl_table_hdr = register_sysctl_table(
 						hung_task_base_table);
 	if (!hung_task_enh.ctl_table_hdr) {
-		unregister_trace_android_vh_check_uninterruptible_tasks(
-						qcom_before_check_tasks, NULL);
-		unregister_trace_android_vh_check_uninterruptible_tasks_dn(
-						qcom_check_tasks_done, NULL);
 		return -ENOMEM;
 	}
 
@@ -252,10 +246,6 @@ late_initcall(hung_task_enh_init);
 static void __exit hung_task_enh_exit(void)
 {
 	unregister_sysctl_table(hung_task_enh.ctl_table_hdr);
-	unregister_trace_android_vh_check_uninterruptible_tasks(
-						qcom_before_check_tasks, NULL);
-	unregister_trace_android_vh_check_uninterruptible_tasks_dn(
-						qcom_check_tasks_done, NULL);
 }
 module_exit(hung_task_enh_exit);
 
