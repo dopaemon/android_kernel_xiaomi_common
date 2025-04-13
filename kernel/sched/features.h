@@ -88,3 +88,14 @@ SCHED_FEAT(UTIL_EST, true)
 SCHED_FEAT(LATENCY_WARN, false)
 
 SCHED_FEAT(HZ_BW, true)
+
+#ifndef __GENKSYMS__
+/*
+ * Preserve relative virtual deadline on 'migration'.
+ *
+ * GKI: keep this last. Vendor modules test sysctl_sched_features and
+ * sched_feat_keys[] with the feature indexes they were built with, so a new
+ * feature may only be appended, never inserted.
+ */
+SCHED_FEAT(PLACE_REL_DEADLINE, true)
+#endif

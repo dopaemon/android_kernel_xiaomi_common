@@ -529,6 +529,15 @@ struct sched_statistics {
 #endif /* CONFIG_SCHEDSTATS */
 } ____cacheline_aligned;
 
+#ifdef CONFIG_SCHED_BORE
+struct sched_burst_cache {
+	u8				score;
+	u32				count;
+	u64				timestamp;
+	spinlock_t			lock;
+};
+#endif // CONFIG_SCHED_BORE
+
 struct sched_entity {
 	/* For load-balancing: */
 	struct load_weight		load;
@@ -538,6 +547,14 @@ struct sched_entity {
 
 	struct list_head		group_node;
 	unsigned int			on_rq;
+#ifndef __GENKSYMS__
+	/*
+	 * GKI: on_rq must stay an unsigned int for the KMI, so rel_deadline
+	 * lives in the 4-byte hole that follows it instead of sharing its
+	 * storage. Hidden from genksyms to keep the symbol CRCs stable.
+	 */
+	unsigned char			rel_deadline;
+#endif
 
 	u64				exec_start;
 	u64				sum_exec_runtime;
@@ -559,6 +576,25 @@ struct sched_entity {
 	unsigned long			runnable_weight;
 #endif
 
+#if defined(CONFIG_SCHED_BORE) && !defined(__GENKSYMS__)
+	/*
+	 * GKI: the BORE state must not move any existing member or grow the
+	 * structure, so none of it sits where upstream BORE puts it:
+	 *
+	 *  - burst_time and the penalty/score bytes use the hole in front of
+	 *    the cacheline aligned 'avg',
+	 *  - group_burst takes over KABI reserved fields 1-3,
+	 *  - child_burst uses the tail padding after the KABI fields.
+	 *
+	 * Everything is hidden from genksyms to keep the symbol CRCs stable.
+	 */
+	u64				burst_time;
+	u8				prev_burst_penalty;
+	u8				curr_burst_penalty;
+	u8				burst_penalty;
+	u8				burst_score;
+#endif
+
 #ifdef CONFIG_SMP
 	/*
 	 * Per entity load average tracking.
@@ -569,10 +605,19 @@ struct sched_entity {
 	struct sched_avg		avg;
 #endif
 
+#ifdef CONFIG_SCHED_BORE
+	_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(1); ANDROID_KABI_RESERVE(2);
+			      ANDROID_KABI_RESERVE(3),
+			      struct sched_burst_cache group_burst);
+#else
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
+#endif
 	ANDROID_KABI_RESERVE(4);
+#if defined(CONFIG_SCHED_BORE) && !defined(__GENKSYMS__)
+	struct sched_burst_cache	child_burst;
+#endif
 };
 
 struct sched_rt_entity {
