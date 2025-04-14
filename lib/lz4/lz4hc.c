@@ -37,10 +37,6 @@
 *  Tuning Parameter
 ***************************************/
 
-#include <linux/slab.h>
-#define ALLOC(size) kzalloc(size, GFP_KERNEL)
-#define FREEMEM(ptr) kfree(ptr)
-
 /*===    Dependency    ===*/
 #define LZ4_HC_STATIC_LINKING_ONLY
 #include "lz4hc.h"
@@ -2094,7 +2090,6 @@ int LZ4_loadDictHC(LZ4_streamHC_t *LZ4_streamHCPtr, const char *dictionary,
 	}
 	return dictSize;
 }
-EXPORT_SYMBOL(LZ4_loadDictHC);
 
 void LZ4_attach_HC_dictionary(LZ4_streamHC_t *working_stream,
 			      const LZ4_streamHC_t *dictionary_stream)
@@ -2203,7 +2198,6 @@ int LZ4_compress_HC_continue(LZ4_streamHC_t *LZ4_streamHCPtr, const char *src,
 						       dst, &srcSize,
 						       dstCapacity, notLimited);
 }
-EXPORT_SYMBOL(LZ4_compress_HC_continue);
 
 int LZ4_compress_HC_continue_destSize(LZ4_streamHC_t *LZ4_streamHCPtr,
 				      const char *src, char *dst,
@@ -2255,7 +2249,6 @@ int LZ4_saveDictHC(LZ4_streamHC_t *LZ4_streamHCPtr, char *safeBuffer,
 	}
 	return dictSize;
 }
-EXPORT_SYMBOL(LZ4_saveDictHC);
 
 /* ================================================
  *  LZ4 Optimal parser (levels [LZ4HC_CLEVEL_OPT_MIN - LZ4HC_CLEVEL_MAX])

@@ -42,7 +42,7 @@
  * in memory stack (0:default, fastest), or in memory heap (1:requires malloc()).
  */
 #ifndef LZ4_HEAPMODE
-#define LZ4_HEAPMODE 1
+#define LZ4_HEAPMODE 0
 #endif
 
 /*-************************************
@@ -1130,10 +1130,10 @@ LZ4_FORCE_INLINE int LZ4_compress_generic_validated(
 			int searchMatchNb = acceleration << LZ4_skipTrigger;
 			do {
 				U32 const h = forwardH;
-				U32 const currentPos = (U32)(forwardIp - base);
+				U32 const curr = (U32)(forwardIp - base);
 				U32 matchIndex = LZ4_getIndexOnHash(
 					h, cctx->hashTable, tableType);
-				assert(matchIndex <= currentPos);
+				assert(matchIndex <= curr);
 				assert(forwardIp - base <
 				       (ptrdiff_t)(2 GB - 1));
 				ip = forwardIp;
@@ -1180,31 +1180,29 @@ LZ4_FORCE_INLINE int LZ4_compress_generic_validated(
 				}
 				forwardH =
 					LZ4_hashPosition(forwardIp, tableType);
-				LZ4_putIndexOnHash(currentPos, h,
-						   cctx->hashTable, tableType);
+				LZ4_putIndexOnHash(curr, h, cctx->hashTable,
+						   tableType);
 
 				DEBUGLOG(7,
 					 "candidate at pos=%u  (offset=%u \n",
-					 matchIndex, currentPos - matchIndex);
+					 matchIndex, curr - matchIndex);
 				if ((dictIssue == dictSmall) &&
 				    (matchIndex < prefixIdxLimit)) {
 					continue;
 				} /* match outside of valid area */
-				assert(matchIndex < currentPos);
+				assert(matchIndex < curr);
 				if (((tableType != byU16) ||
 				     (LZ4_DISTANCE_MAX <
 				      LZ4_DISTANCE_ABSOLUTE_MAX)) &&
-				    (matchIndex + LZ4_DISTANCE_MAX <
-				     currentPos)) {
+				    (matchIndex + LZ4_DISTANCE_MAX < curr)) {
 					continue;
 				} /* too far */
-				assert((currentPos - matchIndex) <=
+				assert((curr - matchIndex) <=
 				       LZ4_DISTANCE_MAX); /* match now expected within distance */
 
 				if (LZ4_read32(match) == LZ4_read32(ip)) {
 					if (maybe_extMem)
-						offset =
-							currentPos - matchIndex;
+						offset = curr - matchIndex;
 					break; /* match found */
 				}
 
@@ -1428,10 +1426,10 @@ LZ4_FORCE_INLINE int LZ4_compress_generic_validated(
 		} else { /* byU32, byU16 */
 
 			U32 const h = LZ4_hashPosition(ip, tableType);
-			U32 const currentPos = (U32)(ip - base);
+			U32 const curr = (U32)(ip - base);
 			U32 matchIndex = LZ4_getIndexOnHash(h, cctx->hashTable,
 							    tableType);
-			assert(matchIndex < currentPos);
+			assert(matchIndex < curr);
 			if (dictDirective == usingDictCtx) {
 				if (matchIndex < startIndex) {
 					/* there was no match, try the dictionary */
@@ -1461,9 +1459,9 @@ LZ4_FORCE_INLINE int LZ4_compress_generic_validated(
 			} else { /* single memory segment */
 				match = base + matchIndex;
 			}
-			LZ4_putIndexOnHash(currentPos, h, cctx->hashTable,
+			LZ4_putIndexOnHash(curr, h, cctx->hashTable,
 					   tableType);
-			assert(matchIndex < currentPos);
+			assert(matchIndex < curr);
 			if (((dictIssue == dictSmall) ?
 				     (matchIndex >= prefixIdxLimit) :
 				     1) &&
@@ -1471,12 +1469,12 @@ LZ4_FORCE_INLINE int LZ4_compress_generic_validated(
 			      (LZ4_DISTANCE_MAX == LZ4_DISTANCE_ABSOLUTE_MAX)) ?
 				     1 :
 				     (matchIndex + LZ4_DISTANCE_MAX >=
-				      currentPos)) &&
+				      curr)) &&
 			    (LZ4_read32(match) == LZ4_read32(ip))) {
 				token = op++;
 				*token = 0;
 				if (maybe_extMem)
-					offset = currentPos - matchIndex;
+					offset = curr - matchIndex;
 				DEBUGLOG(
 					6,
 					"seq.start:%i, literals=%u, match.start:%i",
@@ -1701,7 +1699,7 @@ int LZ4_compress_fast_extState_fastReset(void *state, const char *src,
 	}
 }
 
-int LZ4_compress_fast(const char* src, char* dest, int srcSize, int dstCapacity,
+int LZ4_compress_fast(const char *src, char *dest, int srcSize, int dstCapacity,
 		      int acceleration, void *wrkmem)
 {
     return LZ4_compress_fast_extState(wrkmem, src, dest, srcSize, dstCapacity, acceleration);
@@ -1770,12 +1768,26 @@ int LZ4_compress_destSize_extState(void *state, const char *src, char *dst,
 }
 
 int LZ4_compress_destSize(const char *src, char *dst, int *srcSizePtr,
-			  int targetDstSize, void *wrkmem)
+			  int targetDstSize)
 {
-	return LZ4_compress_destSize_extState_internal(
-		wrkmem, src, dst, srcSizePtr, targetDstSize, 1);
+#if (LZ4_HEAPMODE)
+	LZ4_stream_t *const ctx = (LZ4_stream_t *)ALLOC(sizeof(
+		LZ4_stream_t)); /* malloc-calloc always properly aligned */
+	if (ctx == NULL)
+		return 0;
+#else
+	LZ4_stream_t ctxBody;
+	LZ4_stream_t *const ctx = &ctxBody;
+#endif
+
+	int result = LZ4_compress_destSize_extState_internal(
+		ctx, src, dst, srcSizePtr, targetDstSize, 1);
+
+#if (LZ4_HEAPMODE)
+	FREEMEM(ctx);
+#endif
+	return result;
 }
-EXPORT_SYMBOL(LZ4_compress_destSize);
 
 /*-******************************
 *  Streaming functions
@@ -3000,7 +3012,6 @@ int LZ4_decompress_safe(const char *source, char *dest, int compressedSize,
 				      maxDecompressedSize, decode_full_block,
 				      noDict, (BYTE *)dest, NULL, 0);
 }
-EXPORT_SYMBOL(LZ4_decompress_safe);
 
 LZ4_FORCE_O2
 int LZ4_decompress_safe_partial(const char *src, char *dst, int compressedSize,
@@ -3011,7 +3022,6 @@ int LZ4_decompress_safe_partial(const char *src, char *dst, int compressedSize,
 				      partial_decode, noDict, (BYTE *)dst, NULL,
 				      0);
 }
-EXPORT_SYMBOL(LZ4_decompress_safe_partial);
 
 LZ4_FORCE_O2
 int LZ4_decompress_fast(const char *source, char *dest, int originalSize)
@@ -3020,7 +3030,6 @@ int LZ4_decompress_fast(const char *source, char *dest, int originalSize)
 	return LZ4_decompress_unsafe_generic((const BYTE *)source, (BYTE *)dest,
 					     originalSize, 0, NULL, 0);
 }
-EXPORT_SYMBOL(LZ4_decompress_fast);
 
 /*===== Instantiate a few more decoding cases, used more than once. =====*/
 
@@ -3173,7 +3182,6 @@ int LZ4_setStreamDecode(LZ4_streamDecode_t *LZ4_streamDecode,
 	lz4sd->extDictSize = 0;
 	return 1;
 }
-EXPORT_SYMBOL(LZ4_setStreamDecode);
 
 /*! LZ4_decoderRingBufferSize() :
  *  when setting a ring buffer for streaming decompression (optional scenario),
@@ -3260,7 +3268,6 @@ int LZ4_decompress_safe_continue(LZ4_streamDecode_t *LZ4_streamDecode,
 
 	return result;
 }
-EXPORT_SYMBOL(LZ4_decompress_safe_continue);
 
 LZ4_FORCE_O2 ssize_t LZ4_arm64_decompress_safe_partial(const void *source,
 						       void *dest,
@@ -3288,7 +3295,6 @@ LZ4_FORCE_O2 ssize_t LZ4_arm64_decompress_safe_partial(const void *source,
 					outputSize, partial_decode, noDict,
 					(BYTE *)dest, NULL, 0);
 }
-EXPORT_SYMBOL(LZ4_arm64_decompress_safe_partial);
 
 LZ4_FORCE_O2 ssize_t LZ4_arm64_decompress_safe(const void *source, void *dest,
 					       size_t inputSize,
@@ -3314,7 +3320,6 @@ LZ4_FORCE_O2 ssize_t LZ4_arm64_decompress_safe(const void *source, void *dest,
 					outputSize, decode_full_block, noDict,
 					(BYTE *)dest, NULL, 0);
 }
-EXPORT_SYMBOL(LZ4_arm64_decompress_safe);
 
 LZ4_FORCE_O2 int
 LZ4_decompress_fast_continue(LZ4_streamDecode_t *LZ4_streamDecode,
@@ -3362,7 +3367,6 @@ LZ4_decompress_fast_continue(LZ4_streamDecode_t *LZ4_streamDecode,
 
 	return result;
 }
-EXPORT_SYMBOL(LZ4_decompress_fast_continue);
 
 /*
 Advanced decoding functions :
@@ -3394,7 +3398,6 @@ int LZ4_decompress_safe_usingDict(const char *source, char *dest,
 						maxOutputSize, dictStart,
 						(size_t)dictSize);
 }
-EXPORT_SYMBOL(LZ4_decompress_safe_usingDict);
 
 int LZ4_decompress_safe_partial_usingDict(const char *source, char *dest,
 					  int compressedSize,
@@ -3434,7 +3437,6 @@ int LZ4_decompress_fast_usingDict(const char *source, char *dest,
 	return LZ4_decompress_fast_extDict(source, dest, originalSize,
 					   dictStart, (size_t)dictSize);
 }
-EXPORT_SYMBOL(LZ4_decompress_fast_usingDict);
 
 /*
 These decompression functions are deprecated and should no longer be used.
