@@ -22,6 +22,7 @@
 #include <asoc/msm-cdc-supply.h>
 #include <bindings/audio-codec-port-types.h>
 #include <linux/qti-regmap-debugfs.h>
+#include <linux/mmhardware_sysfs.h>
 
 #include "wcd938x-registers.h"
 #include "wcd938x.h"
@@ -297,6 +298,11 @@ static int wcd938x_init_reg(struct snd_soc_component *component)
 				WCD938X_DIGITAL_EFUSE_REG_30) & 0x07) << 1));
 	snd_soc_component_update_bits(component,
 				WCD938X_HPH_SURGE_HPHLR_SURGE_EN, 0xC0, 0xC0);
+
+#ifdef CONFIG_TARGET_PRODUCT_INGRES
+	snd_soc_component_update_bits(component, WCD938X_MICB2_TEST_CTL_3, 0x80,
+				      0x80);
+#endif
 
 	return 0;
 }
@@ -4102,6 +4108,11 @@ static int wcd938x_soc_codec_probe(struct snd_soc_component *component)
 			return ret;
 		}
 	}
+/* register codec hardware */
+#ifdef CONFIG_MMHARDWARE_DETECTION
+	register_kobj_under_mmsysfs(MM_HW_CODEC,
+				    MM_HARDWARE_SYSFS_CODEC_FOLDER);
+#endif
 	return ret;
 
 err_hwdep:

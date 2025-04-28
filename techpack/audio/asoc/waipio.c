@@ -44,6 +44,14 @@
 #include "msm-audio-defs.h"
 #include "msm_common.h"
 #include "msm_dailink.h"
+#include "hwid.h"
+
+#if IS_ENABLED(CONFIG_MIEV)
+#include <miev/mievent.h>
+#include <linux/timer.h>
+#include <linux/timex.h>
+#include <linux/rtc.h>
+#endif
 
 #define DRV_NAME "waipio-asoc-snd"
 #define __CHIPSET__ "WAIPIO "
@@ -53,7 +61,7 @@
 #define WCD9XXX_MBHC_DEF_BUTTONS    8
 #define CODEC_EXT_CLK_RATE          9600000
 #define DEV_NAME_STR_LEN            32
-#define WCD_MBHC_HS_V_MAX           1600
+#define WCD_MBHC_HS_V_MAX 1700
 
 #define WCN_CDC_SLIM_RX_CH_MAX 2
 #define WCN_CDC_SLIM_TX_CH_MAX 2
@@ -114,14 +122,18 @@ static int msm_int_wsa_init(struct snd_soc_pcm_runtime*);
 static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.read_fw_bin = false,
 	.calibration = NULL,
+#if defined(CONFIG_TARGET_PRODUCT_ZIYI)
+	.detect_extn_cable = false,
+#else
 	.detect_extn_cable = true,
+#endif
 	.mono_stero_detection = false,
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
 	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOICECOMMAND,
-	.key_code[2] = KEY_VOLUMEUP,
-	.key_code[3] = KEY_VOLUMEDOWN,
+	.key_code[1] = BTN_1,
+	.key_code[2] = BTN_2,
+	.key_code[3] = 0,
 	.key_code[4] = 0,
 	.key_code[5] = 0,
 	.key_code[6] = 0,
@@ -134,6 +146,20 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.moisture_duty_cycle_en = true,
 };
 
+static int usbhs_direction_get(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	if (wcd_mbhc_cfg.flip_switch)
+		ucontrol->value.integer.value[0] = 1;
+	else
+		ucontrol->value.integer.value[0] = 0;
+	return 0;
+}
+static const struct snd_kcontrol_new msm_common_snd_controls[] = {
+	SOC_SINGLE_EXT("USB Headset Direction", 0, 0, UINT_MAX, 0,
+		       usbhs_direction_get, NULL),
+};
+
 static bool msm_usbc_swap_gnd_mic(struct snd_soc_component *component, bool active)
 {
 	struct snd_soc_card *card = component->card;
@@ -143,6 +169,7 @@ static bool msm_usbc_swap_gnd_mic(struct snd_soc_component *component, bool acti
 	if (!pdata->fsa_handle)
 		return false;
 
+	wcd_mbhc_cfg.flip_switch = true;
 	return fsa4480_switch_event(pdata->fsa_handle, FSA_MIC_GND_SWAP);
 }
 
@@ -472,8 +499,8 @@ static void *def_wcd_mbhc_cal(void)
 		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
 
 	btn_high[0] = 75;
-	btn_high[1] = 150;
-	btn_high[2] = 237;
+	btn_high[1] = 260;
+	btn_high[2] = 500;
 	btn_high[3] = 500;
 	btn_high[4] = 500;
 	btn_high[5] = 500;
@@ -1096,8 +1123,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_PRI_TDM_RX_0,
 		.stream_name = LPASS_BE_PRI_TDM_RX_0,
 		.playback_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
@@ -1107,8 +1134,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_PRI_TDM_TX_0,
 		.stream_name = LPASS_BE_PRI_TDM_TX_0,
 		.capture_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(pri_tdm_tx_0),
@@ -1117,8 +1144,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_SEC_TDM_RX_0,
 		.stream_name = LPASS_BE_SEC_TDM_RX_0,
 		.playback_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
@@ -1128,8 +1155,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_SEC_TDM_TX_0,
 		.stream_name = LPASS_BE_SEC_TDM_TX_0,
 		.capture_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(sec_tdm_tx_0),
@@ -1138,8 +1165,19 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_TERT_TDM_RX_0,
 		.stream_name = LPASS_BE_TERT_TDM_RX_0,
 		.playback_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
+		.ops = &msm_common_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_tdm_rx_0),
+	},
+	{
+		.name = LPASS_BE_TERT_TDM_RX_0_VIRT,
+		.stream_name = LPASS_BE_TERT_TDM_RX_0_VIRT,
+		.playback_only = 1,
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
@@ -1149,8 +1187,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_TERT_TDM_TX_0,
 		.stream_name = LPASS_BE_TERT_TDM_TX_0,
 		.capture_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(tert_tdm_tx_0),
@@ -1159,8 +1197,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_QUAT_TDM_RX_0,
 		.stream_name = LPASS_BE_QUAT_TDM_RX_0,
 		.playback_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
@@ -1170,8 +1208,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_QUAT_TDM_TX_0,
 		.stream_name = LPASS_BE_QUAT_TDM_TX_0,
 		.capture_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(quat_tdm_tx_0),
@@ -1180,8 +1218,19 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_QUIN_TDM_RX_0,
 		.stream_name = LPASS_BE_QUIN_TDM_RX_0,
 		.playback_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
+		.ops = &msm_common_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(quin_tdm_rx_0),
+	},
+	{
+		.name = LPASS_BE_QUIN_TDM_RX_0_VIRT,
+		.stream_name = LPASS_BE_QUIN_TDM_RX_0_VIRT,
+		.playback_only = 1,
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
@@ -1191,8 +1240,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_QUIN_TDM_TX_0,
 		.stream_name = LPASS_BE_QUIN_TDM_TX_0,
 		.capture_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(quin_tdm_tx_0),
@@ -1201,8 +1250,8 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_SEN_TDM_RX_0,
 		.stream_name = LPASS_BE_SEN_TDM_RX_0,
 		.playback_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
@@ -1212,27 +1261,53 @@ static struct snd_soc_dai_link msm_tdm_dai_links[] = {
 		.name = LPASS_BE_SEN_TDM_TX_0,
 		.stream_name = LPASS_BE_SEN_TDM_TX_0,
 		.capture_only = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
 		.ops = &msm_common_be_ops,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(sen_tdm_tx_0),
 	},
 };
 
+static struct snd_soc_dai_link pre_msm_tdm_cs35l41_dai_links[] = {
+	{
+		.name = LPASS_BE_TERT_TDM_RX_0,
+		.stream_name = LPASS_BE_TERT_TDM_RX_0,
+		.playback_only = 1,
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
+		.ops = &msm_common_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_tdm_rx_0_pre),
+	},
+};
+
+static struct snd_soc_dai_link pre_msm_tdm_cs35l41_dai_links_virt[] = {
+	{
+		.name = LPASS_BE_TERT_TDM_RX_0_VIRT,
+		.stream_name = LPASS_BE_TERT_TDM_RX_0_VIRT,
+		.playback_only = 1,
+		.trigger = { SND_SOC_DPCM_TRIGGER_POST,
+			     SND_SOC_DPCM_TRIGGER_POST },
+		.ops = &msm_common_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_tdm_rx_0_pre),
+	},
+};
+
 static struct snd_soc_dai_link msm_waipio_dai_links[
+#if 0
 			ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links) +
 			ARRAY_SIZE(msm_wsa2_cdc_dma_be_dai_links) +
 			ARRAY_SIZE(msm_wsa_wsa2_cdc_dma_be_dai_links) +
-			ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links) +
-			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links) +
-			ARRAY_SIZE(ext_disp_be_dai_link) +
-			ARRAY_SIZE(msm_common_be_dai_links) +
-			ARRAY_SIZE(msm_wcn_be_dai_links) +
-			ARRAY_SIZE(msm_wcn_btfm_be_dai_links) +
-			ARRAY_SIZE(msm_mi2s_dai_links) +
-			ARRAY_SIZE(msm_tdm_dai_links)];
-
+#endif
+	ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links) +
+	ARRAY_SIZE(msm_va_cdc_dma_be_dai_links) +
+	ARRAY_SIZE(ext_disp_be_dai_link) + ARRAY_SIZE(msm_common_be_dai_links) +
+	ARRAY_SIZE(msm_wcn_be_dai_links) + ARRAY_SIZE(msm_wcn_btfm_be_dai_links) +
+	ARRAY_SIZE(msm_mi2s_dai_links) + ARRAY_SIZE(msm_tdm_dai_links)];
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -1455,7 +1530,13 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev,
 	int rc = 0;
 	u32 val = 0;
 	const struct of_device_id *match;
+	int i = 0;
+	u32 is_pre_dev_version = 0;
+	u32 is_pre_dev_platform = 0;
+	is_pre_dev_version = get_hw_id_value();
+	is_pre_dev_platform = get_hw_version_platform();
 
+	printk("<%s><%d>: E.\n", __func__, __LINE__);
 	match = of_match_node(waipio_asoc_machine_of_match, dev->of_node);
 	if (!match) {
 		dev_err(dev, "%s: No DT match found for sound card\n",
@@ -1529,6 +1610,32 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev,
 		rc = of_property_read_u32(dev->of_node,
 				"qcom,tdm-audio-intf", &val);
 		if (!rc && val) {
+			dev_dbg(dev, "%s(): tdm-audio-intf support present\n",
+				__func__);
+
+			if (((is_pre_dev_version == 0x10003) ||
+			     (is_pre_dev_version == 0x10004)) &&
+			    (is_pre_dev_platform == HARDWARE_PROJECT_L1)) {
+				dev_err(dev, "%s(): is_pre_dev_version: %x\n",
+					__func__, is_pre_dev_version);
+				for (i = 0; i < ARRAY_SIZE(msm_tdm_dai_links);
+				     i++) {
+					if (!strcmp(msm_tdm_dai_links[i].name,
+						    LPASS_BE_TERT_TDM_RX_0)) {
+						memcpy(msm_tdm_dai_links + i,
+						       &pre_msm_tdm_cs35l41_dai_links,
+						       sizeof(pre_msm_tdm_cs35l41_dai_links));
+					} else if (
+						!strcmp(msm_tdm_dai_links[i]
+								.name,
+							LPASS_BE_TERT_TDM_RX_0_VIRT)) {
+						memcpy(msm_tdm_dai_links + i,
+						       &pre_msm_tdm_cs35l41_dai_links_virt,
+						       sizeof(pre_msm_tdm_cs35l41_dai_links_virt));
+					}
+				}
+			}
+
 			memcpy(msm_waipio_dai_links + total_links,
 					msm_tdm_dai_links,
 					sizeof(msm_tdm_dai_links));
@@ -1584,6 +1691,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev,
 		card->late_probe = msm_snd_card_late_probe;
 	}
 
+	printk("<%s><%d>: X.\n", __func__, __LINE__);
 	return card;
 }
 
@@ -1885,6 +1993,15 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
 	if (!lpass_cdc_component) {
 		pr_err("%s: could not find component for lpass-cdc\n",
 			__func__);
+		return ret;
+	}
+
+	ret = snd_soc_add_component_controls(
+		lpass_cdc_component, msm_common_snd_controls,
+		ARRAY_SIZE(msm_common_snd_controls));
+	if (ret < 0) {
+		pr_err("%s: add common snd controls failed: %d\n", __func__,
+		       ret);
 		return ret;
 	}
 
@@ -2196,6 +2313,12 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct clk *lpass_audio_hw_vote = NULL;
 
+#if IS_ENABLED(CONFIG_MIEV)
+	struct misight_mievent *mievent;
+	struct timespec64 curTime;
+#endif
+
+	printk("<%s><%d>: E.\n", __func__, __LINE__);
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev, "%s: No platform supplied from device tree\n", __func__);
 		return -EINVAL;
@@ -2262,6 +2385,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	ret = msm_populate_dai_link_component_of_node(card);
 	if (ret) {
+		printk("<%s><%d>: X.\n", __func__, __LINE__);
 		ret = -EPROBE_DEFER;
 		goto err;
 	}
@@ -2341,6 +2465,21 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	return 0;
 err:
 	devm_kfree(&pdev->dev, pdata);
+	printk("<%s><%d>: X, failed.\n", __func__, __LINE__);
+#if IS_ENABLED(CONFIG_MIEV)
+	if (ret != -EPROBE_DEFER) {
+		dev_dbg(&pdev->dev,
+			"<%s><%d>: X, failed.non-DEFER skip sound card registration.\n",
+			__func__, __LINE__);
+		ktime_get_real_ts64(&curTime);
+		mievent = cdev_tevent_alloc(906001001);
+		cdev_tevent_add_int(mievent, "CurrentTime", curTime.tv_sec);
+		cdev_tevent_add_str(mievent, "Keyword",
+				    "sound_card_not_registered");
+		cdev_tevent_write(mievent);
+		cdev_tevent_destroy(mievent);
+	}
+#endif
 	return ret;
 }
 
