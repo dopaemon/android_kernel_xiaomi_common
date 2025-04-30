@@ -22,7 +22,9 @@
 #include <asoc/msm-cdc-supply.h>
 #include <bindings/audio-codec-port-types.h>
 #include <linux/qti-regmap-debugfs.h>
+#ifdef CONFIG_MMHARDWARE_DETECTION
 #include <linux/mmhardware_sysfs.h>
+#endif
 
 #include "wcd938x-registers.h"
 #include "wcd938x.h"

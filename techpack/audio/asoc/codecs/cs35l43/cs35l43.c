@@ -44,7 +44,9 @@
 #include <linux/err.h>
 #include <linux/firmware.h>
 #include <linux/timekeeping.h>
+#ifdef CONFIG_MMHARDWARE_DETECTION
 #include <linux/mmhardware_sysfs.h>
+#endif
 
 #include "wm_adsp.h"
 #include "cs35l43.h"

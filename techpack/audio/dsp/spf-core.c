@@ -22,7 +22,9 @@
 #include <ipc/gpr-lite.h>
 #include <dsp/spf-core.h>
 #include <dsp/digital-cdc-rsc-mgr.h>
+#ifdef CONFIG_MMHARDWARE_DETECTION
 #include <linux/mmhardware_sysfs.h>
+#endif
 
 #define APM_STATE_READY_TIMEOUT_MS    10000
 #define Q6_READY_TIMEOUT_MS 1000
