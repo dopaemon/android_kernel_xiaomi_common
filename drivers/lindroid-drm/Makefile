@@ -11,7 +11,7 @@ ifneq ($(DKMS_BUILD),)
 # DKMS
 KERN_DIR := /lib/modules/$(KERNELRELEASE)/build
 
-ccflags-y := -isystem include/uapi/drm $(CFLAGS) $(EL8FLAG) $(EL9FLAG) $(RPIFLAG)
+ccflags-y := -Wno-error -isystem include/uapi/drm $(CFLAGS) $(EL8FLAG) $(EL9FLAG) $(RPIFLAG)
 evdi-lindroid-y := evdi_platform_drv.o evdi_platform_dev.o evdi_sysfs.o evdi_modeset.o evdi_connector.o evdi_encoder.o evdi_drm_drv.o evdi_fb.o evdi_gem.o evdi_painter.o evdi_params.o evdi_debug.o
 obj-m := evdi-lindroid.o
 
