@@ -2590,15 +2590,15 @@ static ssize_t cpuset_write_resmask_wrapper(struct kernfs_open_file *of,
 #ifdef CONFIG_CPUSETS_ASSIST
 	static struct cs_target cs_targets[] = {
 		/* Little-only cpusets go first */
-		{ "background",		"0-2" },
-		{ "restricted",		"0-2" },
-		{ "system-background",	"0-3" },
-		{ "camera-background",	"0-3" },
-		{ "audio-app",		"2,3" },
-		{ "foreground",		"0-6" },
-		{ "camera-daemon",	"0-7" },
-		{ "top-app",		"0-7" },
-		{ "ui",		        "4-7" },
+		{ "background",           CONFIG_CPUSETS_ASSIST_BACKGROUND },
+		{ "restricted",           CONFIG_CPUSETS_ASSIST_RESTRICTED },
+		{ "system-background",    CONFIG_CPUSETS_ASSIST_SYSTEM_BACKGROUND },
+		{ "camera-background",    CONFIG_CPUSETS_ASSIST_CAMERA_BACKGROUND },
+		{ "audio-app",            CONFIG_CPUSETS_ASSIST_AUDIO },
+		{ "foreground",           CONFIG_CPUSETS_ASSIST_FOREGROUND },
+		{ "camera-daemon",        CONFIG_CPUSETS_ASSIST_CAMERA_DAEMON },
+		{ "top-app",              CONFIG_CPUSETS_ASSIST_TOP_APP },
+		{ "ui",                   CONFIG_CPUSETS_ASSIST_UI },
 	};
 	struct cpuset *cs = css_cs(of_css(of));
 	int i;
