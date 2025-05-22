@@ -1374,6 +1374,48 @@ config CPUSETS_ASSIST
 
 	  If unsure, say N.
 
+if CPUSETS_ASSIST
+
+config CPUSETS_ASSIST_AUDIO
+    string "CPU cores for audio-app cpuset"
+    default "4,5"
+    help
+      CPU core list for audio-app cpuset, e.g., 4,5 or 0-3
+
+config CPUSETS_ASSIST_UI
+    string "CPU cores for ui cpuset"
+    default "6,7"
+
+config CPUSETS_ASSIST_FOREGROUND
+    string "CPU cores for foreground cpuset"
+    default "0-7"
+
+config CPUSETS_ASSIST_BACKGROUND
+    string "CPU cores for background cpuset"
+    default "0-5"
+
+config CPUSETS_ASSIST_RESTRICTED
+    string "CPU cores for restricted cpuset"
+    default "0-5"
+
+config CPUSETS_ASSIST_SYSTEM_BACKGROUND
+    string "CPU cores for system-background cpuset"
+    default "0-5"
+
+config CPUSETS_ASSIST_CAMERA_DAEMON
+    string "CPU cores for camera-daemon cpuset"
+    default "0-7"
+
+config CPUSETS_ASSIST_TOP_APP
+    string "CPU cores for top-app cpuset"
+    default "0-7"
+
+config CPUSETS_ASSIST_CAMERA_BACKGROUND
+    string "CPU cores for camera-background cpuset"
+    default "0-5"
+
+endif
+
 config SYSFS_DEPRECATED
 	bool "Enable deprecated sysfs features to support old userspace tools"
 	depends on SYSFS
