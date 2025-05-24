@@ -1188,7 +1188,7 @@ static bool mld_in_v1_mode(const struct inet6_dev *idev)
 		return false;
 	if (mld_in_v1_mode_only(idev))
 		return true;
-	if (idev->mc_v1_seen && time_before(jiffies, idev->mc_v1_seen))
+	if (idev->mc_v1_seen && time_before(jiffies, (unsigned long)idev->mc_v1_seen))
 		return true;
 
 	return false;

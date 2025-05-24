@@ -247,7 +247,7 @@ static int __netns_bpf_prog_query(const union bpf_attr *attr,
 				  struct net *net,
 				  enum netns_bpf_attach_type type)
 {
-	__u32 __user *prog_ids = u64_to_user_ptr(attr->query.prog_ids);
+	__u32 __user *prog_ids = (__u32 __user *)u64_to_user_ptr((u64)attr->query.prog_ids);
 	struct bpf_prog_array *run_array;
 	u32 prog_cnt = 0, flags = 0;
 
