@@ -1331,7 +1331,7 @@ int generic_map_delete_batch(struct bpf_map *map,
 			     const union bpf_attr *attr,
 			     union bpf_attr __user *uattr)
 {
-	void __user *keys = (void __user *)u64_to_user_ptr(attr->batch.keys);
+	void __user *keys = (void __user *)u64_to_user_ptr((u64)attr->batch.keys);
 	u32 cp, max_count;
 	int err = 0;
 	void *key;
@@ -1387,8 +1387,8 @@ int generic_map_update_batch(struct bpf_map *map,
 			     const union bpf_attr *attr,
 			     union bpf_attr __user *uattr)
 {
-	void __user *values = (void __user *)u64_to_user_ptr(attr->batch.values);
-	void __user *keys = (void __user *)u64_to_user_ptr(attr->batch.keys);
+	void __user *values = (void __user *)u64_to_user_ptr((u64)attr->batch.values);
+	void __user *keys = (void __user *)u64_to_user_ptr((u64)attr->batch.keys);
 	u32 value_size, cp, max_count;
 	int ufd = attr->batch.map_fd;
 	void *key, *value;
@@ -1451,10 +1451,10 @@ int generic_map_lookup_batch(struct bpf_map *map,
 				    const union bpf_attr *attr,
 				    union bpf_attr __user *uattr)
 {
-	void __user *uobatch = (void __user *)u64_to_user_ptr(attr->batch.out_batch);
-	void __user *ubatch = (void __user *)u64_to_user_ptr(attr->batch.in_batch);
-	void __user *values = (void __user *)u64_to_user_ptr(attr->batch.values);
-	void __user *keys = (void __user *)u64_to_user_ptr(attr->batch.keys);
+	void __user *uobatch = (void __user *)u64_to_user_ptr((u64)attr->batch.out_batch);
+	void __user *ubatch = (void __user *)u64_to_user_ptr((u64)attr->batch.in_batch);
+	void __user *values = (void __user *)u64_to_user_ptr((u64)attr->batch.values);
+	void __user *keys = (void __user *)u64_to_user_ptr((u64)attr->batch.keys);
 	void *buf, *buf_prevkey, *prev_key, *key, *value;
 	u32 value_size, cp, max_count;
 	int err;
@@ -2363,7 +2363,7 @@ static int bpf_obj_pin(const union bpf_attr *attr)
 	if (CHECK_ATTR(BPF_OBJ) || attr->file_flags != 0)
 		return -EINVAL;
 
-	return bpf_obj_pin_user(attr->bpf_fd, (char __user *)u64_to_user_ptr(attr->pathname));
+	return bpf_obj_pin_user(attr->bpf_fd, (char __user *)u64_to_user_ptr((u64)attr->pathname));
 }
 
 static int bpf_obj_get(const union bpf_attr *attr)
@@ -2372,7 +2372,7 @@ static int bpf_obj_get(const union bpf_attr *attr)
 	    attr->file_flags & ~BPF_OBJ_FLAG_MASK)
 		return -EINVAL;
 
-	return bpf_obj_get_user((char __user *)u64_to_user_ptr(attr->pathname),
+	return bpf_obj_get_user((char __user *)u64_to_user_ptr((u64)attr->pathname),
 				attr->file_flags);
 }
 
@@ -2939,7 +2939,7 @@ static int bpf_raw_tracepoint_open(const union bpf_attr *attr)
 	case BPF_PROG_TYPE_RAW_TRACEPOINT:
 	case BPF_PROG_TYPE_RAW_TRACEPOINT_WRITABLE:
 		if (strncpy_from_user(buf,
-				      (char __user *)u64_to_user_ptr(attr->raw_tracepoint.name),
+				      (char __user *)u64_to_user_ptr((u64)attr->raw_tracepoint.name),
 				      sizeof(buf) - 1) < 0) {
 			err = -EFAULT;
 			goto out_put_prog;
@@ -3495,7 +3495,7 @@ static int bpf_prog_get_info_by_fd(struct file *file,
 				   const union bpf_attr *attr,
 				   union bpf_attr __user *uattr)
 {
-	struct bpf_prog_info __user *uinfo = (struct bpf_prog_info __user *)u64_to_user_ptr(attr->info.info);
+	struct bpf_prog_info __user *uinfo = (struct bpf_prog_info __user *)u64_to_user_ptr((u64)attr->info.info);
 	struct bpf_prog_info info;
 	u32 info_len = attr->info.info_len;
 	struct bpf_prog_stats stats;
@@ -3776,7 +3776,7 @@ static int bpf_map_get_info_by_fd(struct file *file,
 				  const union bpf_attr *attr,
 				  union bpf_attr __user *uattr)
 {
-	struct bpf_map_info __user *uinfo = (struct bpf_map_info __user *)u64_to_user_ptr(attr->info.info);
+	struct bpf_map_info __user *uinfo = (struct bpf_map_info __user *)u64_to_user_ptr((u64)attr->info.info);
 	struct bpf_map_info info;
 	u32 info_len = attr->info.info_len;
 	int err;
@@ -3820,7 +3820,7 @@ static int bpf_btf_get_info_by_fd(struct file *file,
 				  const union bpf_attr *attr,
 				  union bpf_attr __user *uattr)
 {
-	struct bpf_btf_info __user *uinfo = (struct bpf_btf_info __user *)u64_to_user_ptr(attr->info.info);
+	struct bpf_btf_info __user *uinfo = (struct bpf_btf_info __user *)u64_to_user_ptr((u64)attr->info.info);
 	u32 info_len = attr->info.info_len;
 	int err;
 
@@ -3836,7 +3836,7 @@ static int bpf_link_get_info_by_fd(struct file *file,
 				  const union bpf_attr *attr,
 				  union bpf_attr __user *uattr)
 {
-	struct bpf_link_info __user *uinfo = (struct bpf_link_info __user *)u64_to_user_ptr(attr->info.info);
+	struct bpf_link_info __user *uinfo = (struct bpf_link_info __user *)u64_to_user_ptr((u64)attr->info.info);
 	struct bpf_link_info info;
 	u32 info_len = attr->info.info_len;
 	int err;
@@ -3934,7 +3934,7 @@ static int bpf_task_fd_query_copy(const union bpf_attr *attr,
 				    const char *buf, u64 probe_offset,
 				    u64 probe_addr)
 {
-	char __user *ubuf = (char __user *)u64_to_user_ptr(attr->task_fd_query.buf);
+	char __user *ubuf = (char __user *)u64_to_user_ptr((u64)attr->task_fd_query.buf);
 	u32 len = buf ? strlen(buf) : 0, input_len;
 	int err = 0;
 
