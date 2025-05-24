@@ -6195,7 +6195,7 @@ static int io_timeout_remove_prep(struct io_kiocb *req,
 			tr->ltimeout = true;
 		if (tr->flags & ~(IORING_TIMEOUT_UPDATE_MASK|IORING_TIMEOUT_ABS))
 			return -EINVAL;
-		if (get_timespec64(&tr->ts, u64_to_user_ptr(sqe->addr2)))
+		if (get_timespec64(&tr->ts, (struct timespec64 __user *)u64_to_user_ptr(sqe->addr2)))
 			return -EFAULT;
 	} else if (tr->flags) {
 		/* timeout removal doesn't support flags */
@@ -6276,7 +6276,7 @@ static int io_timeout_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 	data->req = req;
 	data->flags = flags;
 
-	if (get_timespec64(&data->ts, u64_to_user_ptr(sqe->addr)))
+	if (get_timespec64(&data->ts, (struct timespec64 __user *)u64_to_user_ptr(sqe->addr)))
 		return -EFAULT;
 
 	INIT_LIST_HEAD(&req->timeout.list);
