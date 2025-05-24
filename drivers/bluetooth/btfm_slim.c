@@ -304,7 +304,7 @@ static int btfm_slim_get_logical_addr(struct slim_device *slim)
 		/* Give SLIMBUS time to report present and be ready. */
 		usleep_range(1000, 1100);
 		BTFMSLIM_DBG("retyring get logical addr");
-	} while (time_before(jiffies, timeout));
+	} while (time_before(jiffies, (unsigned long)timeout));
 
 	return ret;
 }
