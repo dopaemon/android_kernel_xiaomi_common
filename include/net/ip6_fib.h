@@ -272,7 +272,7 @@ static inline void fib6_set_expires(struct fib6_info *f6i,
 static inline bool fib6_check_expired(const struct fib6_info *f6i)
 {
 	if (f6i->fib6_flags & RTF_EXPIRES)
-		return time_after(jiffies, f6i->expires);
+		return time_after(jiffies, (unsigned long)f6i->expires);
 	return false;
 }
 
