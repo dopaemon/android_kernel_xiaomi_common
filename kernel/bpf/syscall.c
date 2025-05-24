@@ -3860,7 +3860,7 @@ static int bpf_task_fd_query_copy(const union bpf_attr *attr,
 				    const char *buf, u64 probe_offset,
 				    u64 probe_addr)
 {
-	char __user *ubuf = u64_to_user_ptr(attr->task_fd_query.buf);
+	char __user *ubuf = (char __user *)u64_to_user_ptr(attr->task_fd_query.buf);
 	u32 len = buf ? strlen(buf) : 0, input_len;
 	int err = 0;
 
