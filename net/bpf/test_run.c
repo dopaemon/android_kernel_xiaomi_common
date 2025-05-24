@@ -130,7 +130,7 @@ static int bpf_test_finish(const union bpf_attr *kattr,
 			   union bpf_attr __user *uattr, const void *data,
 			   u32 size, u32 retval, u32 duration)
 {
-	void __user *data_out = u64_to_user_ptr(kattr->test.data_out);
+	void __user *data_out = (void __user *)u64_to_user_ptr((u64)kattr->test.data_out);
 	int err = -EFAULT;
 	u32 copy_size = size;
 
@@ -221,7 +221,7 @@ ALLOW_ERROR_INJECTION(bpf_modify_return_test, ERRNO);
 static void *bpf_test_init(const union bpf_attr *kattr, u32 size,
 			   u32 headroom, u32 tailroom)
 {
-	void __user *data_in = u64_to_user_ptr(kattr->test.data_in);
+	void __user *data_in = (void __user *)u64_to_user_ptr((u64)kattr->test.data_in);
 	u32 user_size = kattr->test.data_size_in;
 	void *data;
 
@@ -308,7 +308,7 @@ int bpf_prog_test_run_raw_tp(struct bpf_prog *prog,
 			     const union bpf_attr *kattr,
 			     union bpf_attr __user *uattr)
 {
-	void __user *ctx_in = u64_to_user_ptr(kattr->test.ctx_in);
+	void __user *ctx_in = (void __user *)u64_to_user_ptr((u64)kattr->test.ctx_in);
 	__u32 ctx_size_in = kattr->test.ctx_size_in;
 	struct bpf_raw_tp_test_run_info info;
 	int cpu = kattr->test.cpu, err = 0;
@@ -369,8 +369,8 @@ out:
 
 static void *bpf_ctx_init(const union bpf_attr *kattr, u32 max_size)
 {
-	void __user *data_in = u64_to_user_ptr(kattr->test.ctx_in);
-	void __user *data_out = u64_to_user_ptr(kattr->test.ctx_out);
+	void __user *data_in = (void __user *)u64_to_user_ptr((u64)kattr->test.ctx_in);
+	void __user *data_out = (void __user *)u64_to_user_ptr((u64)kattr->test.ctx_out);
 	u32 size = kattr->test.ctx_size_in;
 	void *data;
 	int err;
@@ -402,7 +402,7 @@ static int bpf_ctx_finish(const union bpf_attr *kattr,
 			  union bpf_attr __user *uattr, const void *data,
 			  u32 size)
 {
-	void __user *data_out = u64_to_user_ptr(kattr->test.ctx_out);
+	void __user *data_out = (void __user *)u64_to_user_ptr((u64)kattr->test.ctx_out);
 	int err = -EFAULT;
 	u32 copy_size = size;
 
