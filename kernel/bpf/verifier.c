@@ -8962,7 +8962,7 @@ static int check_btf_func(struct bpf_verifier_env *env,
 	prog = env->prog;
 	btf = prog->aux->btf;
 
-	void __user *urecord = (void __user *)u64_to_user_ptr(attr->func_info);
+	urecord = (void __user *)u64_to_user_ptr((u64)attr->func_info);
 	min_size = min_t(u32, krec_size, urec_size);
 
 	krecord = kvcalloc(nfuncs, krec_size, GFP_KERNEL | __GFP_NOWARN);
@@ -9105,7 +9105,7 @@ static int check_btf_line(struct bpf_verifier_env *env,
 
 	s = 0;
 	sub = env->subprog_info;
-	void __user *ulinfo = (void __user *)u64_to_user_ptr(attr->line_info);
+	ulinfo = (void __user *)u64_to_user_ptr((u64)attr->line_info);
 	expected_size = sizeof(struct bpf_line_info);
 	ncopy = min_t(u32, expected_size, rec_size);
 	for (i = 0; i < nr_linfo; i++) {

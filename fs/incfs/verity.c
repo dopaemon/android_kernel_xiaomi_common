@@ -541,7 +541,7 @@ static int incfs_enable_verity(struct file *filp,
 
 	/* Get the signature if the user provided one */
 	if (arg->sig_size) {
-		signature = memdup_user(u64_to_user_ptr(arg->sig_ptr),
+		signature = memdup_user(u64_to_user_ptr((u64)arg->sig_ptr),
 					arg->sig_size);
 		if (IS_ERR(signature)) {
 			err = PTR_ERR(signature);
