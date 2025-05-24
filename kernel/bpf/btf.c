@@ -5454,9 +5454,9 @@ int btf_new_fd(const union bpf_attr *attr)
 	struct btf *btf;
 	int ret;
 
-	btf = btf_parse(u64_to_user_ptr(attr->btf),
+	btf = btf_parse((void __user *)u64_to_user_ptr((u64)attr->btf),
 			attr->btf_size, attr->btf_log_level,
-			u64_to_user_ptr(attr->btf_log_buf),
+			(void __user *)u64_to_user_ptr((u64)attr->btf_log_buf),
 			attr->btf_log_size);
 	if (IS_ERR(btf))
 		return PTR_ERR(btf);
@@ -5512,7 +5512,7 @@ int btf_get_info_by_fd(const struct btf *btf,
 	void __user *ubtf;
 	u32 uinfo_len;
 
-	uinfo = u64_to_user_ptr(attr->info.info);
+	uinfo = (void __user *)u64_to_user_ptr((u64)attr->info.info);
 	uinfo_len = attr->info.info_len;
 
 	info_copy = min_t(u32, uinfo_len, sizeof(info));
