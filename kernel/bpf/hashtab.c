@@ -1379,9 +1379,9 @@ __htab_map_lookup_and_delete_batch(struct bpf_map *map,
 	struct bpf_htab *htab = container_of(map, struct bpf_htab, map);
 	u32 bucket_cnt, total, key_size, value_size, roundup_key_size;
 	void *keys = NULL, *values = NULL, *value, *dst_key, *dst_val;
-	void __user *uvalues = u64_to_user_ptr(attr->batch.values);
-	void __user *ukeys = u64_to_user_ptr(attr->batch.keys);
-	void *ubatch = u64_to_user_ptr(attr->batch.in_batch);
+	void __user *uvalues = (void __user *)u64_to_user_ptr((u64)attr->batch.values);
+	void __user *ukeys = (void __user *)u64_to_user_ptr((u64)attr->batch.keys);
+	void *ubatch = (void *)u64_to_user_ptr((u64)attr->batch.in_batch);
 	u32 batch, max_count, size, bucket_size;
 	struct htab_elem *node_to_free = NULL;
 	u64 elem_map_flags, map_flags;
@@ -1571,7 +1571,7 @@ after_loop:
 		goto out;
 
 	/* copy # of entries and next batch */
-	ubatch = u64_to_user_ptr(attr->batch.out_batch);
+	ubatch = (void *)u64_to_user_ptr((u64)attr->batch.out_batch);
 	if (copy_to_user(ubatch, &batch, sizeof(batch)) ||
 	    put_user(total, &uattr->batch.count))
 		ret = -EFAULT;
