@@ -475,7 +475,7 @@ int bpf_iter_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 
 	memset(&linfo, 0, sizeof(union bpf_iter_link_info));
 
-	ulinfo = u64_to_user_ptr(attr->link_create.iter_info);
+	ulinfo = u64_to_user_ptr((u64)attr->link_create.iter_info);
 	linfo_len = attr->link_create.iter_info_len;
 	if (!ulinfo ^ !linfo_len)
 		return -EINVAL;
