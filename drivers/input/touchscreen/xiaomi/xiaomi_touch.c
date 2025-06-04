@@ -138,6 +138,10 @@ int notify_oneshot_sensor(enum oneshot_sensor_type sensor_type, int value)
 	if (atomic_read(&pocket_disable_gestures)) {
 		pr_info("gesture of type %d with value %d ignored due to pocket/nonui mode\n",
 			sensor_type, value);
+	} else if (!atomic_read(&suspended)) {
+		pr_info("gesture of type %d with value %d ignored because touch"
+			"screen is in resume state\n",
+			sensor_type, value);
 	} else {
 		sensor = oneshot_sensor_map[sensor_type];
 		atomic_set(&sensor->pending_event, value);
@@ -173,7 +177,8 @@ static void oneshot_sensor_update_driver(enum touch_id touch_id, bool enabled,
 			enabled ? atomic_read(&requested_state[i]) : 0;
 		if (atomic_xchg(&oneshot_sensor_enabled[touch_id][i], requested_value) !=
 		    requested_value) {
-			pr_info("setting mode %d to %d!\n", i, requested_value);
+			pr_debug("setting mode %d to %d!\n", i,
+				 requested_value);
 			interface->set_mode_value(interface->private,
 						  oneshot_sensor_map[i]->mode,
 						  requested_value);
@@ -345,10 +350,10 @@ static int touch_mode_set(enum touch_mode mode, int value)
 		switch (value) {
 		case TOUCH_FOLD_STATUS_UNFOLDED:
 			requested_touch_id = TOUCH_ID_PRIMARY;
-			return 0;
+			break;
 		case TOUCH_FOLD_STATUS_FOLDED:
 			requested_touch_id = TOUCH_ID_SECONDARY;
-			return 0;
+			break;
 		default:
 			return -EINVAL;
 		}
@@ -451,8 +456,8 @@ static long xiaomi_touch_dev_ioctl(struct file *file, unsigned int cmd,
 	if (copy_from_user(&request, (int __user *)arg, sizeof(request)))
 		return -EFAULT;
 
-	pr_info("cmd: %d, mode: %d, value: %d\n", _IOC_NR(cmd), request.mode,
-		request.value);
+	pr_debug("cmd: %d, mode: %d, value: %d\n", _IOC_NR(cmd), request.mode,
+		 request.value);
 
 	switch (_IOC_NR(cmd)) {
 	case TOUCH_MODE_SET:
@@ -483,6 +488,8 @@ touch_panel_event_callback(enum panel_event_notifier_tag tag,
 			   struct panel_event_notification *notification,
 			   void *client_data)
 {
+	int i;
+
 	if (!notification)
 		return;
 
@@ -512,6 +519,19 @@ touch_panel_event_callback(enum panel_event_notifier_tag tag,
 		if (notification->notif_data.early_trigger) {
 			atomic_set(&suspended, 0);
 			cancel_delayed_work_sync(&oneshot_sensor_enable_work);
+			/*
+			 * Resuming invalidates all pending events to avoid
+			 * phantom wakes after suspending again.
+			 */
+			for (i = 0; i < ONESHOT_SENSOR_TYPE_NUM; i++) {
+				if (atomic_xchg(&oneshot_sensor_map[i]
+							 ->pending_event,
+						0)) {
+					pr_info("cleared pending event for "
+						"sensor %d due to unblank\n",
+						i);
+				}
+			}
 		}
 		break;
 	default:
