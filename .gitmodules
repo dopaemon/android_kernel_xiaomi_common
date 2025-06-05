@@ -1,4 +1,0 @@
-[submodule "drivers/staging/kernelsu"]
-	path = drivers/staging/kernelsu
-	url = https://github.com/dopaemon/KernelSU-Next.git
-	branch = next-5.10-susfs

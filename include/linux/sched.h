@@ -1413,16 +1413,8 @@ struct task_struct {
 #else
 	ANDROID_KABI_RESERVE(6);
 #endif
-#ifdef CONFIG_KSU_SUSFS
-	ANDROID_KABI_USE(9, u64 susfs_task_state);
-#else
 	ANDROID_KABI_RESERVE(9);
-#endif
-#ifdef CONFIG_KSU_SUSFS
-	ANDROID_KABI_USE(10, u64 susfs_last_fake_mnt_id);
-#else
 	ANDROID_KABI_RESERVE(10);
-#endif
 
 	/*
 	 * New fields for task_struct should be added above here, so that
