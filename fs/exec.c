@@ -77,6 +77,8 @@
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
+#include <linux/init_task.h>
+#include <linux/printk.h>
 
 #include <trace/events/sched.h>
 
@@ -1231,63 +1233,78 @@ char *__get_task_comm(char *buf, size_t buf_size, struct task_struct *tsk)
 EXPORT_SYMBOL_GPL(__get_task_comm);
 
 #ifdef CONFIG_SELECTIVE_BIG_CORE_ENABLE
+
 static const char *allowed_packages[] = {
 	"tw.nekomimi.nekogram"
 };
 
-static void filter_big_cores_by_uid(void)
+static bool is_allowed_package(void)
 {
-	struct device *cpu6 = get_cpu_device(6);
-	struct device *cpu7 = get_cpu_device(7);
-	char cmdline[256] = {0};
-	char current_proc[64];
-	struct file *file;
+	char *cmdline_path;
+	struct file *f;
+	char *buf;
 	loff_t pos = 0;
-	mm_segment_t old_fs;
-	int len = 0, matched = 0;
-	int i;
+	ssize_t len;
+	int i, matched = 0;
 
-	if (!cpu6 || !cpu7)
-		return;
+	if (!current->mm)
+		return false;
 
-	snprintf(current_proc, sizeof(current_proc), "/proc/%d/cmdline", current->pid);
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
+	cmdline_path = kasprintf(GFP_KERNEL, "/proc/%d/cmdline", current->pid);
+	if (!cmdline_path)
+		return false;
 
-	file = filp_open(current_proc, O_RDONLY, 0);
-	if (!IS_ERR(file)) {
-		len = kernel_read(file, cmdline, sizeof(cmdline) - 1, &pos);
-		filp_close(file, NULL);
+	f = filp_open(cmdline_path, O_RDONLY, 0);
+	kfree(cmdline_path);
+	if (IS_ERR(f))
+		return false;
+
+	buf = kzalloc(256, GFP_KERNEL);
+	if (!buf) {
+		filp_close(f, NULL);
+		return false;
 	}
-	set_fs(old_fs);
+
+	len = kernel_read(f, buf, 255, &pos);
+	filp_close(f, NULL);
 
 	if (len <= 0)
-		goto disable;
+		goto out;
 
-	cmdline[len] = '\0';
+	buf[len] = '\0';
 
 	for (i = 0; i < ARRAY_SIZE(allowed_packages); i++) {
-		if (strnstr(cmdline, allowed_packages[i], len)) {
+		if (strnstr(buf, allowed_packages[i], len)) {
 			matched = 1;
 			break;
 		}
 	}
 
-	if (matched) {
-		cpu_device_up(cpu6);
-		cpu_device_up(cpu7);
-		pr_info("filter_big_cores_by_uid: Allowed package '%s' running → CPU 6 & 7 enabled\n", cmdline);
-		return;
-	}
-
-disable:
-	cpu_device_down(cpu6);
-	cpu_device_down(cpu7);
-	pr_info("filter_big_cores_by_uid: No allowed package running → CPU 6 & 7 disabled\n");
+out:
+	kfree(buf);
+	return matched;
 }
 
-#endif // CONFIG_SELECTIVE_BIG_CORE_ENABLE
+static void filter_big_cores_by_uid(void)
+{
+	struct device *cpu6 = get_cpu_device(6);
+	struct device *cpu7 = get_cpu_device(7);
 
+	if (!cpu6 || !cpu7)
+		return;
+
+	if (is_allowed_package()) {
+		cpu_device_up(cpu6);
+		cpu_device_up(cpu7);
+		pr_info("selective_big_core: '%s' matched → CPU6 & CPU7 ON\n", current->comm);
+	} else {
+		cpu_device_down(cpu6);
+		cpu_device_down(cpu7);
+		pr_info("selective_big_core: '%s' not allowed → CPU6 & CPU7 OFF\n", current->comm);
+	}
+}
+
+#endif
 
 /*
  * These functions flushes out all traces of the currently running executable
