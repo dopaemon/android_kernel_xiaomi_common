@@ -1274,8 +1274,8 @@ static void filter_big_cores_by_uid(void)
 	}
 
 	if (matched) {
-		cpu_device_up(cpu6, CPUHP_ONLINE);
-		cpu_device_up(cpu7, CPUHP_ONLINE);
+		cpu_device_up(cpu6);
+		cpu_device_up(cpu7);
 		pr_info("filter_big_cores_by_uid: Allowed package '%s' running → CPU 6 & 7 enabled\n", cmdline);
 		return;
 	}
