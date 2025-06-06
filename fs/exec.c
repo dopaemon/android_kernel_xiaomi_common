@@ -69,6 +69,12 @@
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
 
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/sched.h>
+#include <linux/cpufreq.h>
+#include <linux/device.h>
+
 #include <trace/events/task.h>
 #include "internal.h"
 
@@ -1223,6 +1229,142 @@ char *__get_task_comm(char *buf, size_t buf_size, struct task_struct *tsk)
 	return buf;
 }
 EXPORT_SYMBOL_GPL(__get_task_comm);
+
+#ifdef CONFIG_SELECTIVE_BIG_CORE_ENABLE
+
+#define MAX_BIG_CPUS 3
+static int big_cpus[MAX_BIG_CPUS] = {5, 6, 7};
+static const char *allowed_packages[] = {
+	"com.vng.pubgmobile"
+};
+
+static int read_freq_from_sysfs(int cpu, const char *type)
+{
+	char path[128];
+	struct file *f;
+	loff_t pos = 0;
+	char buf[16] = {0};
+	int freq = -1;
+
+	snprintf(path, sizeof(path),
+		"/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_%s_freq", cpu, type);
+
+	f = filp_open(path, O_RDONLY, 0);
+	if (IS_ERR(f))
+		return -1;
+
+	kernel_read(f, buf, sizeof(buf) - 1, &pos);
+	filp_close(f, NULL);
+
+	kstrtoint(strim(buf), 10, &freq);
+	return freq;
+}
+
+static void set_cpu_freq(int cpu, int min_freq, int max_freq)
+{
+	char path[128], val[16];
+	struct file *f;
+	loff_t pos = 0;
+
+	snprintf(path, sizeof(path),
+		"/sys/devices/system/cpu/cpu%d/cpufreq/scaling_min_freq", cpu);
+	snprintf(val, sizeof(val), "%d\n", min_freq);
+	f = filp_open(path, O_WRONLY, 0);
+	if (!IS_ERR(f)) {
+		kernel_write(f, val, strlen(val), &pos);
+		filp_close(f, NULL);
+	}
+
+	snprintf(path, sizeof(path),
+		"/sys/devices/system/cpu/cpu%d/cpufreq/scaling_max_freq", cpu);
+	snprintf(val, sizeof(val), "%d\n", max_freq);
+	pos = 0;
+	f = filp_open(path, O_WRONLY, 0);
+	if (!IS_ERR(f)) {
+		kernel_write(f, val, strlen(val), &pos);
+		filp_close(f, NULL);
+	}
+}
+
+static void set_big_cores_state(int enable)
+{
+	int i;
+	for (i = 0; i < MAX_BIG_CPUS; i++) {
+		int cpu = big_cpus[i];
+		int min_freq = read_freq_from_sysfs(cpu, "min");
+		int max_freq = read_freq_from_sysfs(cpu, "max");
+
+		if (min_freq < 0 || max_freq < 0) {
+			min_freq = 300000;
+			max_freq = 1800000;
+		}
+
+		if (enable)
+			set_cpu_freq(cpu, min_freq, max_freq);
+		else
+			set_cpu_freq(cpu, 0, 0);
+	}
+}
+
+static void filter_big_cores_by_uid(void)
+{
+	char cmdline[256] = {0};
+	char proc_path[64];
+	struct file *file;
+	loff_t pos = 0;
+	mm_segment_t old_fs;
+	int len = 0, matched = 0;
+	int i;
+
+	snprintf(proc_path, sizeof(proc_path), "/proc/%d/cmdline", current->pid);
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	file = filp_open(proc_path, O_RDONLY, 0);
+	if (!IS_ERR(file)) {
+		len = kernel_read(file, cmdline, sizeof(cmdline) - 1, &pos);
+		filp_close(file, NULL);
+	}
+	set_fs(old_fs);
+
+	if (len <= 0)
+		goto disable;
+
+	cmdline[len] = '\0';
+
+	for (i = 0; i < ARRAY_SIZE(allowed_packages); i++) {
+		if (strnstr(cmdline, allowed_packages[i], len)) {
+			matched = 1;
+			break;
+		}
+	}
+
+	if (matched) {
+		pr_info("selective_core: allowed app '%s' → enabling big cores\n", cmdline);
+		set_big_cores_state(1);
+		return;
+	}
+
+disable:
+	pr_info("selective_core: no allowed app → disabling big cores\n");
+	set_big_cores_state(0);
+}
+
+#endif // CONFIG_SELECTIVE_BIG_CORE_ENABLE
+
+void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
+{
+	task_lock(tsk);
+	trace_task_rename(tsk, buf);
+	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
+	task_unlock(tsk);
+
+#ifdef CONFIG_SELECTIVE_BIG_CORE_ENABLE
+	filter_big_cores_by_uid();
+#endif
+
+	perf_event_comm(tsk, exec);
+}
 
 /*
  * These functions flushes out all traces of the currently running executable

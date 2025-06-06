@@ -353,4 +353,15 @@ source "fs/unicode/Kconfig"
 config IO_WQ
 	bool
 
+config SELECTIVE_BIG_CORE_ENABLE
+	bool "Selective Big Core Enable"
+	default n
+	help
+	  Enable selective enabling/disabling of big CPU cores based on
+	  running process name. This allows dynamically controlling
+	  big cores for better power/performance balance.
+
+	  When enabled, big cores will be enabled only for certain allowed
+	  packages. Otherwise, big cores will be turned off or scaled down.
+
 endmenu
