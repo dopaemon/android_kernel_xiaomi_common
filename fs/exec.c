@@ -72,6 +72,12 @@
 #include <trace/events/task.h>
 #include "internal.h"
 
+#include <linux/cpu.h>
+#include <linux/device.h>
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/sched.h>
+
 #include <trace/events/sched.h>
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(task_rename);
@@ -1224,6 +1230,65 @@ char *__get_task_comm(char *buf, size_t buf_size, struct task_struct *tsk)
 }
 EXPORT_SYMBOL_GPL(__get_task_comm);
 
+#ifdef CONFIG_SELECTIVE_BIG_CORE_ENABLE
+static const char *allowed_packages[] = {
+	"tw.nekomimi.nekogram"
+};
+
+static void filter_big_cores_by_uid(void)
+{
+	struct device *cpu6 = get_cpu_device(6);
+	struct device *cpu7 = get_cpu_device(7);
+	char cmdline[256] = {0};
+	char current_proc[64];
+	struct file *file;
+	loff_t pos = 0;
+	mm_segment_t old_fs;
+	int len, matched = 0;
+	int i;
+
+	if (!cpu6 || !cpu7)
+		return;
+
+	snprintf(current_proc, sizeof(current_proc), "/proc/%d/cmdline", current->pid);
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	file = filp_open(current_proc, O_RDONLY, 0);
+	if (!IS_ERR(file)) {
+		len = kernel_read(file, cmdline, sizeof(cmdline) - 1, &pos);
+		filp_close(file, NULL);
+	}
+	set_fs(old_fs);
+
+	if (len <= 0)
+		goto disable;
+
+	cmdline[len] = '\0';
+
+	for (i = 0; i < ARRAY_SIZE(allowed_packages); i++) {
+		if (strnstr(cmdline, allowed_packages[i], len)) {
+			matched = 1;
+			break;
+		}
+	}
+
+	if (matched) {
+		cpu_device_up(cpu6, CPUHP_ONLINE);
+		cpu_device_up(cpu7, CPUHP_ONLINE);
+		pr_info("filter_big_cores_by_uid: Allowed package '%s' running → CPU 6 & 7 enabled\n", cmdline);
+		return;
+	}
+
+disable:
+	cpu_device_down(cpu6);
+	cpu_device_down(cpu7);
+	pr_info("filter_big_cores_by_uid: No allowed package running → CPU 6 & 7 disabled\n");
+}
+
+#endif // CONFIG_SELECTIVE_BIG_CORE_ENABLE
+
+
 /*
  * These functions flushes out all traces of the currently running executable
  * so that a new one can be started
@@ -1235,6 +1300,11 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 	trace_task_rename(tsk, buf);
 	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
 	task_unlock(tsk);
+
+#ifdef CONFIG_SELECTIVE_BIG_CORE_ENABLE
+	filter_big_cores_by_uid();
+#endif /* CONFIG_SELECTIVE_BIG_CORE_ENABLE */
+
 	perf_event_comm(tsk, exec);
 }
 

@@ -350,6 +350,13 @@ source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
 source "fs/unicode/Kconfig"
 
+config SELECTIVE_BIG_CORE_ENABLE
+	bool "Selective big core control (CPU6/7 toggle)"
+	default n
+	help
+	  Dynamically disable or enable CPU 6 and 7 at runtime.
+	  Useful for restricting access to high-power cores.
+
 config IO_WQ
 	bool
 
