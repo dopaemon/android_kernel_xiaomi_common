@@ -1244,7 +1244,7 @@ static void filter_big_cores_by_uid(void)
 	struct file *file;
 	loff_t pos = 0;
 	mm_segment_t old_fs;
-	int len, matched = 0;
+	int len = 0, matched = 0;
 	int i;
 
 	if (!cpu6 || !cpu7)
