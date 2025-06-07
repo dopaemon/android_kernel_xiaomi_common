@@ -2249,6 +2249,7 @@ static void ptrace_stop(int exit_code, int why, int clear_code, unsigned long me
 	spin_lock_irq(&current->sighand->siglock);
 	current->last_siginfo = NULL;
 	current->ptrace_message = 0;
+
 	/* LISTENING can be set only during STOP traps, clear it */
 	current->jobctl &= ~JOBCTL_LISTENING;
 
