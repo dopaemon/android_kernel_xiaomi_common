@@ -74,7 +74,6 @@ static inline int ptrace_report_syscall(struct pt_regs *regs,
 		current->exit_code = 0;
 	}
 
-	current->ptrace_message = 0;
 	return fatal_signal_pending(current);
 }
 
