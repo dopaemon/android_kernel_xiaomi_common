@@ -1352,20 +1352,6 @@ disable:
 
 #endif // CONFIG_SELECTIVE_BIG_CORE_ENABLE
 
-void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
-{
-	task_lock(tsk);
-	trace_task_rename(tsk, buf);
-	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
-	task_unlock(tsk);
-
-#ifdef CONFIG_SELECTIVE_BIG_CORE_ENABLE
-	filter_big_cores_by_uid();
-#endif
-
-	perf_event_comm(tsk, exec);
-}
-
 /*
  * These functions flushes out all traces of the currently running executable
  * so that a new one can be started
@@ -1377,6 +1363,11 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 	trace_task_rename(tsk, buf);
 	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
 	task_unlock(tsk);
+
+#ifdef CONFIG_SELECTIVE_BIG_CORE_ENABLE
+        filter_big_cores_by_uid();
+#endif
+
 	perf_event_comm(tsk, exec);
 }
 
