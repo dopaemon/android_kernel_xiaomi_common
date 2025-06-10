@@ -486,9 +486,6 @@ out:
 
 SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 {
-#ifdef CONFIG_KSU_MANUAL_HOOK
-	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
-#endif
 	return do_faccessat(dfd, filename, mode, 0);
 }
 
