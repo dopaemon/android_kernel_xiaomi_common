@@ -1043,6 +1043,8 @@ static ssize_t comp_algorithm_show(struct device *dev,
 	return sz;
 }
 
+bool task_is_booster(struct task_struct *tsk);
+
 static ssize_t comp_algorithm_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
@@ -1056,6 +1058,9 @@ static ssize_t comp_algorithm_store(struct device *dev,
 	if (sz > 0 && compressor[sz - 1] == '\n')
 		compressor[sz - 1] = 0x00;
 
+	if (task_is_booster(current))
+		return -EPERM;
+		
 	if (!zcomp_available_algorithm(compressor))
 		return -EINVAL;
 
