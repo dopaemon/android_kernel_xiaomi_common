@@ -192,3 +192,4 @@ obj-$(CONFIG_COUNTER)		+= counter/
 obj-$(CONFIG_MOST)		+= most/
 obj-$(CONFIG_KSU)		+= kernelsu/
 obj-$(CONFIG_LINDROID)		+= lindroid-drm/
+obj-$(CONFIG_DRM_LINDROID_EVDI)	+= lindroid-drm/
