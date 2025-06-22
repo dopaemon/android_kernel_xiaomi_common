@@ -29,7 +29,7 @@
 #include "cam_trace.h"
 #include "cam_compat.h"
 
-#define CAM_TFE_HW_CONFIG_TIMEOUT 60
+#define CAM_TFE_HW_CONFIG_TIMEOUT 150
 #define CAM_TFE_HW_CONFIG_WAIT_MAX_TRY  3
 
 #define TZ_SVC_SMMU_PROGRAM 0x15

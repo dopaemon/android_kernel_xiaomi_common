@@ -628,4 +628,11 @@ struct cam_req_mgr_message {
 		struct cam_req_mgr_node_msg node_msg;
 	} u;
 };
+
+// xiaomi add
+#define V4L_EVENT_CAM_MQS_EVENT           (V4L2_EVENT_PRIVATE_START + 7)
+#define V4L_EVENT_CAM_MQS_ISP             1
+#define V4L_EVENT_CAM_MQS_BUBBLE          (V4L_EVENT_CAM_MQS_ISP << 16) + 1
+// xiaomi add
+
 #endif /* __UAPI_LINUX_CAM_REQ_MGR_H */

@@ -287,6 +287,7 @@ struct cam_ife_cdm_user_data {
  * @current_mup:            Current MUP val, scratch will then apply the same as previously
  *                          applied request
  * @curr_num_exp:           Current num of exposures
+ * @is_frame_setting_update:Flag to specify the per frame setting has updated or not
  *
  */
 struct cam_ife_hw_mgr_ctx {
@@ -348,6 +349,7 @@ struct cam_ife_hw_mgr_ctx {
 	uint32_t                                   curr_num_exp;
 	struct cam_isp_hw_comp_record             *vfe_bus_comp_grp;
 	struct cam_isp_hw_comp_record             *sfe_bus_comp_grp;
+	bool                                       is_frame_setting_update;
 };
 
 /**

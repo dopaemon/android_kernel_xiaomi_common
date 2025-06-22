@@ -1440,9 +1440,16 @@ static int cam_sfe_top_handle_irq_bottom_half(
 	struct cam_sfe_path_data           *path_data = res->res_priv;
 	struct cam_sfe_top_priv            *top_priv = path_data->top_priv;
 	struct cam_sfe_top_irq_evt_payload *payload = evt_payload_priv;
+	struct cam_isp_hw_event_info        evt_info;
 
 	for (i = 0; i < CAM_SFE_IRQ_REGISTERS_MAX; i++)
 		irq_status[i] = payload->irq_reg_val[i];
+
+	evt_info.hw_idx = top_priv->common_data.soc_info->index;
+	evt_info.hw_type = CAM_ISP_HW_TYPE_SFE;
+	evt_info.res_type = CAM_ISP_RESOURCE_SFE_IN;
+	evt_info.reg_val = 0;
+	evt_info.res_id = res->res_id;
 
 	if (irq_status[0] & path_data->path_reg_data->subscribe_irq_mask) {
 		if (irq_status[0] & path_data->path_reg_data->sof_irq_mask) {
@@ -1470,6 +1477,11 @@ static int cam_sfe_top_handle_irq_bottom_half(
 				cam_sfe_top_sel_frame_counter(
 					res->res_id, &frame_cnt,
 					true, path_data);
+
+			if (top_priv->event_cb &&
+				(res->res_id == CAM_ISP_HW_SFE_IN_RDI0))
+				top_priv->event_cb(top_priv->priv_per_stream,
+					CAM_ISP_HW_EVENT_SOF, (void *)&evt_info);
 			}
 
 		if (irq_status[0] &
@@ -1477,6 +1489,11 @@ static int cam_sfe_top_handle_irq_bottom_half(
 			CAM_DBG(CAM_SFE, "SFE:%d Received %s EOF",
 				res->hw_intf->hw_idx,
 				res->res_name);
+
+			if (top_priv->event_cb &&
+				(res->res_id == CAM_ISP_HW_SFE_IN_RDI0))
+				top_priv->event_cb(top_priv->priv_per_stream,
+					CAM_ISP_HW_EVENT_EOF, (void *)&evt_info);
 		}
 		ret = CAM_SFE_IRQ_STATUS_SUCCESS;
 	}
