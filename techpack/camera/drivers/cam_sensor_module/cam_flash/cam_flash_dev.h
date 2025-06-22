@@ -51,6 +51,8 @@
 #define CAM_FLASH_PACKET_OPCODE_STREAM_OFF           3
 #define CAM_FLASH_PACKET_OPCODE_INIT_FIRE            4
 
+#define CONFIG_CAMERA_I2CFLASH 1
+
 struct cam_flash_ctrl;
 
 enum cam_flash_switch_trigger_ops {
@@ -195,6 +197,7 @@ struct cam_flash_func_tbl {
  * @io_master_info      : Information about the communication master
  * @i2c_data            : I2C register settings
  * @last_flush_req      : last request to flush
+ * @trigger_source      : Indicate the trigger source
  * @streamoff_count     : Count to hold the number of times stream off called
  * @apply_streamoff     : variable to store when to apply stream off
  */
@@ -247,7 +250,7 @@ int cam_flash_pmic_flush_request(struct cam_flash_ctrl *fctrl,
 	enum cam_flash_flush_type, uint64_t req_id);
 void cam_flash_shutdown(struct cam_flash_ctrl *fctrl);
 int cam_flash_release_dev(struct cam_flash_ctrl *fctrl);
-
+void update_i2c_flash_brightness(struct i2c_settings_list *i2c_list);
 /**
  * @brief : API to register FLASH hw to platform framework.
  * @return struct platform_device pointer on on success, or ERR_PTR() on error.

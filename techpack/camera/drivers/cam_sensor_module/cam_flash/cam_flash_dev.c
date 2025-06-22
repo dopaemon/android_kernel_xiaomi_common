@@ -12,6 +12,306 @@
 #include "cam_common_util.h"
 #include "camera_main.h"
 
+#ifdef CONFIG_CAMERA_I2CFLASH
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/gpio.h>
+#endif
+
+#ifdef CONFIG_CAMERA_I2CFLASH
+#define I2C_FLASH_NUM 4
+#define I2C_FLASH_SLOT_INDEX 7
+#define I2C_FLASH_AUX_SLOT_INDEX 6
+#define I2C_FLASH_ADDR 0xc6
+#define I2C_FLASH_MAX_TORCH_CURRENT 1500
+#define I2C_FLASH_MIN_TORCH_CURRENT 0
+#define I2C_FLASH_GPIO_EN 356
+#define I2C_FLASH_LED1_REG_ADDR 0x05
+#define I2C_FLASH_LED2_REG_ADDR 0x06
+
+static struct kobject *i2c_flash_kobj;
+static int i2c_flash_brightness[I2C_FLASH_NUM];
+static int i2c_flash_switch;
+static int i2c_flash_status;
+
+struct cam_flash_ctrl *fctrl_flash;
+struct cam_flash_ctrl *fctrl_flash_aux;
+
+static int cam_flash_i2c_driver_powerup()
+{
+	int ret;
+
+	ret = gpio_request_one(I2C_FLASH_GPIO_EN, 0, "flash_en");
+	if (ret < 0) {
+		CAM_ERR(CAM_FLASH, "i2c flash kobj gpio_request_one failed ");
+		return ret;
+	}
+	gpio_direction_output(I2C_FLASH_GPIO_EN,1);
+	usleep_range(1000, 2000);
+
+	ret = camera_io_init(&(fctrl_flash->io_master_info));
+	if (ret) {
+		CAM_ERR(CAM_FLASH, "i2c flash kobj fctrl_flash cci_init failed: rc: %d", ret);
+		goto release_gpio;
+	}
+	ret = camera_io_init(&(fctrl_flash_aux->io_master_info));
+	if (ret) {
+		CAM_ERR(CAM_FLASH, "i2c flash kobj fctrl_flash_aux cci_init failed: rc: %d", ret);
+		goto release_i2c;
+	}
+
+	CAM_INFO(CAM_FLASH, "i2c flash kobj powerup %d", ret);
+
+	usleep_range(1000, 2000);
+	return ret;
+
+release_i2c:
+	camera_io_release(&(fctrl_flash->io_master_info));
+release_gpio:
+	gpio_direction_output(I2C_FLASH_GPIO_EN,0);
+	gpio_free(I2C_FLASH_GPIO_EN);
+	return ret;
+}
+
+static int cam_flash_i2c_driver_powerdown()
+{
+	int ret = 0;
+
+	camera_io_release(&(fctrl_flash->io_master_info));
+	camera_io_release(&(fctrl_flash_aux->io_master_info));
+	usleep_range(1000, 2000);
+	gpio_direction_output(I2C_FLASH_GPIO_EN,0);
+	gpio_free(I2C_FLASH_GPIO_EN);
+	usleep_range(1000, 2000);
+
+	CAM_INFO(CAM_FLASH, "i2c flash kobj powerdown %d", ret);
+
+	return ret;
+}
+
+static int cam_flash_i2c_driver_set_torch(int* led_brightness, int led_switch)
+{
+	int ret;
+
+	struct cam_sensor_i2c_reg_array i2c_flash_reg_setting[3] = {
+		{0x05,0x23,0,0},
+		{0x06,0x23,0,0},
+		{0x01,0x00,0,0},
+	};
+	struct cam_sensor_i2c_reg_setting i2c_flash_settings = {
+		.reg_setting = i2c_flash_reg_setting,
+		.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE,
+		.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE,
+		.size = 3,
+		.delay = 0,
+	};
+
+	i2c_flash_reg_setting[0].reg_data = led_brightness[0];
+	i2c_flash_reg_setting[1].reg_data = led_brightness[1];
+	i2c_flash_reg_setting[2].reg_data = (led_switch & 0x03) | 0x08;
+	ret = camera_io_dev_write((&(fctrl_flash->io_master_info)),
+		&(i2c_flash_settings));
+	if (ret < 0) {
+		CAM_ERR(CAM_FLASH, "i2c flash kobj Failed to random write I2C settings: %d", ret);
+		return ret;
+	}
+
+	i2c_flash_reg_setting[0].reg_data = led_brightness[2];
+	i2c_flash_reg_setting[1].reg_data = led_brightness[3];
+	i2c_flash_reg_setting[2].reg_data = ((led_switch & 0x0C) >> 2) | 0x08;
+	ret = camera_io_dev_write((&(fctrl_flash_aux->io_master_info)),
+		&(i2c_flash_settings));
+	if (ret < 0) {
+		CAM_ERR(CAM_FLASH, "i2c flash kobj Failed to random write I2C settings: %d", ret);
+		return ret;
+	}
+
+	CAM_INFO(CAM_FLASH, "i2c flash kobj set_torch %d %d", led_brightness, led_switch);
+
+	usleep_range(1000, 2000);
+	return ret;
+}
+
+
+static ssize_t led_brightness_show(struct kobject *kobj, struct kobj_attribute *attr,
+			char *buf)
+{
+	return sprintf(buf, "%d:%d:%d:%d\n", i2c_flash_brightness[0], i2c_flash_brightness[1],
+		i2c_flash_brightness[2], i2c_flash_brightness[3]);
+}
+
+static ssize_t led_brightness_store(struct kobject *kobj, struct kobj_attribute *attr,
+			 const char *buf, size_t count)
+{
+	int ret;
+	int i;
+	int brightness[I2C_FLASH_NUM];
+
+	CAM_INFO(CAM_FLASH, "i2c flash kobj echo buf %s", buf);
+	ret = sscanf(buf, "%d:%d:%d:%d", &brightness[0], &brightness[1],
+		&brightness[2], &brightness[3]);
+	CAM_INFO(CAM_FLASH, "i2c flash kobj sscanf ret %d", ret);
+
+	if (ret == I2C_FLASH_NUM) {
+		i2c_flash_brightness[0] = brightness[0];
+		i2c_flash_brightness[1] = brightness[1];
+		i2c_flash_brightness[2] = brightness[2];
+		i2c_flash_brightness[3] = brightness[3];
+	}
+
+	for (i = 0;i < I2C_FLASH_NUM; i++) {
+		if (I2C_FLASH_MAX_TORCH_CURRENT < i2c_flash_brightness[i]) {
+			i2c_flash_brightness[i] = I2C_FLASH_MAX_TORCH_CURRENT;
+		}
+		if (I2C_FLASH_MIN_TORCH_CURRENT > i2c_flash_brightness[i]) {
+			i2c_flash_brightness[i] = I2C_FLASH_MIN_TORCH_CURRENT;
+		}
+		CAM_INFO(CAM_FLASH, "i2c flash kobj set brightness[%d] to %d", i, i2c_flash_brightness[i]);
+	}
+
+	return count;
+}
+
+static struct kobj_attribute led_brightness_attribute =
+	__ATTR(led_brightness, 0664, led_brightness_show, led_brightness_store);
+
+static ssize_t led_switch_show(struct kobject *kobj, struct kobj_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "%d\n", i2c_flash_switch);
+}
+
+static ssize_t led_switch_store(struct kobject *kobj, struct kobj_attribute *attr,
+	const char *buf, size_t count)
+{
+	int ret;
+
+	ret = kstrtoint(buf, 10, &i2c_flash_switch);
+	if (ret < 0) {
+		return ret;
+	}
+
+	CAM_INFO(CAM_FLASH, "i2c flash kobj set switch to %d", i2c_flash_switch);
+
+	if ((NULL != fctrl_flash) && (NULL != fctrl_flash_aux)) {
+
+		fctrl_flash->io_master_info.client->addr = I2C_FLASH_ADDR;
+		fctrl_flash_aux->io_master_info.client->addr = I2C_FLASH_ADDR;
+
+
+		if ((0x01 <= i2c_flash_switch) && ( 0x0F >= i2c_flash_switch) && (0 == i2c_flash_status)) {
+
+			ret = cam_flash_i2c_driver_powerup();
+			if (ret < 0) {
+				CAM_ERR(CAM_FLASH, "i2c flash kobj Failed to powerup: %d", ret);
+				return ret;
+			}
+
+			ret = cam_flash_i2c_driver_set_torch(i2c_flash_brightness, i2c_flash_switch);
+			if (ret < 0) {
+				CAM_ERR(CAM_FLASH, "i2c flash kobj Failed to set_torch: %d", ret);
+				return ret;
+			}
+
+			i2c_flash_status = 1;
+		}else if ((0 == i2c_flash_switch) && (1 == i2c_flash_status)) {
+
+			ret = cam_flash_i2c_driver_set_torch(i2c_flash_brightness, i2c_flash_switch);
+			if (ret < 0) {
+				CAM_ERR(CAM_FLASH, "i2c flash kobj Failed to set_torch: %d", ret);
+				return ret;
+			}
+
+			ret = cam_flash_i2c_driver_powerdown();
+			if (ret < 0) {
+				CAM_ERR(CAM_FLASH, "i2c flash kobj Failed to powerdown: %d", ret);
+				return ret;
+			}
+
+			i2c_flash_status = 0;
+		}else {
+			CAM_ERR(CAM_FLASH, "i2c flash kobj error cmd i2c_flash_switch %d ", i2c_flash_switch);
+		}
+
+	}
+
+	return count;
+}
+
+static struct kobj_attribute led_switch_attribute =
+	__ATTR(led_switch, 0664, led_switch_show, led_switch_store);
+
+static struct attribute *attrs[] = {
+	&led_brightness_attribute.attr,
+	&led_switch_attribute.attr,
+	NULL,   /* need to NULL terminate the list of attributes */
+};
+
+static struct attribute_group attr_group = {
+	.attrs = attrs,
+};
+
+static int cam_flash_i2c_driver_init_kobject(struct cam_flash_ctrl *fctrl)
+{
+	int retval = 0;
+
+	if (NULL != fctrl) {
+		CAM_INFO(CAM_FLASH, "i2c flash kobj init flash:%s index %d i2c_flash_kobj %p",
+			fctrl->io_master_info.client->name,
+			fctrl->soc_info.index,
+			i2c_flash_kobj);
+
+		if (I2C_FLASH_SLOT_INDEX == fctrl->soc_info.index) {
+			fctrl_flash = fctrl;
+		}else if (I2C_FLASH_AUX_SLOT_INDEX == fctrl->soc_info.index) {
+			fctrl_flash_aux = fctrl;
+		}
+	}
+
+	if (NULL != i2c_flash_kobj) {
+		return retval;
+	}
+
+	i2c_flash_kobj = kobject_create_and_add(FLASH_DRIVER_I2C, kernel_kobj);
+	if (!i2c_flash_kobj) {
+		return -ENOMEM;
+	}
+
+	retval = sysfs_create_group(i2c_flash_kobj, &attr_group);
+	if (retval) {
+	   kobject_put(i2c_flash_kobj);
+	}
+
+	CAM_INFO(CAM_FLASH, "i2c flash kobj init rc %d  i2c_flash_kobj %p",retval, i2c_flash_kobj);
+
+	return retval;
+}
+
+static void cam_flash_i2c_driver_deinit_kobject()
+{
+	CAM_INFO(CAM_FLASH, "i2c flash kobj deinit i2c_flash_kobj %p",i2c_flash_kobj);
+	if (NULL != i2c_flash_kobj) {
+		kobject_put(i2c_flash_kobj);
+	}
+}
+void update_i2c_flash_brightness(struct i2c_settings_list *i2c_list)
+{
+	int i = 0;
+	for (i = 0; i < i2c_list->i2c_settings.size; i++) {
+		if (I2C_FLASH_LED1_REG_ADDR == i2c_list->i2c_settings.reg_setting[i].reg_addr) {
+			i2c_flash_brightness[0] = i2c_list->i2c_settings.reg_setting[i].reg_data;
+			i2c_flash_brightness[2] = i2c_list->i2c_settings.reg_setting[i].reg_data;
+		}
+		else if (I2C_FLASH_LED2_REG_ADDR == i2c_list->i2c_settings.reg_setting[i].reg_addr) {
+			i2c_flash_brightness[1] = i2c_list->i2c_settings.reg_setting[i].reg_data;
+			i2c_flash_brightness[3] = i2c_list->i2c_settings.reg_setting[i].reg_data;
+		}
+	}
+	CAM_INFO(CAM_FLASH, "%d:%d:%d:%d\n", i2c_flash_brightness[0], i2c_flash_brightness[1],
+		i2c_flash_brightness[2], i2c_flash_brightness[3]);
+}
+#endif
+
 static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		void *arg, struct cam_flash_private_soc *soc_private)
 {
@@ -672,6 +972,8 @@ static int cam_flash_i2c_component_bind(struct device *dev,
 	struct cam_hw_soc_info *soc_info = NULL;
 
 	client = container_of(dev, struct i2c_client, dev);
+	CAM_INFO(CAM_FLASH, "cam_flash_i2c_driver_probe E rc: %d", rc);
+
 	if (client == NULL) {
 		CAM_ERR(CAM_FLASH, "Invalid Args client: %pK",
 			client);
@@ -774,6 +1076,12 @@ static int cam_flash_i2c_component_bind(struct device *dev,
 	mutex_init(&(fctrl->flash_mutex));
 	fctrl->flash_state = CAM_FLASH_STATE_INIT;
 
+#ifdef CONFIG_CAMERA_I2CFLASH
+	cam_flash_i2c_driver_init_kobject(fctrl);
+#endif
+
+	CAM_INFO(CAM_FLASH, "cam_flash_i2c_driver_probe X rc: %d", rc);
+
 	return rc;
 
 unreg_subdev:
@@ -798,6 +1106,10 @@ static void cam_flash_i2c_component_unbind(struct device *dev,
 	}
 
 	fctrl = i2c_get_clientdata(client);
+
+#ifdef CONFIG_CAMERA_I2CFLASH
+	cam_flash_i2c_driver_deinit_kobject();
+#endif
 	/* Handle I2C Devices */
 	if (!fctrl) {
 		CAM_ERR(CAM_FLASH, "Flash device is NULL");
@@ -833,7 +1145,7 @@ static int32_t cam_flash_i2c_driver_probe(struct i2c_client *client,
 		return -EFAULT;
 	}
 
-	CAM_DBG(CAM_FLASH, "Adding sensor flash component");
+	CAM_INFO(CAM_FLASH, "Adding sensor flash component");
 	rc = component_add(&client->dev, &cam_flash_i2c_component_ops);
 	if (rc)
 		CAM_ERR(CAM_FLASH, "failed to add component rc: %d", rc);
@@ -894,9 +1206,13 @@ int32_t cam_flash_init_module(void)
 		return rc;
 	}
 
+	CAM_INFO(CAM_FLASH, "platform_driver_register X rc: %d", rc);
+
 	rc = i2c_add_driver(&cam_flash_i2c_driver);
 	if (rc < 0)
 		CAM_ERR(CAM_FLASH, "i2c_add_driver failed rc: %d", rc);
+
+	CAM_INFO(CAM_FLASH, "i2c_add_driver X rc: %d", rc);
 
 	return rc;
 }
