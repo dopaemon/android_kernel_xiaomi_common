@@ -431,6 +431,7 @@ struct cam_req_mgr_connected_device {
  * @wq_congestion        : Indicates if WQ congestion is detected or not
  * @last_internal_applied_idx : Recode the last applied idx by internal trigger
  * @last_external_applied_idx : Recode the last applied idx by external trigger
+ * @cont_empty_slots     : Continuous empty slots
  */
 struct cam_req_mgr_core_link {
 	int32_t                              link_hdl;
@@ -478,6 +479,7 @@ struct cam_req_mgr_core_link {
 	int32_t                              last_internal_applied_idx;
 	int32_t                              last_external_applied_idx;
 #endif
+	uint32_t                             cont_empty_slots;
 };
 
 /**
