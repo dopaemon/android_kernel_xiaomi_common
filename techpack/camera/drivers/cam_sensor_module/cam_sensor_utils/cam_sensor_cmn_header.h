@@ -250,6 +250,7 @@ struct i2c_data_settings {
 	struct i2c_settings_array streamon_settings;
 	struct i2c_settings_array streamoff_settings;
 	struct i2c_settings_array read_settings;
+	struct i2c_settings_array parklens_settings; //xiaomi add
 	struct i2c_settings_array *per_frame;
 	struct i2c_settings_array *frame_skip;
 	struct i2c_settings_array reg_bank_unlock_settings;
