@@ -37,7 +37,7 @@ static int i2c_flash_status;
 struct cam_flash_ctrl *fctrl_flash;
 struct cam_flash_ctrl *fctrl_flash_aux;
 
-static int cam_flash_i2c_driver_powerup()
+static int cam_flash_i2c_driver_powerup(void)
 {
 	int ret;
 
@@ -73,7 +73,7 @@ release_gpio:
 	return ret;
 }
 
-static int cam_flash_i2c_driver_powerdown()
+static int cam_flash_i2c_driver_powerdown(void)
 {
 	int ret = 0;
 
@@ -287,7 +287,7 @@ static int cam_flash_i2c_driver_init_kobject(struct cam_flash_ctrl *fctrl)
 	return retval;
 }
 
-static void cam_flash_i2c_driver_deinit_kobject()
+static void cam_flash_i2c_driver_deinit_kobject(void)
 {
 	CAM_INFO(CAM_FLASH, "i2c flash kobj deinit i2c_flash_kobj %p",i2c_flash_kobj);
 	if (NULL != i2c_flash_kobj) {
