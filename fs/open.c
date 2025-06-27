@@ -415,7 +415,7 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
 	const struct cred *old_cred = NULL;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_SU
-	if (susfs_is_sus_su_hooks_enabled) {
+	if (likely(susfs_is_sus_su_hooks_enabled)) {
 		ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 	}
 #endif

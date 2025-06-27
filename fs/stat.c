@@ -206,7 +206,7 @@ static int vfs_statx(int dfd, const char __user *filename, int flags,
 #endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_SU
-	if (susfs_is_sus_su_hooks_enabled) {
+	if (likely(susfs_is_sus_su_hooks_enabled)) {
 		ksu_handle_stat(&dfd, &filename, &flags);
 	}
 #endif
