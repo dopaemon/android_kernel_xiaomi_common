@@ -700,7 +700,13 @@ typedef  enum  {
     WMI_SERVICE_CTRL_PATH_STA_DAR_STATS_SUPPORT = 441, /* FW supports DAR stats reporting for STA mode */
     WMI_SERVICE_APF_DATA_OFFLOAD_SUPPORT_ENABLED = 442, /* Indicates FW support for APFv6 handling offloads and disable QC data offloads */
     WMI_SERVICE_PER_VDEV_TWT_RESP_DISABLE_SUPPORT = 443, /* FW supports vdev level TWT responder disable */
-
+    WMI_SERVICE_VENDOR_OUI_ACTION_V2 = 444, /* FW supports vendor OUI action version 2 */
+    WMI_SERVICE_HW_BLACKLIST_CHAN_SUPPORT = 445, /* Indicates FW support for computing and sending the HW channel blacklist for the current country and applicable power mode */
+    WMI_SERVICE_NDP_DFS_CHANNEL_SUPPORT = 446, /* FW supports forming NDP on DFS channels */
+    WMI_SERVICE_WFD_R2 = 447, /* Indicates FW supports WiFi-Direct R2 */
+    WMI_SERVICE_STA_MLO_RCFG_SUPPORT = 448, /* FW supports STA ML reconfig op */
+    WMI_SERVICE_PDEV_SUSPEND_EVENT_SUPPORT = 449, /* FW supports PDEV_SUSPEND event */
+    WMI_SERVICE_PCC_MODE = 450, /* Indicates FW support for PCC (P2P Connection Compatibility) Mode */
 
     WMI_MAX_EXT2_SERVICE
 
