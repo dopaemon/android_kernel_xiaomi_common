@@ -3,6 +3,8 @@
 # Makefile for misc devices that really don't fit anywhere else.
 #
 
+ccflags-$(CONFIG_MI_HARDWARE_ID) += -I$(srctree)/drivers/misc/hwid/
+
 obj-$(CONFIG_IBM_ASM)		+= ibmasm/
 obj-$(CONFIG_IBMVMC)		+= ibmvmc.o
 obj-$(CONFIG_AD525X_DPOT)	+= ad525x_dpot.o
@@ -34,6 +36,7 @@ obj-$(CONFIG_SENSORS_TSL2550)	+= tsl2550.o
 obj-$(CONFIG_DS1682)		+= ds1682.o
 obj-$(CONFIG_C2PORT)		+= c2port/
 obj-$(CONFIG_HMC6352)		+= hmc6352.o
+obj-$(CONFIG_RTIMD_I2C)		+= rtimd-i2c/
 obj-y				+= eeprom/
 obj-y				+= cb710/
 obj-$(CONFIG_VMWARE_BALLOON)	+= vmw_balloon.o
@@ -48,9 +51,11 @@ obj-$(CONFIG_SRAM)		+= sram.o
 obj-$(CONFIG_SRAM_EXEC)		+= sram-exec.o
 obj-$(CONFIG_GENWQE)		+= genwqe/
 obj-$(CONFIG_ECHO)		+= echo/
+obj-$(CONFIG_HDCP_QSEECOM)	+= hdcp/
 obj-$(CONFIG_CXL_BASE)		+= cxl/
 obj-$(CONFIG_PCI_ENDPOINT_TEST)	+= pci_endpoint_test.o
 obj-$(CONFIG_OCXL)		+= ocxl/
+obj-$(CONFIG_ISL97900_LED)	+= isl97900_led/
 obj-y				+= cardreader/
 obj-$(CONFIG_PVPANIC)   	+= pvpanic.o
 obj-$(CONFIG_HABANA_AI)		+= habanalabs/
@@ -58,3 +63,11 @@ obj-$(CONFIG_UACCE)		+= uacce/
 obj-$(CONFIG_XILINX_SDFEC)	+= xilinx_sdfec.o
 obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
+obj-$(CONFIG_QSEECOM)		+= qseecom-mod.o
+qseecom-mod-$(CONFIG_QSEECOM)  := qseecom.o
+qseecom-mod-$(CONFIG_COMPAT)	+= compat_qseecom.o
+obj-$(CONFIG_WIGIG_SENSING_SPI)	+= wigig_sensing.o
+obj-$(CONFIG_KINECTICS_XR_NORDIC) += kxrctrl/
+obj-y				+= hwid/
+wl2866d_ldo-y			+= wl2866d.o
+obj-$(CONFIG_LDO_WL2866D)	+= wl2866d_ldo.o

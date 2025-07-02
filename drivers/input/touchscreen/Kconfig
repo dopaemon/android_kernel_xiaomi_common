@@ -1335,4 +1335,22 @@ config TOUCHSCREEN_ZINITIX
 	  To compile this driver as a module, choose M here: the
 	  module will be called zinitix.
 
+source "drivers/input/touchscreen/st/Kconfig"
+
+source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+
+source "drivers/input/touchscreen/fts_spi/Kconfig"
+
+source "drivers/input/touchscreen/fst2/Kconfig"
+
+source "drivers/input/touchscreen/xiaomi/Kconfig"
+
+source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
+
+source "drivers/input/touchscreen/nt36xxx/Kconfig"
+
+source "drivers/input/touchscreen/goodix_berlin_driver/Kconfig"
+
+source "drivers/input/touchscreen/synaptics_s3907/Kconfig"
+
 endif

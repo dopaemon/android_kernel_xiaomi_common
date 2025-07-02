@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2021 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -26,10 +26,12 @@
 #include <linux/amba/bus.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
+#include <linux/of.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
+#include <linux/suspend.h>
 
 #include <asm/barrier.h>
 #include <asm/sections.h>
@@ -1957,7 +1959,8 @@ static int etm4_probe(struct device *dev, void __iomem *base, u32 etm_pid)
 		type_name = "etm";
 	}
 
-	desc.name = devm_kasprintf(dev, GFP_KERNEL,
+	if (of_property_read_string(dev->of_node, "coresight-name", &desc.name))
+		desc.name = devm_kasprintf(dev, GFP_KERNEL,
 				   "%s%d", type_name, drvdata->cpu);
 	if (!desc.name)
 		return -ENOMEM;
@@ -2040,6 +2043,24 @@ static int etm4_probe_platform_dev(struct platform_device *pdev)
 
 	return ret;
 }
+
+
+#ifdef CONFIG_HIBERNATION
+static int etm_freeze(struct device *dev)
+{
+	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_disable(drvdata->csdev);
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops etm_dev_pm_ops = {
+#ifdef CONFIG_HIBERNATION
+	.freeze  = etm_freeze,
+#endif
+};
 
 static struct amba_cs_uci_id uci_id_etm4[] = {
 	{
@@ -2126,6 +2147,7 @@ static struct amba_driver etm4x_amba_driver = {
 		.name   = "coresight-etm4x",
 		.owner  = THIS_MODULE,
 		.suppress_bind_attrs = true,
+		.pm	= &etm_dev_pm_ops,
 	},
 	.probe		= etm4_probe_amba,
 	.remove         = etm4_remove_amba,
