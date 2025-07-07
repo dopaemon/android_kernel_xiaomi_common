@@ -2253,6 +2253,8 @@ static void default_options(struct f2fs_sb_info *sbi, bool remount)
 	F2FS_OPTION(sbi).errors = MOUNT_ERRORS_CONTINUE;
 	F2FS_OPTION(sbi).resizable_tail_secno = 0;
 
+	set_opt(sbi, ATGC);
+	set_opt(sbi, GC_MERGE);
 	set_opt(sbi, INLINE_XATTR);
 	set_opt(sbi, INLINE_DATA);
 	set_opt(sbi, INLINE_DENTRY);
