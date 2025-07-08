@@ -99,8 +99,6 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 	if (sg_policy->work_in_progress)
 		return true;
 
-	delta_ns = time - sg_policy->last_freq_update_time;
-
 	/*
 	 * When frequency-invariant utilization tracking is present, there's no
 	 * rate limit when increasing frequency. Therefore, the next frequency
