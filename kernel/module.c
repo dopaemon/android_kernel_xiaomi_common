@@ -3567,7 +3567,7 @@ int __weak module_frob_arch_sections(Elf_Ehdr *hdr,
 static char *module_blacklist;
 static char *custom_module_blacklist[] = {
 #if IS_BUILTIN(CONFIG_CRYPTO_LZO)
-    "lzo", "lzo_rle",
+    "lzo", "lzo_rle", "lz4kd", "lz4k", "zstd",
 #endif
 #if IS_BUILTIN(CONFIG_ZRAM)
     "zram",
