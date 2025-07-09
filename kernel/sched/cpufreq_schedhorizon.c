@@ -12,9 +12,11 @@
 
 #include <linux/sched/cpufreq.h>
 #include <trace/events/power.h>
+#include <linux/sched/cpufreq_schedhorizon.h>
 
 static unsigned int default_efficient_freq[] = {0};
 static u64 default_up_delay[] = {0};
+static u64 restrict_escape_until = 0;
 
 struct sugov_tunables {
 	struct gov_attr_set	attr_set;
@@ -71,6 +73,11 @@ struct sugov_cpu {
 };
 
 static DEFINE_PER_CPU(struct sugov_cpu, sugov_cpu);
+
+void restrict_escape_kick(u64 duration_ms)
+{
+	restrict_escape_until = ktime_get() + duration_ms * NSEC_PER_MSEC;
+}
 
 static inline int match_nearest_efficient_step(int freq, int maxstep, int *freq_table)
 {
@@ -590,7 +597,7 @@ static u64 *resolve_data_delay (const char *buf, int *num_ret,size_t count)
 		num++;
 
 	output = kzalloc(num * sizeof(u64), GFP_KERNEL);
-	
+
 	cp = buf;
 	i = 0;
 	pr_err("Before while");
