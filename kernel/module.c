@@ -3572,6 +3572,12 @@ static char *custom_module_blacklist[] = {
 #if IS_BUILTIN(CONFIG_ZRAM)
     "zram",
 #endif
+#if IS_BUILTIN(CONFIG_OPLUS_FEATURE_PERFORMANCE_MM)
+    /* OnePlus Feature */
+    "oplus_bsp_kshrink_slabd", "oplus_bsp_pcppages_opt", "oplus_bsp_dump_tasks_mm", "oplus_bsp_gloom", "oplus_bsp_hybridswap_zram",
+    "hybridmain", "hybridswapd", "hybridswap", "crypto_zstdn", "oplus_bsp_memleak_detect", "oplus_bsp_mapped_protect", "oplus_bsp_mm_osvelte",
+    "oplus_bsp_zram_opt", "oplus_bsp_process_reclaim",
+#endif
 #if IS_BUILTIN(CONFIG_ZSMALLOC)
     "zsmalloc",
 #endif
