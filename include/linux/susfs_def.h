@@ -60,6 +60,8 @@
 
 #define TIF_NON_ROOT_USER_APP_PROC 33 // thread_info->flags is unsigned long :D
 
+#define TASK_STRUCT_NON_ROOT_USER_APP_PROC BIT(24)
+
 #define AS_FLAGS_ANDROID_DATA_ROOT_DIR 28
 #define AS_FLAGS_SDCARD_ROOT_DIR 29
 #define BIT_ANDROID_DATA_ROOT_DIR BIT(28)
