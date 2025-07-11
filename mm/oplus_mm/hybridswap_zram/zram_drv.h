@@ -101,7 +101,7 @@ struct zram_stats {
 #endif
 };
 
-#ifdef CONFIG_ZRAM_MULTI_COMP
+#ifdef CONFIG_HYBRIDSWAP_ZRAM_MULTI_COMP
 #define ZRAM_PRIMARY_COMP	0U
 #define ZRAM_SECONDARY_COMP	1U
 #define ZRAM_MAX_COMPS	4U
