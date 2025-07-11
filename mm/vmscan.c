@@ -195,6 +195,7 @@ struct scan_control {
 #define prefetchw_prev_lru_page(_page, _base, _field) do { } while (0)
 #endif
 
+int sysctl_workingset_protection __read_mostly = 0;
 u8 sysctl_anon_min_ratio  __read_mostly = CONFIG_ANON_MIN_RATIO;
 u8 sysctl_clean_low_ratio __read_mostly = CONFIG_CLEAN_LOW_RATIO;
 u8 sysctl_clean_min_ratio __read_mostly = CONFIG_CLEAN_MIN_RATIO;
@@ -2533,7 +2534,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	 * Force-scan anon if clean file pages is under vm.clean_low_ratio
 	 * or vm.clean_min_ratio.
 	 */
-	if (sc->clean_below_low || sc->clean_below_min) {
+	if (sysctl_workingset_protection && (sc->clean_below_low || sc->clean_below_min)) {
 		scan_balance = SCAN_ANON;
 		goto out;
 	}
@@ -2687,23 +2688,16 @@ out:
 			BUG();
 		}
 
+
 		/*
 		 * Hard protection of the working set.
+		 * Don't reclaim anon/file pages when the amount is
+		 * below the watermark of the same type.
 		 */
-		if (file) {
-			/*
-			 * Don't reclaim file pages when the amount of
-			 * clean file pages is below vm.clean_min_ratio.
-			 */
-			if (sc->clean_below_min)
+		if (sysctl_workingset_protection) {
+			if (file ? sc->clean_below_min : sc->anon_below_min) {
 				scan = 0;
-		} else {
-			/*
-			 * Don't reclaim anonymous pages when their
-			 * amount is below vm.anon_min_ratio.
-			 */
-			if (sc->anon_below_min)
-				scan = 0;
+			}
 		}
 
 		nr[lru] = scan;
@@ -5672,6 +5666,14 @@ static void prepare_workingset_protection(pg_data_t *pgdat, struct scan_control 
 {
 	unsigned long node_mem_total;
 	struct sysinfo i;
+
+	if (!(sysctl_workingset_protection)) {
+		sc->anon_below_min = 0;
+		sc->clean_below_low = 0;
+		sc->clean_below_min = 0;
+		return;
+	}
+
 	if (likely(sysctl_anon_min_ratio  ||
 	           sysctl_clean_low_ratio ||
 		       sysctl_clean_min_ratio)) {
@@ -5832,7 +5834,9 @@ again:
 
 	prepare_scan_count(pgdat, sc);
 
-	prepare_workingset_protection(pgdat, sc);
+	if (sysctl_workingset_protection) {
+		prepare_workingset_protection(pgdat, sc);
+	}
 
 	shrink_node_memcgs(pgdat, sc);
 
@@ -5921,7 +5925,10 @@ again:
 	if (reclaimable)
 		pgdat->kswapd_failures = 0;
 
-	if (sc->clean_below_min && pgdat->kswapd_failures && !sc->priority) {
+	if (sysctl_workingset_protection &&
+	    sc->clean_below_min &&
+	    pgdat->kswapd_failures &&
+	    !sc->priority) {
 		invoke_oom(sc);
 	}
 }
