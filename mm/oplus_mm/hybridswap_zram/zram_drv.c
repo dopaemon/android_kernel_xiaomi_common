@@ -1342,18 +1342,6 @@ static int zram_read_from_zspool(struct zram *zram, struct page *page,
 	u32 prio;
 	int ret;
 
-#ifdef CONFIG_HYBRIDSWAP_CORE
-	if (likely(!bio)) {
-		ret = hybridswap_fault_out(zram, index);
-		if (unlikely(ret)) {
-			pr_err("search in hybridswap failed! err=%d, page=%u\n",
-					ret, index);
-			zram_slot_unlock(zram, index);
-			return ret;
-		}
-	}
-#endif
-
 	handle = zram_get_handle(zram, index);
 	if (!handle || zram_test_flag(zram, index, ZRAM_SAME)) {
 		unsigned long value;
@@ -1396,6 +1384,19 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 	int ret;
 
 	zram_slot_lock(zram, index);
+
+#ifdef CONFIG_HYBRIDSWAP_CORE
+        if (likely(!bio)) {
+                ret = hybridswap_fault_out(zram, index);
+                if (unlikely(ret)) {
+                        pr_err("search in hybridswap failed! err=%d, page=%u\n",
+                                        ret, index);
+                        zram_slot_unlock(zram, index);
+                        return ret;
+                }
+        }
+#endif
+
 	if (!zram_test_flag(zram, index, ZRAM_WB)) {
 		/* Slot should be locked through out the function call */
 		ret = zram_read_from_zspool(zram, page, index);
