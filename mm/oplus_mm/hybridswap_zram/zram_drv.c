@@ -1016,7 +1016,7 @@ static __maybe_unused int __comp_algorithm_store(struct zram *zram, u32 prio, co
 	return 0;
 }
 
-static ssize_t comp_algorithm_show(struct device *dev,
+static ssize_t __maybe_unused comp_algorithm_show(struct device *dev,
 				   struct device_attribute *attr,
 				   char *buf)
 {
@@ -1025,7 +1025,7 @@ static ssize_t comp_algorithm_show(struct device *dev,
 	return __comp_algorithm_show(zram, ZRAM_PRIMARY_COMP, buf);
 }
 
-static ssize_t comp_algorithm_store(struct device *dev,
+static ssize_t __maybe_unused comp_algorithm_store(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf,
 				    size_t len)
