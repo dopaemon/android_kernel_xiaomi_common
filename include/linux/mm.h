@@ -213,6 +213,7 @@ static inline void __mm_zero_struct_page(struct page *page)
 
 extern int sysctl_max_map_count;
 
+extern int sysctl_workingset_protection;
 extern u8 sysctl_anon_min_ratio;
 extern u8 sysctl_clean_low_ratio;
 extern u8 sysctl_clean_min_ratio;
