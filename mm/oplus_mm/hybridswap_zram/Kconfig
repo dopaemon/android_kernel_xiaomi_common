@@ -14,6 +14,21 @@ config HYBRIDSWAP_ZRAM
 
 	  See Documentation/admin-guide/blockdev/zram.rst for more information.
 
+config HYBRIDSWAP_ZRAM_DISKSIZE
+        int "ZRAM disk size for HybridSwap (in GB)"
+        depends on HYBRIDSWAP_ZRAM && !ZRAM
+        default 12
+        help
+	  This option sets the disk size of the zram device used by HybridSwap.
+	  The value is specified in gigabytes.
+
+	  The configured size determines how much swap space will be allocated
+	  for the zram device. If too small, swapping performance may degrade.
+	  If too large, it may waste memory reserved for zram.
+
+	  Admin can verify or adjust this setting via HybridSwap initialization
+	  parameters or via sysfs if supported by the implementation.
+
 config HYBRIDSWAP_ZRAM_WRITEBACK
        bool "Write back incompressible or idle page to backing device"
        depends on HYBRIDSWAP_ZRAM && !ZRAM_WRITEBACK
