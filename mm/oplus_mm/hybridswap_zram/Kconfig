@@ -16,7 +16,8 @@ config HYBRIDSWAP_ZRAM
 
 config HYBRIDSWAP_ZRAM_WRITEBACK
        bool "Write back incompressible or idle page to backing device"
-       depends on HYBRIDSWAP_ZRAM
+       depends on HYBRIDSWAP_ZRAM && !ZRAM_WRITEBACK
+       default y
        help
 	 With incompressible page, there is no memory saving to keep it
 	 in memory. Instead, write it out to backing device.
@@ -76,7 +77,7 @@ config HYBRIDSWAP_CORE
 
 config ZRAM_DEFAULT_COMP_ALGORITHM
 	string "Default ZRAM algorithm"
-	default "lz4k"
+	default "lz4"
 
 config ZRAM_ENTROPY
 	bool "Use entropy optimization for zram"
@@ -99,7 +100,7 @@ config ZRAM_ENTROPY_THRESHOLD
 
 config HYBRIDSWAP_ZRAM_MULTI_COMP
 	bool "Enable multiple compression streams"
-	depends on HYBRIDSWAP_ZRAM && !ZRAM
+	depends on HYBRIDSWAP_ZRAM && !ZRAM && !ZRAM_MULTI_COMP
 	default y
 	help
 	  This will enable multi-compression streams, so that ZRAM can
