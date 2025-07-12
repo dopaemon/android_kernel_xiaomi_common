@@ -2192,7 +2192,7 @@ static ssize_t disksize_store(struct device *dev,
 	int err;
 	u32 prio;
 
-	disksize =  (u64)12 * SZ_1G;
+	disksize =  (u64)CONFIG_HYBRIDSWAP_ZRAM_DISKSIZE * SZ_1G;
 	if (!disksize)
 		return -EINVAL;
 
