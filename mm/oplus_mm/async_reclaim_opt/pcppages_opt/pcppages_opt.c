@@ -37,8 +37,6 @@ out:
 
 static void unregister_dstate_opt_vendor_hooks(void)
 {
-	unregister_trace_android_vh_drain_all_pages_bypass(should_drain_all_pages, NULL);
-
 	return;
 }
 
