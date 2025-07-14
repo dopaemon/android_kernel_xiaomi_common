@@ -178,8 +178,6 @@ out:
 
 static void unregister_shrink_async_vendor_hooks(void)
 {
-	unregister_trace_android_vh_shrink_slab_bypass(should_shrink_async, NULL);
-
 	return;
 }
 
