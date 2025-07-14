@@ -129,9 +129,6 @@ out:
 
 static void unregister_zram_opt_vendor_hooks(void)
 {
-	unregister_trace_android_vh_tune_swappiness(zo_set_swappiness, NULL);
-	unregister_trace_android_vh_tune_inactive_ratio(zo_set_inactive_ratio, NULL);
-
 	return;
 }
 
