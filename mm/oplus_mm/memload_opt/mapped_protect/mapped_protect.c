@@ -36,8 +36,6 @@ out:
 
 static void unregister_mapped_protect_vendor_hooks(void)
 {
-	unregister_trace_android_vh_page_referenced_check_bypass(should_skip_page_referenced, NULL);
-
 	return;
 }
 
