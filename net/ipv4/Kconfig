@@ -696,6 +696,14 @@ config TCP_CONG_BBR3
 	  provide a delay signal. It requires pacing, using either TCP internal
 	  pacing or the fq ("Fair Queue") pacing packet scheduler.
 
+config TCP_CONG_BRUTAL
+	tristate "TCP Brutal"
+	default y
+	help
+	  TCP Brutal is a fixed-rate congestion control algorithm used by
+	  Hysteria. It sends at the rate requested by the application through
+	  setsockopt() and compensates for packet loss instead of backing off.
+
 choice
 	prompt "Default TCP congestion control"
 	default DEFAULT_CUBIC
