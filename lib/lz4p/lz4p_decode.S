@@ -251,7 +251,6 @@
 SYM_FUNC_START(_lz4_decompress_asm)
 	lz4_decompress_asm_generic
 SYM_FUNC_END(_lz4_decompress_asm)
-EXPORT_SYMBOL(_lz4_decompress_asm)
 
 SYM_INNER_LABEL(Failed, SYM_L_LOCAL)
 	mov	tmp, #-1
