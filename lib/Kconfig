@@ -323,6 +323,7 @@ config ZSTD_DECOMPRESS
 	tristate
 
 source "lib/xz/Kconfig"
+source "lib/lz4p/Kconfig"
 
 #
 # These all provide a common interface (hence the apparent duplication with

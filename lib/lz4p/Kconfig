@@ -1,0 +1,6 @@
+config XRING_ZRAM_LZ4P
+	bool "XRING ZRAM LZ4P"
+	default n
+	help
+	  Choose this option to enable zram lz4p.
+	  When enable this option, ZRAM enables LZ4P compress and decompress algorithm.
