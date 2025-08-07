@@ -135,7 +135,7 @@ static struct scomp_alg scomp = {
 	}
 };
 
-int lz4p_init(void)
+static int lz4p_init(void)
 {
 	int ret;
 
@@ -155,8 +155,15 @@ int lz4p_init(void)
 	return ret;
 }
 
-void lz4p_exit(void)
+static void lz4p_exit(void)
 {
 	crypto_unregister_alg(&alg_lz4);
 	crypto_unregister_scomp(&scomp);
 }
+
+subsys_initcall(lz4p_init);
+module_exit(lz4p_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("lz4p Compression Algorithm");
+MODULE_ALIAS_CRYPTO("lz4p");

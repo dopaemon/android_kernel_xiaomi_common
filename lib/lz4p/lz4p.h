@@ -13,9 +13,6 @@
 #include "lz4p_compress.h"
 #include "lz4p_decompress.h"
 #include "lz4p_constants.h"
-
-int lz4p_init(void);
-void lz4p_exit(void);
 #endif
 
 #endif /* __LINUX_XRING_LZ4P_H */
