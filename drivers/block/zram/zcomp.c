@@ -30,6 +30,9 @@ static const char * const backends[] = {
 #if IS_ENABLED(CONFIG_CRYPTO_ZSTD)
 	"zstd",
 #endif
+#if IS_ENABLED(CONFIG_XRING_ZRAM_LZ4P)
+	"lz4p",
+#endif
 };
 
 static void zcomp_strm_free(struct zcomp_strm *zstrm)
