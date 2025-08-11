@@ -2,3 +2,7 @@
 	path = KernelSU
 	url = https://github.com/dopaemon/KernelSU-Next.git
 	branch = wild
+[submodule "drivers/lindroid-drm"]
+	path = drivers/lindroid-drm
+	url = https://github.com/Linux-on-droid/lindroid-drm-loopback.git
+	branch = master
