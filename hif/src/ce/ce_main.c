@@ -1957,7 +1957,7 @@ uint32_t hif_ce_history_max = HIF_CE_HISTORY_MAX;
  */
 #if defined(CONFIG_SLUB_DEBUG_ON)
 #define CE_DESC_HISTORY_BUFF_CNT  CE_COUNT_MAX
-#define IS_CE_DEBUG_ONLY_FOR_CRIT_CE  0
+#define IS_CE_DEBUG_ONLY_FOR_CRIT_CE  0UL
 #else
 /* CE2, CE3, CE7 */
 #define CE_DESC_HISTORY_BUFF_CNT  3
@@ -2743,7 +2743,7 @@ hif_send_head(struct hif_opaque_softc *hif_ctx,
 
 	if (qdf_unlikely(!ce_hdl)) {
 		hif_err("CE handle is null");
-		return A_ERROR;
+		return QDF_STATUS_E_INVAL;
 	}
 
 	QDF_NBUF_UPDATE_TX_PKT_COUNT(nbuf, QDF_NBUF_TX_PKT_HIF);
