@@ -1179,7 +1179,6 @@ static inline bool movable_only_nodes(nodemask_t *nodes)
 {
 	struct zonelist *zonelist;
 	struct zoneref *z;
-	int nid;
 
 	if (nodes_empty(*nodes))
 		return false;
@@ -1189,8 +1188,7 @@ static inline bool movable_only_nodes(nodemask_t *nodes)
 	 * zonelist as they are interlinked. We just need to find
 	 * at least one zone that can satisfy kernel allocations.
 	 */
-	nid = first_node(*nodes);
-	zonelist = &NODE_DATA(nid)->node_zonelists[ZONELIST_FALLBACK];
+	zonelist = &NODE_DATA(first_node(*nodes))->node_zonelists[ZONELIST_FALLBACK];
 	z = first_zones_zonelist(zonelist, ZONE_NORMAL,	nodes);
 	return (!z->zone) ? true : false;
 }
