@@ -68,7 +68,6 @@
 #define GENI_ILLEGAL_CMD	7
 #define GENI_ABORT_DONE		8
 #define GENI_TIMEOUT		9
-#define GENI_SPURIOUS_IRQ	10
 #define I2C_ADDR_NACK		11
 #define I2C_DATA_NACK		12
 #define GENI_M_CMD_FAILURE	13
@@ -213,7 +212,6 @@ static struct geni_i2c_err_log gi2c_log[] = {
 				"Illegal cmd, check GENI cmd-state machine"},
 	[GENI_ABORT_DONE] = {-ETIMEDOUT, "Abort after timeout successful"},
 	[GENI_TIMEOUT] = {-ETIMEDOUT, "I2C TXN timed out"},
-	[GENI_SPURIOUS_IRQ] = {-EINVAL, "Received unexpected interrupt"},
 	[GENI_M_CMD_FAILURE] = {-EINVAL, "Master command failure"},
 };
 
@@ -651,7 +649,6 @@ static void geni_i2c_irq_handle_watermark(struct geni_i2c_dev *gi2c, u32 m_stat)
 
 	if (!cur) {
 		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "%s: Spurious irq\n", __func__);
-		geni_i2c_err(gi2c, GENI_SPURIOUS_IRQ);
 		return;
 	}
 
@@ -713,9 +710,7 @@ static irqreturn_t geni_i2c_irq(int irq, void *dev)
 		    "%s: m_irq_status:0x%x\n", __func__, m_stat);
 
 	if (!cur) {
-		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "Spurious irq\n");
-		geni_i2c_err(gi2c, GENI_SPURIOUS_IRQ);
-		gi2c->cmd_done = true;
+		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev, "Spurious irq, unexpected interrupt\n");
 		is_clear_watermark = true;
 		goto irqret;
 	}
