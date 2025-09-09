@@ -6171,6 +6171,16 @@ static bool allow_direct_reclaim(pg_data_t *pgdat)
 	return wmark_ok;
 }
 
+static __always_inline bool task_is_critical(void)
+{
+	char comm[TASK_COMM_LEN];
+	get_task_comm(comm, current);
+
+	return !strncmp(comm, "surfaceflinger", TASK_COMM_LEN) ||
+	       !strncmp(comm, "system_server", TASK_COMM_LEN) ||
+	       !strncmp(comm, "cameraserver", TASK_COMM_LEN);
+}
+
 /*
  * Throttle direct reclaimers if backing storage is backed by the network
  * and the PFMEMALLOC reserve for the preferred node is getting dangerously
@@ -6232,6 +6242,9 @@ static bool throttle_direct_reclaim(gfp_t gfp_mask, struct zonelist *zonelist,
 
 	/* If no zone was usable by the allocation flags then do not throttle */
 	if (!pgdat)
+		goto out;
+
+	if (task_is_critical())
 		goto out;
 
 	/* Account for the throttling */
