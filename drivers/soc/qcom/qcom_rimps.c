@@ -12,7 +12,7 @@
 #include <linux/msm_rtb.h>
 
 /* RIMPS Register offsets */
-#define RIMPS_IPC_CHAN_SUPPORTED	2
+#define RIMPS_IPC_CHAN_SUPPORTED	3
 #define RIMPS_SEND_IRQ_OFFSET		0xC
 #define RIMPS_SEND_IRQ_VAL		BIT(28)
 #define RIMPS_CLEAR_IRQ_OFFSET		0x308
