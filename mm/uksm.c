@@ -79,6 +79,7 @@
 
 #include <asm/tlbflush.h>
 #include <linux/sysms_finder.h>
+#include <linux/game_pid.h>
 #include "internal.h"
 
 
