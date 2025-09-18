@@ -456,22 +456,22 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
 CC		= $(CCACHE) clang
-LD		= ld.lld
-AR		= llvm-ar
-NM		= llvm-nm
-OBJCOPY		= llvm-objcopy
-OBJDUMP		= llvm-objdump
-READELF		= llvm-readelf
-STRIP		= llvm-strip
+LD		= $(CCACHE) ld.lld
+AR		= $(CCACHE) llvm-ar
+NM		= $(CCACHE) llvm-nm
+OBJCOPY		= $(CCACHE) llvm-objcopy
+OBJDUMP		= $(CCACHE) llvm-objdump
+READELF		= $(CCACHE) llvm-readelf
+STRIP		= $(CCACHE) llvm-strip
 else
 CC		= $(CCACHE) $(CROSS_COMPILE)gcc
-LD		= $(CROSS_COMPILE)ld
-AR		= $(CROSS_COMPILE)ar
-NM		= $(CROSS_COMPILE)nm
-OBJCOPY		= $(CROSS_COMPILE)objcopy
-OBJDUMP		= $(CROSS_COMPILE)objdump
-READELF		= $(CROSS_COMPILE)readelf
-STRIP		= $(CROSS_COMPILE)strip
+LD		= $(CCACHE) $(CROSS_COMPILE)ld
+AR		= $(CCACHE) $(CROSS_COMPILE)ar
+NM		= $(CCACHE) $(CROSS_COMPILE)nm
+OBJCOPY		= $(CCACHE) $(CROSS_COMPILE)objcopy
+OBJDUMP		= $(CCACHE) $(CROSS_COMPILE)objdump
+READELF		= $(CCACHE) $(CROSS_COMPILE)readelf
+STRIP		= $(CCACHE) $(CROSS_COMPILE)strip
 endif
 PAHOLE		= pahole
 RESOLVE_BTFIDS	= $(objtree)/tools/bpf/resolve_btfids/resolve_btfids
