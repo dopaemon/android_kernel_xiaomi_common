@@ -193,7 +193,7 @@ static void free_rpmh_bw_votes(struct rpmh_bw_votes *votes)
 
 /* Build the votes table from the specified bandwidth levels */
 static struct rpmh_bw_votes *build_rpmh_bw_votes(struct bcm *bcms,
-		int bcm_count, u32 *levels, int levels_count)
+		int bcm_count, u32 *levels, int levels_count, bool gmu_ab)
 {
 	struct rpmh_bw_votes *votes;
 	int i;
@@ -243,7 +243,7 @@ static struct rpmh_bw_votes *build_rpmh_bw_votes(struct bcm *bcms,
 			return ERR_PTR(-ENOMEM);
 		}
 
-		tcs_cmd_data(bcms, bcm_count, levels[i], levels[i], votes->cmds[i]);
+		tcs_cmd_data(bcms, bcm_count, gmu_ab ? levels[i] : 0x0, levels[i], votes->cmds[i]);
 	}
 
 	return votes;
@@ -466,7 +466,7 @@ static int build_bw_table(struct adreno_device *adreno_dev)
 	int ret;
 
 	ddr = build_rpmh_bw_votes(gen7_ddr_bcms, ARRAY_SIZE(gen7_ddr_bcms),
-		pwr->ddr_table, pwr->ddr_table_count);
+		pwr->ddr_table, pwr->ddr_table_count, adreno_dev->gmu_ab);
 	if (IS_ERR(ddr))
 		return PTR_ERR(ddr);
 
@@ -475,7 +475,7 @@ static int build_bw_table(struct adreno_device *adreno_dev)
 
 	if (count > 0)
 		cnoc = build_rpmh_bw_votes(gen7_cnoc_bcms,
-			ARRAY_SIZE(gen7_cnoc_bcms), cnoc_table, count);
+			ARRAY_SIZE(gen7_cnoc_bcms), cnoc_table, count, adreno_dev->gmu_ab);
 
 	kfree(cnoc_table);
 
