@@ -182,7 +182,7 @@ jobs:
           rm -rf ./build/_setup_env.sh
           wget -O ./build/_setup_env.sh https://raw.githubusercontent.com/dopaemon/android_kernel_xiaomi_common/refs/heads/master/.github/scripts/_setup_env.sh
           chmod +x ./build/_setup_env.sh
-          git clone -b ${{ github.event.inputs.KERNEL_BRANCH }} --recurse-submodules -j$(nproc --all) --depth=1 --single-branch ${{ github.event.inputs.KERNEL_GIT }} ./common
+          git clone -b ${{ github.event.inputs.KERNEL_BRANCH }} --recurse-submodules -j$(nproc --all) --depth=1 --single-branch --no-tags --filter=blob:none ${{ github.event.inputs.KERNEL_GIT }} ./common
           git clone -b lineage-22.2 --single-branch --depth=1 https://github.com/cupid-development/android_kernel_xiaomi_sm8450-modules sm8450-modules
           git clone -b lineage-22.2 --single-branch --depth=1 https://github.com/cupid-development/android_kernel_xiaomi_sm8450-devicetrees sm8450-devicetrees
           if [ "$TARGET" != "Both" ]; then
