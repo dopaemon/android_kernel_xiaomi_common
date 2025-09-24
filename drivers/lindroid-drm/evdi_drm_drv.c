@@ -151,7 +151,7 @@ static struct kmem_cache *evdi_gralloc_cache;
 //Handle short copies due to minor faults on big buffers
 static inline int evdi_prefault_readable(const void __user *uaddr, size_t len)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0) || defined(EL8) || defined(EL9)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
 	return fault_in_readable(uaddr, len);
 #else
 	return 0;
@@ -160,7 +160,7 @@ static inline int evdi_prefault_readable(const void __user *uaddr, size_t len)
 
 static inline int evdi_prefault_writeable(void __user *uaddr, size_t len)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0) || defined(EL8) || defined(EL9)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
 	return fault_in_writeable(uaddr, len);
 #else
 	return 0;
