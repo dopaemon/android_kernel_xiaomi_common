@@ -2660,7 +2660,7 @@ static int zram_add(void)
 	zram_init_shrinker(zram);
 	if (!zram->zram_shrinker)
 		goto out_cleanup_disk;
-	if (list_lru_init_memcg(&zram->zram_list_lru, zram->zram_shrinker))
+	if (list_lru_init(&zram->zram_list_lru))
 		goto lru_fail;
 	#endif /* CONFIG_ZRAM_WRITEBACK */
 	up_write(&zram->init_lock);
@@ -3319,7 +3319,7 @@ static void zram_init_shrinker(struct zram *zram)
 {
 	struct shrinker *shrinker;
 
-	shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE | SHRINKER_MEMCG_AWARE, "mm-zram");
+	shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "mm-zram");
 	if (!shrinker)
 		return;
 
