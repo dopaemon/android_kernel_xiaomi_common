@@ -215,7 +215,7 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: Build Selected Devices KSU
-        if: github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both' && github.event.inputs.KERNEL_BRANCH == 'Rebase'
+        if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
           set -e
           DEVICE="${{ matrix.device }}"
@@ -249,7 +249,7 @@ jobs:
           fi
 
       - name: Build Selected Devices NonKSU
-        if: github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both' && github.event.inputs.KERNEL_BRANCH == 'Rebase'
+        if: (github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
           set -e
           DEVICE="${{ matrix.device }}"
