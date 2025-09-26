@@ -10,7 +10,7 @@ on:
         type: choice
         options:
         - Rebase
-        - Linux-5.10.y-Android-12
+        - lindroid
       KERNEL_GIT:
         description: 'Kernel Source Code'
         required: true
@@ -46,7 +46,7 @@ on:
         required: true
         default: '14.0'
       BUILD_TARGET:
-        description: 'Specify your Build Target'
+        description: 'Specify your Build Target (lindroid only KSU)'
         required: true
         default: 'KSU'
         type: choice
@@ -215,7 +215,7 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: Build Selected Devices KSU
-        if: github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both'
+        if: github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both' && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
           set -e
           DEVICE="${{ matrix.device }}"
@@ -249,7 +249,7 @@ jobs:
           fi
 
       - name: Build Selected Devices NonKSU
-        if: github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both'
+        if: github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both' && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
           set -e
           DEVICE="${{ matrix.device }}"
@@ -274,6 +274,41 @@ jobs:
 
           if [ "$TARGET" != "Both" ]; then
              ZIP_NAME="DoraCore-${DEVICE}-NonKSU-5.10-A12-${BUILD_DATE}.zip"
+             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image
+             zip -r9 "$ZIP_NAME" *
+             mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+          else
+             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-standard
+          fi
+
+      - name: Build Lindroid Kernel
+        if: github.event.inputs.KERNEL_BRANCH == 'lindroid'
+        run: |
+          set -e
+          DEVICE="${{ matrix.device }}"
+          TARGET="${{ github.event.inputs.BUILD_TARGET }}"
+          ZIP_NAME=""
+
+          cd $GITHUB_WORKSPACE/android-kernel
+          cd ./common/
+          git reset --hard HEAD
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
+          echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
+
+          if [ "$DEVICE" != "gki" ]; then
+             cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
+          fi
+
+          cd ../
+          CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all)
+
+          if [ "$TARGET" != "Both" ]; then
+             ZIP_NAME="DoraCore-${DEVICE}-LinDroid-5.10-A12-${BUILD_DATE}.zip"
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image
              zip -r9 "$ZIP_NAME" *
