@@ -295,7 +295,6 @@ jobs:
           cd ./common/
           git reset --hard HEAD
           rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
-          echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
 
           if [ "$DEVICE" != "gki" ]; then
              cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
