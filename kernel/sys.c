@@ -1243,17 +1243,27 @@ DECLARE_RWSEM(uts_sem);
 static void override_custom_release(char __user *release, size_t len)
 {
 #ifdef CONFIG_UNAME_OVERRIDE
-	char *buf;
+	char *buf, *token, *targets;
 
 	buf = kstrdup_quotable_cmdline(current, GFP_KERNEL);
-	if (buf == NULL)
+	if (!buf)
 		return;
 
-	if (strstr(buf, CONFIG_UNAME_OVERRIDE_TARGET)) {
-		copy_to_user(release, CONFIG_UNAME_OVERRIDE_STRING,
-			       strlen(CONFIG_UNAME_OVERRIDE_STRING) + 1);
+	targets = kstrdup(CONFIG_UNAME_OVERRIDE_TARGET, GFP_KERNEL);
+	if (!targets) {
+		kfree(buf);
+		return;
 	}
 
+	for (token = strsep(&targets, ","); token; token = strsep(&targets, ",")) {
+		if (strstr(buf, token)) {
+			copy_to_user(release, CONFIG_UNAME_OVERRIDE_STRING,
+				     strlen(CONFIG_UNAME_OVERRIDE_STRING) + 1);
+			break;
+		}
+	}
+
+	kfree(targets);
 	kfree(buf);
 #endif
 }
