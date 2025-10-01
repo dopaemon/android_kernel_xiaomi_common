@@ -172,6 +172,7 @@ static int qcom_rimps_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to ioremap the rimps rx irq addr\n");
 		return -ENOMEM;
 	}
+	rimps_ipc->num_chan = resource_size(res)/RIMPS_CLOCK_DOMAIN_OFFSET;
 
 	rimps_ipc->irq = platform_get_irq(pdev, 0);
 	if (rimps_ipc->irq < 0) {
@@ -179,7 +180,6 @@ static int qcom_rimps_probe(struct platform_device *pdev)
 		return rimps_ipc->irq;
 	}
 
-	rimps_ipc->num_chan = RIMPS_IPC_CHAN_SUPPORTED;
 	ret = qcom_rimps_ipc_setup_mbox(rimps_ipc);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to create mailbox\n");
