@@ -36,7 +36,6 @@
 #define BWMON_FEATURE_HIST  2104
 
 static struct bwprof_dev_data *bwprof_data;
-static struct config_group *root_group;
 void __iomem *base_src;
 struct bwprof_monitor_data *monitor_data;
 struct bwprof_hist_data *hist_data;
@@ -598,6 +597,65 @@ static void bwprof_mon_rx(struct mbox_client *client, void *msg)
 	mutex_unlock(&bwprof_data->mons_lock);
 }
 
+static const struct config_item_type bwprof_subsys_type = {
+	.ct_attrs = bwprof_attrs,
+	.ct_owner   = THIS_MODULE,
+};
+
+static struct configfs_subsystem bwprof_subsys = {
+	.su_group = {
+		.cg_item = {
+			.ci_namebuf = "bwprof",
+			.ci_type = &bwprof_subsys_type,
+		},
+	},
+};
+
+static int bwprof_configfs_init(void)
+{
+	struct bwprof_hw_group  *hw_node;
+	u32 i;
+	int ret;
+	const char *name;
+
+	config_group_init(&bwprof_subsys.su_group);
+	mutex_init(&bwprof_subsys.su_mutex);
+
+	for (i = 0; i < bwprof_data->hw_cnt; i++) {
+		hw_node = bwprof_data->hw_node[i];
+
+		switch (hw_node->hw_type) {
+		case BWPROF_DDR:
+			name = "ddr";
+			break;
+		case BWPROF_LLCC:
+			name = "llcc";
+			break;
+		default:
+			pr_err("bwprof_scmi: Unknown hw_type: %d\n",
+				hw_node->hw_type);
+			continue;
+		}
+
+		config_group_init_type_name(&hw_node->ls_group, name,
+			&ls_item_type);
+		configfs_add_default_group(&hw_node->ls_group,
+			&bwprof_subsys.su_group);
+
+	}
+
+	ret = configfs_register_subsystem(&bwprof_subsys);
+	if (ret) {
+		mutex_destroy(&bwprof_subsys.su_mutex);
+		pr_err("Failed configfs_register_subsystem %d\n", ret);
+		return ret;
+	}
+
+	bwprof_data->dev_group = &bwprof_subsys.su_group;
+
+	return 0;
+}
+
 int cpucp_bwprof_init(struct scmi_device *sdev)
 {
 	u32 data_size;
@@ -632,6 +690,11 @@ int cpucp_bwprof_init(struct scmi_device *sdev)
 		return -ENOMEM;
 	}
 
+	if (bwprof_configfs_init()) {
+		pr_err("bwprof_configfs_init failed\n");
+		return -EINVAL;
+	}
+
 	bwprof_data->ph = ph;
 	bwprof_data->bwprof_ops = ops;
 	bwprof_data->is_sampling_enable = false;
@@ -642,66 +705,6 @@ int cpucp_bwprof_init(struct scmi_device *sdev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(cpucp_bwprof_init);
-
-static struct config_group *bwprof_make_group(
-		struct config_group *group, const char *name)
-{
-	struct bwprof_hw_group  *hw_node;
-	u32 hw_type;
-	u32 i;
-
-	if (!bwprof_data->is_set_config)
-		return ERR_PTR(-EINVAL);
-
-	if (config_group_find_item(group, name))
-		return ERR_PTR(-EEXIST);
-
-	if (!strcmp(name, "ddr"))
-		hw_type = BWPROF_DDR;
-	else if (!strcmp(name, "llcc"))
-		hw_type = BWPROF_LLCC;
-	else
-		return ERR_PTR(-EINVAL);
-
-	for (i = 0; i < bwprof_data->hw_cnt; i++) {
-		if (bwprof_data->hw_node[i]->hw_type == hw_type)
-			break;
-	}
-
-	if (i == bwprof_data->hw_cnt)
-		return ERR_PTR(-EINVAL);
-
-	hw_node = bwprof_data->hw_node[i];
-	config_group_init_type_name(&hw_node->ls_group, name, &ls_item_type);
-
-	return &hw_node->ls_group;
-}
-
-static void bwprof_drop_item(struct config_group *group,
-		struct config_item *item)
-{
-	config_item_put(item);
-}
-
-static struct configfs_group_operations bwprof_group_ops = {
-	.make_group = bwprof_make_group,
-	.drop_item  = bwprof_drop_item,
-};
-
-static const struct config_item_type bwprof_subsys_type = {
-	.ct_group_ops   = &bwprof_group_ops,
-	.ct_attrs = bwprof_attrs,
-	.ct_owner   = THIS_MODULE,
-};
-
-static struct configfs_subsystem bwprof_subsys = {
-	.su_group = {
-		.cg_item = {
-			.ci_namebuf = "bwprof",
-			.ci_type = &bwprof_subsys_type,
-		},
-	},
-};
 
 static int bwprof_dev_probe(struct platform_device *pdev)
 {
@@ -747,18 +750,6 @@ static int bwprof_dev_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	config_group_init(&bwprof_subsys.su_group);
-	mutex_init(&bwprof_subsys.su_mutex);
-
-	ret = configfs_register_subsystem(&bwprof_subsys);
-	if (ret) {
-		mutex_destroy(&bwprof_subsys.su_mutex);
-		dev_err(dev, "Failed configfs_register_subsystem %d\n", ret);
-		return ret;
-	}
-
-	root_group = &bwprof_subsys.su_group;
-	bwprof_data->dev_group = root_group;
 	bwprof_data->inited = true;
 	mutex_init(&bwprof_data->mons_lock);
 
