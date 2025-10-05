@@ -2,3 +2,8 @@
 	path = Baseband-guard
 	url = https://github.com/vc-teahouse/Baseband-guard.git
 	branch = main
+
+[submodule "drivers/staging/kernelsu"]
+	path = drivers/staging/kernelsu
+	url = https://github.com/dopaemon/KernelSU-Next.git
+	branch = next
