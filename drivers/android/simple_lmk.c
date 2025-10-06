@@ -76,6 +76,7 @@ static unsigned long find_victims(int *vindex)
 	struct task_struct *tsk;
 
 	rcu_read_lock();
+	memset(task_bucket, 0, sizeof(task_bucket));
 	for_each_process(tsk) {
 		struct signal_struct *sig;
 		short adj;
@@ -200,6 +201,11 @@ static void set_task_rt_prio(struct task_struct *tsk, int priority)
 
 static void scan_and_kill(void)
 {
+	if (system_state != SYSTEM_RUNNING) {
+		pr_info("System not fully booted, skip LMK\n");
+		return;
+	}
+
 	int i, nr_to_kill, nr_found = 0;
 	unsigned long pages_found;
 
