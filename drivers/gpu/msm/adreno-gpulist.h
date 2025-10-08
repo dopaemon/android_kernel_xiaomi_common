@@ -2180,7 +2180,8 @@ static const struct adreno_gen7_core adreno_gpu_core_gen7_6_0 = {
 		.features = ADRENO_APRIV | ADRENO_IOCOHERENT |
 				ADRENO_CONTENT_PROTECTION | ADRENO_L3_VOTE |
 				ADRENO_IFPC | ADRENO_PREEMPTION | ADRENO_BCL |
-				ADRENO_ACD | ADRENO_LPAC | ADRENO_DMS,
+				ADRENO_ACD | ADRENO_LPAC | ADRENO_DMS |
+				ADRENO_GMU_AB,
 		.gpudev = &adreno_gen7_hwsched_gpudev.base,
 		.perfcounters = &adreno_gen7_hwsched_perfcounters,
 		.uche_gmem_alignment = SZ_16M,

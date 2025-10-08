@@ -165,7 +165,8 @@
 #define ADRENO_HW_FENCE BIT(16)
 /* Dynamic Mode Switching supported on this target */
 #define ADRENO_DMS BIT(17)
-
+/* Enable GMU Based AB voting */
+#define ADRENO_GMU_AB BIT(28)
 
 /*
  * Adreno GPU quirks - control bits for various workarounds
