@@ -1,5 +1,28 @@
 # How do I submit patches to Android Common Kernels
 
+```
+┌───────────────────────────────────────────────────────────────┐
+│                          Kernel Image                         │
+│ ┌───────────────────────────────────────────────────────────┐ │
+│ │ BOOT_IMG                                                  │ │
+│ │  - boot kernel (Image.gz)                                 │ │
+│ │  - boot ramdisk                                           │ │
+│ │  - modules listed in BOOT_KERNEL_MODULES                  │ │
+│ └───────────────────────────────────────────────────────────┘ │
+│ ┌───────────────────────────────────────────────────────────┐ │
+│ │ vendor_ramdisk                                            │ │
+│ │  - modules listed in BOARD_VENDOR_RAMDISK_KERNEL_MODULES  │ │
+│ │  - critical for early init                                │ │
+│ └───────────────────────────────────────────────────────────┘ │
+│ ┌───────────────────────────────────────────────────────────┐ │
+│ │ vendor_dlkm.img                                           │ │
+│ │  - /vendor_dlkm/lib/modules/<ver>/                        │ │
+│ │  - modules.list.vendor_dlkm defines contents              │ │
+│ │  - loaded by modprobe_vendor_dlkm                         │ │
+│ └───────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────┘
+```
+
 1. BEST: Make all of your changes to upstream Linux. If appropriate, backport to the stable releases.
    These patches will be merged automatically in the corresponding common kernels. If the patch is already
    in upstream Linux, post a backport of the patch that conforms to the patch requirements below.
