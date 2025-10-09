@@ -663,7 +663,7 @@ int cpucp_bwprof_init(struct scmi_device *sdev)
 	struct scmi_protocol_handle *ph;
 	int ret;
 
-	if (!bwprof_data->inited)
+	if (!bwprof_data || !bwprof_data->inited)
 		return -EPROBE_DEFER;
 
 	if (!sdev || !sdev->handle)
