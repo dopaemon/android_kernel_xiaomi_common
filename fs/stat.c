@@ -223,6 +223,10 @@ static int vfs_statx(int dfd, const char __user *filename, int flags,
 orig_flow:
 #endif
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	ksu_handle_stat(&dfd, &filename, &flags);
+#endif
+
 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
 		      AT_STATX_SYNC_TYPE))
 		return -EINVAL;
