@@ -7747,8 +7747,8 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 #if !defined(CONFIG_CACULE_SCHED)
 	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
 	int scale = cfs_rq->nr_running >= sched_nr_latency;
-	int next_buddy_marked = 0;
 #endif /* CONFIG_CACULE_SCHED */
+	int next_buddy_marked = 0;
 	bool preempt = false, nopreempt = false;
 
 	if (unlikely(se == pse))
@@ -11227,6 +11227,7 @@ out:
 	WRITE_ONCE(nohz.has_blocked, 1);
 }
 
+#if !defined(CONFIG_CACULE_RDB)
 static bool update_nohz_stats(struct rq *rq)
 {
 	unsigned int cpu = rq->cpu;
@@ -11240,12 +11241,11 @@ static bool update_nohz_stats(struct rq *rq)
 	if (!time_after(jiffies, rq->last_blocked_load_update_tick))
 		return true;
 
-#if !defined(CONFIG_CACULE_RDB)
 	update_blocked_averages(cpu);
-#endif
 
 	return rq->has_blocked_load;
 }
+#endif /* !CONFIG_CACULE_RDB */
 
 #if !defined(CONFIG_CACULE_RDB)
 /*
@@ -11733,7 +11733,7 @@ static int newidle_balance(struct rq *this_rq, struct rq_flags *rf)
 		(this_rq->avg_idle < sysctl_sched_migration_cost);
 #endif
 
-	if (can_newidle)
+	if (can_newidle) {
 		if (sd)
 			update_next_balance(sd, &next_balance);
 		rcu_read_unlock();

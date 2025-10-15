@@ -1374,7 +1374,7 @@ config SCHED_AUTOGROUP
 	select CGROUPS
 	select CGROUP_SCHED
 	select FAIR_GROUP_SCHED
-        default y
+	default y
 	help
 	  This option optimizes the scheduler for common desktop workloads by
 	  automatically creating and populating task groups.  This separation
