@@ -3310,6 +3310,14 @@ int cnss_reset_time_sync_period(struct device *dev)
 }
 EXPORT_SYMBOL(cnss_reset_time_sync_period);
 
+static ssize_t recovery_show(struct device *dev, struct device_attribute *attr,
+			     char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", plat_priv->recovery_enabled);
+}
+
 static ssize_t recovery_store(struct device *dev,
 			      struct device_attribute *attr,
 			      const char *buf, size_t count)
@@ -3476,7 +3484,7 @@ static ssize_t charger_mode_store(struct device *dev,
 
 static DEVICE_ATTR_WO(fs_ready);
 static DEVICE_ATTR_WO(shutdown);
-static DEVICE_ATTR_WO(recovery);
+static DEVICE_ATTR_RW(recovery);
 static DEVICE_ATTR_WO(enable_hds);
 static DEVICE_ATTR_WO(qdss_trace_start);
 static DEVICE_ATTR_WO(qdss_trace_stop);
