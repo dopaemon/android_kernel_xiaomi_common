@@ -7,7 +7,3 @@
 	path = drivers/staging/kernelsu
 	url = https://github.com/dopaemon/KernelSU-Next.git
 	branch = next
-[submodule "KernelSU"]
-	path = KernelSU
-	url = https://github.com/dopaemon/KernelSU-Next.git
-	branch = next
