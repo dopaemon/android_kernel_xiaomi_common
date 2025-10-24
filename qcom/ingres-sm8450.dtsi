@@ -278,12 +278,6 @@
 };
 
 &soc {
-	xiaomi_touch {
-		compatible = "xiaomi-touch";
-		status = "ok";
-		touch,name = "xiaomi-touch";
-	};
-
 	mi_game_plaid {
         	compatible = "xiaomi-gpu-plaid";
 	};
