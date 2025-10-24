@@ -1,7 +1,7 @@
 on:
-  workflow_dispatch:
+  push:
 
-name: Clean Draft Releases
+name: Delete Draft Releases older than 5 days
 
 permissions:
   contents: write
@@ -11,15 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: sgpublic/delete-release-action@v1.2
+      - name: Delete drafts
+        uses: hugo19941994/delete-draft-releases@latest
         with:
-          release-drop: false
-          release-keep-count: -1
-          release-drop-tag: true
-          pre-release-drop: true
-          pre-release-keep-count: -1
-          pre-release-drop-tag: true
-          draft-drop: true
-          draft-drop-count: -1
+          threshold: 5d
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
