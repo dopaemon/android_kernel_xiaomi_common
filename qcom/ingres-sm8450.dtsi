@@ -11,7 +11,7 @@
 	clock-frequency = <400000>;
 	status = "ok";
 	aw8697_haptic@5A {
-		compatible = "awinic,awinic_haptic";
+		compatible = "awinic,aw86297_haptic";
 		reg = <0x5a>;
 		reset-gpio = <&tlmm 89 0x00>;
 		irq-gpio = <&tlmm 90 0x00>;
@@ -557,7 +557,7 @@
 &soc {
 	fingerprint_goodix {
 		compatible = "goodix,fingerprint";
-		fp_vdd_vreg-supply = <&L7C>;
+		vdda-supply = <&L7C>;
 		goodix,gpio-reset = <&tlmm 41 0x0>;
 		goodix,gpio-irq = <&tlmm 40 0x0>;
 		status = "ok";
