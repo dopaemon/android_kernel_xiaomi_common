@@ -1,0 +1,25 @@
+on:
+  workflow_dispatch:
+
+name: Clean Draft Releases
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: sgpublic/delete-release-action@v1.1
+        with:
+          release-drop: false
+          release-keep-count: -1
+          release-drop-tag: true
+          pre-release-drop: true
+          pre-release-keep-count: -1
+          pre-release-drop-tag: true
+          draft-drop: true
+          draft-drop-count: -1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
