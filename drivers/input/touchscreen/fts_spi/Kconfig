@@ -8,6 +8,15 @@ config TOUCHSCREEN_ST_FTS_V521_SPI
 
 	  To compile this driver as a module, choose M here.
 
+config TOUCHSCREEN_ST_FTS_V521_SPI_ALT_REPORT_RATE_CMD
+	bool "Use alternate report-rate command sequence"
+	depends on TOUCHSCREEN_ST_FTS_V521_SPI
+	help
+	  Say Y here if you want to use alternate sequence
+	  to change report rate instead of the default.
+
+	  If unsure, say N.
+
 config TOUCHSCREEN_ST_FTS_V521_SPI_SECONDARY
 	bool "Build as a secondary touch module"
 	depends on TOUCHSCREEN_ST_FTS_V521_SPI
