@@ -889,6 +889,15 @@ config INPUT_STPMIC1_ONKEY
 	  To compile this driver as a module, choose M here: the
 	  module will be called stpmic1_onkey.
 
+config INPUT_XM_GAMEKEY
+	tristate "Xiaomi gamekey buttons support"
+	depends on INPUT && REGULATOR
+	help
+	  This option enables support for gamekey buttons (aka "triggers").
+
+	  To compile this driver as a module, choose M here. The module will
+	  be called xm_gamekey.
+
 source "drivers/input/misc/aw86927_haptic/Kconfig"
 
 source "drivers/input/misc/aw8622x_haptic/Kconfig"
