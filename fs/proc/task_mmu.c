@@ -88,14 +88,14 @@ unsigned long task_vsize(struct mm_struct *mm)
 	return PAGE_SIZE * mm->total_vm;
 }
 
+#ifdef CONFIG_MAP_SPOOF
 struct string_entry {
-    char *string;
-    struct list_head list;
+	char *string;
+	struct list_head list;
 };
-extern struct list_head maps_string_list; // this is on ksu's core_hook.c
-
+extern struct list_head string_list;
 extern atomic_t skip_rwxp;
-extern atomic_t skip_rxp;
+#endif
 
 unsigned long task_statm(struct mm_struct *mm,
 			 unsigned long *shared, unsigned long *text,
@@ -506,6 +506,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	dev_t dev = 0;
 	const char *name = NULL;
 
+#ifdef CONFIG_MAP_SPOOF	// spoof rwxp
 	struct string_entry *entry, *tmp;
 
 	// skip rwxp and two entries after it
@@ -514,7 +515,6 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 		if (skip_count > 0) {
 			skip_count--;
 			seq_printf(m, "%08lx-%08lx ---- 00000000 00:00 0  \n",vma->vm_start, vma->vm_end);
-
 			return;
 		}
 
@@ -524,22 +524,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 			return;
 		}
 	}
-	// skip r-xp and two entries after it
-	if (atomic_read(&skip_rxp)) {
-		static int skip_count = 0;
-		if (skip_count > 0) {
-			skip_count--;
-			seq_printf(m, "%08lx-%08lx ---- 00000000 00:00 0  \n",vma->vm_start, vma->vm_end);
-
-			return;
-		}
-
-		if ((vma->vm_flags & (VM_READ | VM_EXEC)) == (VM_READ | VM_EXEC) && !(vma->vm_flags & VM_MAYSHARE)) {
-			seq_printf(m, "%08lx-%08lx ---- 00000000 00:00 0  \n",vma->vm_start, vma->vm_end);
-			skip_count = 2;
-			return;
-		}
-	}
+#endif
 
 	if (file) {
 		struct inode *inode = file_inode(vma->vm_file);
@@ -574,15 +559,16 @@ bypass_orig_flow:
 #endif
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
 
+#ifdef CONFIG_MAP_SPOOF	// spoof file entries
 		if (file->f_path.dentry) {
-			smp_mb();
-			list_for_each_entry_safe(entry, tmp, &maps_string_list, list) {
+			list_for_each_entry_safe(entry, tmp, &string_list, list) {
 				if (strstr(file->f_path.dentry->d_name.name, entry->string)) {
 					seq_printf(m, "%08lx-%08lx ---- 00000000 00:00 0  \n",vma->vm_start, vma->vm_end);
 					return;
 				}
 			}
 		}
+#endif
 
 		struct dentry *dentry = file->f_path.dentry;
 
