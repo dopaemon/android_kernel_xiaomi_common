@@ -229,6 +229,7 @@ jobs:
           cd ./common/
           git reset --hard HEAD
           rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
+          echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
 
           if [ "$DEVICE" != "gki" ]; then
              cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
@@ -240,13 +241,27 @@ jobs:
           cd ../
           CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all)
 
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch
+          chmod 777 patch
+
           if [ "$TARGET" != "Both" ]; then
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image
+             ./patch
+             rm -rf Image
+             mv oImage Image
+             mv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
+
              ZIP_NAME="DoraCore-${DEVICE}-KSU-5.10-A12-${BUILD_DATE}.zip"
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image
              zip -r9 "$ZIP_NAME" *
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
           else
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image
+             ./patch
+             rm -rf Image
+             mv oImage Image
+             mv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/Image-kernelsu
+
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-kernelsu
           fi
