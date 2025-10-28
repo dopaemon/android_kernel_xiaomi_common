@@ -186,7 +186,7 @@ else
 fi
 echo "Copied dtb(s) to $DTB_COPY_TO."
 
-mkdtboimg.py create $DTBO_COPY_TO/ --page_size=4096 out/dtbs/*.dtbo
+mkdtboimg.py create $DTBO_COPY_TO --page_size=4096 out/dtbs/*.dtbo
 echo "Generated dtbo.img to $DTBO_COPY_TO".
 
 first_stage_modules="$(cat modules.list.msm.waipio)"
