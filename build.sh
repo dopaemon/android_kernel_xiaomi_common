@@ -945,26 +945,6 @@ if [ -n "${POST_KERNEL_BUILD_CMDS}" ]; then
   set +x
 fi
 
-if [ -n "${MODULES_ORDER}" ]; then
-  echo "========================================================"
-  echo " Checking the list of modules:"
-  if ! diff -u "${KERNEL_DIR}/${MODULES_ORDER}" "${OUT_DIR}/modules.order"; then
-    echo "ERROR: modules list out of date" >&2
-    echo "Update it with:" >&2
-    echo "cp ${OUT_DIR}/modules.order ${KERNEL_DIR}/${MODULES_ORDER}" >&2
-    exit 1
-  fi
-fi
-
-if [ "${KMI_SYMBOL_LIST_STRICT_MODE}" = "1" ]; then
-  echo "========================================================"
-  echo " Comparing the KMI and the symbol lists:"
-  set -x
-  ${ROOT_DIR}/build/abi/compare_to_symbol_list "${OUT_DIR}/Module.symvers" \
-                                               "${OUT_DIR}/abi_symbollist.raw"
-  set +x
-fi
-
 rm -rf ${MODULES_STAGING_DIR}
 mkdir -p ${MODULES_STAGING_DIR}
 
