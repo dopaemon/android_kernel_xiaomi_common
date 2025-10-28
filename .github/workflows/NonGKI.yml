@@ -1,0 +1,240 @@
+name: NonGKI | DoraCore Kernel Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      BUILD_DEVICE:
+        description: 'Device Target'
+        required: true
+        default: 'mayfly'
+        type: choice
+        options:
+        - all
+        - mayfly
+        - cupid
+        - unicorn
+        - zeus
+        - diting
+        - marble
+        - mondrian
+        - thor
+        - zizhan
+        - ziyi
+        - ingres
+        - gki
+      BUILD_TARGET:
+        description: 'Specify your Build Target (lindroid only KSU)'
+        required: true
+        default: 'KSU'
+        type: choice
+        options:
+        - NonKSU
+        - KSU
+        - Both
+      RELEASE:
+        description: 'Status Release'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+        - draft
+        - prerelease
+        - release
+
+jobs:
+  set-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        env:
+          BUILD_DEVICE: ${{ github.event.inputs.BUILD_DEVICE }}
+        run: |
+          if [ "$BUILD_DEVICE" = "mayfly" ]; then
+            matrix='["mayfly"]'
+          elif [ "$BUILD_DEVICE" = "cupid" ]; then
+            matrix='["cupid"]'
+          elif [ "$BUILD_DEVICE" = "zeus" ]; then
+            matrix='["zeus"]'
+          elif [ "$BUILD_DEVICE" = "unicorn" ]; then
+            matrix='["unicorn"]'
+          elif [ "$BUILD_DEVICE" = "diting" ]; then
+            matrix='["diting"]'
+          elif [ "$BUILD_DEVICE" = "marble" ]; then
+            matrix='["marble"]'
+          elif [ "$BUILD_DEVICE" = "mondrian" ]; then
+            matrix='["mondrian"]'
+          elif [ "$BUILD_DEVICE" = "thor" ]; then
+            matrix='["thor"]'
+          elif [ "$BUILD_DEVICE" = "zizhan" ]; then
+            matrix='["zizhan"]'
+          elif [ "$BUILD_DEVICE" = "ziyi" ]; then
+            matrix='["ziyi"]'
+          elif [ "$BUILD_DEVICE" = "ingres" ]; then
+            matrix='["ziyi"]'
+          elif [ "$BUILD_DEVICE" = "ingres" ]; then
+            matrix='["gki"]'
+          elif [ "$BUILD_DEVICE" = "all" ]; then
+            matrix='["mayfly", "cupid", "unicorn", "zeus", "diting", "marble", "mondrian", "thor", "zizhan", "ziyi", "ingres", "gki"]'
+          fi
+
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+  create_release:
+    runs-on: ubuntu-latest
+
+    outputs:
+      tag: ${{ steps.set-tag.outputs.tag }}
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    permissions:
+      contents: write
+      discussions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set tag as timestamp
+        id: set-tag
+        run: echo "tag=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.set-tag.outputs.tag }}
+          name: DoraCore Build ${{ steps.set-tag.outputs.tag }}
+          draft: ${{ github.event.inputs.RELEASE == 'draft' }}
+          prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
+          body: |
+            Build: DoraCore Kernel For GKI Linux 5.10.y
+            Linux: Linux 5.10.y
+            Type: GKI
+            Developer: @dopaemon
+            Credits: @ArianK16a, @bachnxuan, @Gelbpunkt, @ztc1997, @pzqqt, @KernelToast, @Arter97, @ramabondanp, @Gosth15, @Flopster101, @bheatleyyy, @keosh1, @n08i40k, ...
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: [create_release, set-matrix]
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        device: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    permissions:
+      contents: write
+      discussions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Environment
+        run: |
+          TARGET="${{ github.event.inputs.BUILD_TARGET }}"
+          echo "BUILD_DATE=$(TZ=Asia/Ho_Chi_Minh date +'%Y-%m%d-%H%M')" >> $GITHUB_ENV
+          cd $GITHUB_WORKSPACE
+          sudo apt-get update
+          sudo apt-get install -y git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler rename libelf-dev dwarves wget openjdk-8-jdk
+          sudo wget -O /usr/bin/repo http://commondatastorage.googleapis.com/git-repo-downloads/repo
+          sudo chmod +x /usr/bin/repo
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          mkdir -p $GITHUB_WORKSPACE/android-kernel && cd $GITHUB_WORKSPACE/android-kernel
+          repo init --depth=1 --u https://github.com/dopaemon/android_kernel_manifest.git -b sm8450
+          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+          git clone -b sm8450 --depth=1 --single-branch https://github.com/dopaemon/Anykernel3.git ./AnyKernel3
+          rm -rf ./AnyKernel3/.git
+
+      - name: Build Selected Devices KSU
+        if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both')
+        run: |
+          set -e
+          DEVICE="${{ matrix.device }}"
+          TARGET="${{ github.event.inputs.BUILD_TARGET }}"
+          ZIP_NAME=""
+
+          cd $GITHUB_WORKSPACE/android-kernel
+          rm -rf ${DEVICE}-kernel
+          cd ./sm8450
+          git reset --hard HEAD
+          echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
+
+          cd $GITHUB_WORKSPACE/android-kernel
+          cd ./sm8450/
+
+          ./build.sh ${DEVICE}
+
+          ZIP_NAME="DoraCore-${DEVICE}-NonGKI-KSU-5.10-A12-${BUILD_DATE}.zip"
+
+          cd $GITHUB_WORKSPACE/android-kernel/${DEVICE}-kernel
+          cp -rv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
+          cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
+          cp -rv ./vendor_dlkm $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_dlkm_modules
+          cp -rv ./vendor_ramdisk $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_boot_modules
+
+          cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
+          rm -r .git README.md
+          find . -type f -name 'placeholder' -delete
+          find . -type d -empty -delete
+
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch
+          chmod 777 patch
+          ./patch
+          rm -rf Image patch
+          mv oImage Image
+
+          zip -r9 "$ZIP_NAME" *
+          mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+
+      - name: Build Selected Devices NonKSU
+        if: (github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both')
+        run: |
+          set -e
+          DEVICE="${{ matrix.device }}"
+          TARGET="${{ github.event.inputs.BUILD_TARGET }}"
+          ZIP_NAME=""
+
+          cd $GITHUB_WORKSPACE/android-kernel
+          rm -rf ${DEVICE}-kernel
+          cd ./sm8450
+          git reset --hard HEAD
+          echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
+
+          cd $GITHUB_WORKSPACE/android-kernel
+          cd ./sm8450/
+
+          ./build.sh ${DEVICE}
+
+          ZIP_NAME="DoraCore-${DEVICE}-NonGKI-NonKSU-5.10-A12-${BUILD_DATE}.zip"
+
+          cd $GITHUB_WORKSPACE/android-kernel/${DEVICE}-kernel
+          cp -rv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
+          cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
+          cp -rv ./vendor_dlkm $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_dlkm_modules
+          cp -rv ./vendor_ramdisk $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_boot_modules
+
+          cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
+          rm -r .git README.md
+          find . -type f -name 'placeholder' -delete
+          find . -type d -empty -delete
+
+          zip -r9 "$ZIP_NAME" *
+          mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create_release.outputs.tag }}
+          files: DoraCore*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

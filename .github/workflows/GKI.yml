@@ -1,4 +1,4 @@
-name: DoraCore Kernel Build
+name: GKI | DoraCore Kernel Build
 
 on:
   workflow_dispatch:
