@@ -157,10 +157,10 @@ jobs:
                 device-tree-compiler rename dwarves \
                 openjdk-8-jdk bc bison g++-multilib \
                 gcc-multilib gnupg gperf imagemagick \
-                lib32ncurses5-dev lib32readline-dev \
+                lib32readline-dev \
                 lib32z1-dev liblz4-tool libncurses5-dev \
-                libncurses5 libsdl1.2-dev libssl-dev nano \
-                libwxgtk3.0-gtk3-dev libxml2 libxml2-utils \
+                libsdl1.2-dev libssl-dev nano \
+                libxml2 libxml2-utils \
                 lzop pngcrush rsync schedtool squashfs-tools \
                 xsltproc zlib1g-dev python3 python-is-python3
           sudo wget -O /usr/bin/repo http://commondatastorage.googleapis.com/git-repo-downloads/repo
