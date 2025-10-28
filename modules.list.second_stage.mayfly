@@ -1,0 +1,4 @@
+goodix_fod.ko
+qcom_pm8008-regulator.ko
+fts_touch_spi.ko
+aw8697-haptic.ko
