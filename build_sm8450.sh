@@ -10,6 +10,7 @@ TC_DIR="$KP_ROOT/prebuilts/clang/kernel/linux-x86/clang-r416183b"
 PREBUILTS_DIR="$KP_ROOT/prebuilts/kernel-build-tools/linux-x86"
 MODULES_REPO="sm8450-modules"
 DT_REPO="sm8450-devicetrees"
+HDR_STAGING="kernel-headers"
 
 DO_CLEAN=false
 NO_LTO=false
@@ -54,6 +55,7 @@ DTB_COPY_TO="$KERNEL_DIR/dtbs"
 DTBO_COPY_TO="$DTB_COPY_TO/dtbo.img"
 VBOOT_DIR="$KERNEL_DIR/vendor_ramdisk"
 VDLKM_DIR="$KERNEL_DIR/vendor_dlkm"
+HDR_DEST="$KERNEL_DIR/kernel-headers"
 
 # AK3_DIR="$HOME/AnyKernel3"
 # ZIPNAME="aospa-kernel-$TARGET-$(date '+%Y%m%d-%H%M').zip"
@@ -132,7 +134,9 @@ $ONLY_CONFIG && exit
 echo -e "\nBuilding kernel...\n"
 m Image modules dtbs
 rm -rf out/modules out/*.ko
-m INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
+m INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install headers_install INSTALL_HDR_PATH="$HDR_STAGING"
+
+mkdir -p "$HDR_DEST"
 
 echo -e "\nBuilding techpack modules..."
 for module in $MODULES; do
@@ -173,14 +177,14 @@ echo "Copied kernel to $KERNEL_COPY_TO."
 
 if [ -d "$DTB_COPY_TO" ]; then
     rm -f $DTB_COPY_TO/*.dtb
-    cp out/dtbs/*.dtb $DTB_COPY_TO
+    cp out/dtbs/*.dtb $DTB_COPY_TO/
 else
     rm -f $DTB_COPY_TO
-    cat out/dtbs/*.dtb >> $DTB_COPY_TO
+    cat out/dtbs/*.dtb >> $DTB_COPY_TO/
 fi
 echo "Copied dtb(s) to $DTB_COPY_TO."
 
-mkdtboimg.py create $DTBO_COPY_TO --page_size=4096 out/dtbs/*.dtbo
+mkdtboimg.py create $DTBO_COPY_TO/ --page_size=4096 out/dtbs/*.dtbo
 echo "Generated dtbo.img to $DTBO_COPY_TO".
 
 first_stage_modules="$(cat modules.list.msm.waipio)"
@@ -234,6 +238,9 @@ done
 
 sed -E -i 's|([^: ]*/)([^/]*\.ko)([:]?)([ ]\|$)|/lib/modules/\2\3\4|g' $VBOOT_DIR/modules.dep
 sed -E -i 's|([^: ]*/)([^/]*\.ko)([:]?)([ ]\|$)|/vendor_dlkm/lib/modules/\2\3\4|g' $VDLKM_DIR/modules.dep
+
+echo -e "\nCopying kernel headers..."
+cp -a "out/$HDR_STAGING/include/*" "$HDR_DEST/"
 
 # cd AnyKernel3
 # zip -r9 "../$ZIPNAME" * -x .git README.md *placeholder
