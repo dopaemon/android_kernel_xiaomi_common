@@ -4,7 +4,11 @@
 # Copyright (C) 2024 Adithya R.
 
 SECONDS=0 # start builtin bash timer
-KP_ROOT="$HOME/Rebase"
+if [ -n "$GITHUB_WORKSPACE" ]; then
+  KP_ROOT="$GITHUB_WORKSPACE/android-kernel"
+else
+  KP_ROOT="$HOME/Rebase"
+fi
 SRC_ROOT="$KP_ROOT/sm8450"
 TC_DIR="$KP_ROOT/prebuilts/clang/kernel/linux-x86/clang-r416183b"
 PREBUILTS_DIR="$KP_ROOT/prebuilts/kernel-build-tools/linux-x86"
