@@ -238,8 +238,12 @@ jobs:
              cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
           fi
 
-          cd ../
-          CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+          (
+             set +e
+             cd ../
+             CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+          )
+          
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
 
           cd $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/
@@ -284,8 +288,12 @@ jobs:
              cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
           fi
 
-          cd ../
-          CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+          (
+             set +e
+             cd ../
+             CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+          )
+          
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
 
           if [ "$TARGET" != "Both" ]; then
