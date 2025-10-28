@@ -4,11 +4,10 @@
 # Copyright (C) 2024 Adithya R.
 
 SECONDS=0 # start builtin bash timer
-KP_ROOT="$(realpath ../..)"
-SRC_ROOT="$HOME/pa"
-TC_DIR="$KP_ROOT/prebuilts-master/clang/host/linux-x86/clang-r510928"
+KP_ROOT="$HOME/Rebase"
+SRC_ROOT="$KP_ROOT/sm8450"
+TC_DIR="$KP_ROOT/prebuilts/clang/kernel/linux-x86/clang-r416183b"
 PREBUILTS_DIR="$KP_ROOT/prebuilts/kernel-build-tools/linux-x86"
-BRANCH="$(git branch --show-current)"
 MODULES_REPO="sm8450-modules"
 DT_REPO="sm8450-devicetrees"
 
@@ -42,12 +41,8 @@ if [ -z "$TARGET" ]; then
     exit 1
 fi
 
-if ! source .build.rc || [ -z "$SRC_ROOT" ]; then
-    echo -e "Create a .build.rc file here and define\nSRC_ROOT=<path/to/aospa/source>"
-    exit 1
-fi
-
-KERNEL_DIR="$SRC_ROOT/device/xiaomi/$TARGET-kernel"
+KERNEL_DIR="$KP_ROOT/$TARGET-kernel"
+mkdir -p $KERNEL_DIR
 
 if [ ! -d "$KERNEL_DIR" ]; then
     echo "$KERNEL_DIR does not exist!"
@@ -70,6 +65,7 @@ VDLKM_DIR="$KERNEL_DIR/vendor_dlkm"
 DEFCONFIG="gki_defconfig"
 DEFCONFIGS="vendor/waipio_GKI.config \
 vendor/xiaomi_GKI.config \
+vendor/${TARGET}_GKI.config \
 vendor/debugfs.config"
 
 MODULES_SRC="../$MODULES_REPO/qcom/opensource"
@@ -100,6 +96,10 @@ case "$TARGET" in
         DTB_WILDCARD="waipio"
         DTBO_WILDCARD="cupid-sm8450-pm8008-overlay"
         ;;
+    "mayfly" )
+        DTB_WILDCARD="cape"
+        DTBO_WILDCARD="mayfly-sm8475-pm8008-overlay"
+        ;;
 esac
 
 export PATH="$TC_DIR/bin:$PREBUILTS_DIR/bin:$PATH"
@@ -111,37 +111,18 @@ function m() {
         TARGET_PRODUCT=$TARGET $@ || exit $?
 }
 
-function get_trees_rev() {
-    kernel_rev="$(git rev-parse HEAD | cut -c1-12)"
-    [[ -n "$(git --no-optional-locks status -uno --porcelain)" ]] && kernel_rev+="+"
-
-    modules_rev="$(git -C ../$MODULES_REPO rev-parse HEAD | cut -c1-12)"
-    [[ -n "$(git -C ../$MODULES_REPO --no-optional-locks status -uno --porcelain)" ]] && modules_rev+="+"
-
-    dt_rev="$(git -C ../$DT_REPO rev-parse HEAD | cut -c1-12)"
-    [[ -n "$(git -C ../$DT_REPO --no-optional-locks status -uno --porcelain)" ]] && dt_rev+="+"
-
-    echo "-${kernel_rev}-m${modules_rev}-d${dt_rev}"
-}
-
 $DO_CLEAN && (
     rm -rf out $MODULES_REPO
     echo "Cleaned output directories."
 )
 
 mkdir -p out
-export LOCALVERSION="$(get_trees_rev)"
 
 echo -e "Generating config...\n"
 m $DEFCONFIG
 m ./scripts/kconfig/merge_config.sh $DEFCONFIGS vendor/${TARGET}_GKI.config
-scripts/config --file out/.config \
-    --set-str LOCALVERSION "-$BRANCH" \
-    -d LOCALVERSION_AUTO \
-    -m CONFIG_KSU
 $NO_LTO && (
     scripts/config --file out/.config \
-        --set-str LOCALVERSION "-${BRANCH}-nolto" \
         -d LTO_CLANG_FULL -e LTO_NONE
     echo -e "\nDisabled LTO!"
 )
@@ -152,15 +133,6 @@ echo -e "\nBuilding kernel...\n"
 m Image modules dtbs
 rm -rf out/modules out/*.ko
 m INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
-
-echo -e "\nCopying KSU LKM..."
-ksu_path="$(find $modules_out -name 'kernelsu.ko' -print -quit)"
-if [ -n "$ksu_path" ]; then
-    mv "$ksu_path" out
-    echo "Copied to out/kernelsu.ko"
-else
-    echo "Unable to locate ksu module!"
-fi
 
 echo -e "\nBuilding techpack modules..."
 for module in $MODULES; do
@@ -178,7 +150,7 @@ mv  out/arch/arm64/boot/dts/vendor/qcom/$DTB_WILDCARD.dtb \
     out/arch/arm64/boot/dts/vendor/qcom/$DTBO_WILDCARD.dtbo \
     out/dtbs-base
 rm -f out/arch/arm64/boot/dts/vendor/qcom/*.dtbo
-../../build/android/merge_dtbs.py out/dtbs-base out/arch/arm64/boot/dts/vendor/qcom/ out/dtbs || exit $?
+$KP_ROOT/build/android/merge_dtbs.py out/dtbs-base out/arch/arm64/boot/dts/vendor/qcom/ out/dtbs || exit $?
 
 echo -e "\nCopying files...\n"
 
