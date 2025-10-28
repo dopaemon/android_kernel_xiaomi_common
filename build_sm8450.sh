@@ -57,6 +57,8 @@ VBOOT_DIR="$KERNEL_DIR/vendor_ramdisk"
 VDLKM_DIR="$KERNEL_DIR/vendor_dlkm"
 HDR_DEST="$KERNEL_DIR/kernel-headers"
 
+[ -f "$DTB_COPY_TO" ] || { mkdir -p $DTB_COPY_TO }
+
 # AK3_DIR="$HOME/AnyKernel3"
 # ZIPNAME="aospa-kernel-$TARGET-$(date '+%Y%m%d-%H%M').zip"
 # if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
