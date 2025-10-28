@@ -238,6 +238,6 @@ sed -E -i 's|([^: ]*/)([^/]*\.ko)([:]?)([ ]\|$)|/lib/modules/\2\3\4|g' $VBOOT_DI
 sed -E -i 's|([^: ]*/)([^/]*\.ko)([:]?)([ ]\|$)|/vendor_dlkm/lib/modules/\2\3\4|g' $VDLKM_DIR/modules.dep
 
 echo -e "\nCopying kernel headers..."
-cp -a "out/$HDR_STAGING/include/*" "$HDR_DEST/"
+cp -r out/$HDR_STAGING/include/* $HDR_DEST/
 
 echo -e "\nCompleted in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
