@@ -43,11 +43,10 @@ if [ -z "$TARGET" ]; then
 fi
 
 KERNEL_DIR="$KP_ROOT/$TARGET-kernel"
-mkdir -p $KERNEL_DIR
 
 if [ ! -d "$KERNEL_DIR" ]; then
     echo "$KERNEL_DIR does not exist!"
-    exit 1
+    mkdir -p $KERNEL_DIR
 fi
 
 KERNEL_COPY_TO="$KERNEL_DIR"
@@ -57,14 +56,25 @@ VBOOT_DIR="$KERNEL_DIR/vendor_ramdisk"
 VDLKM_DIR="$KERNEL_DIR/vendor_dlkm"
 HDR_DEST="$KERNEL_DIR/kernel-headers"
 
-[ -f "$DTB_COPY_TO" ] || { mkdir -p $DTB_COPY_TO }
+if [ ! -d "$DTB_COPY_TO" ]; then
+    echo "$DTB_COPY_TO does not exist!"
+    mkdir -p $DTB_COPY_TO
+fi
 
-# AK3_DIR="$HOME/AnyKernel3"
-# ZIPNAME="aospa-kernel-$TARGET-$(date '+%Y%m%d-%H%M').zip"
-# if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
-#    head=$(git rev-parse --verify HEAD 2>/dev/null); then
-#     ZIPNAME="${ZIPNAME::-4}-$(echo $head | cut -c1-8).zip"
-# fi
+if [ ! -d "$VBOOT_DIR" ]; then
+    echo "$VBOOT_DIR does not exist!"
+    mkdir -p $VBOOT_DIR
+fi
+
+if [ ! -d "$VDLKM_DIR" ]; then
+    echo "$VDLKM_DIR does not exist!"
+    mkdir -p $VDLKM_DIR
+fi
+
+if [ ! -d "$HDR_DEST" ]; then
+    echo "$HDR_DEST does not exist!"
+    mkdir -p $HDR_DEST
+fi
 
 DEFCONFIG="gki_defconfig"
 DEFCONFIGS="vendor/waipio_GKI.config \
@@ -160,20 +170,6 @@ $KP_ROOT/build/android/merge_dtbs.py out/dtbs-base out/arch/arm64/boot/dts/vendo
 
 echo -e "\nCopying files...\n"
 
-# rm -rf AnyKernel3
-# if [ -d "$AK3_DIR" ]; then
-# 	cp -r $AK3_DIR AnyKernel3
-# 	git -C AnyKernel3 checkout marble &> /dev/null
-# elif ! git clone -q https://github.com/ghostrider-reborn/AnyKernel3 -b marble; then
-# 	echo -e "\nAnyKernel3 repo not found locally and couldn't clone from GitHub! Aborting..."
-# 	exit 1
-# fi
-# KERNEL_COPY_TO="AnyKernel3"
-# DTB_COPY_TO="AnyKernel3/dtb"
-# DTBO_COPY_TO="AnyKernel3/dtbo.img"
-# VBOOT_DIR="AnyKernel3/vendor_boot_modules"
-# VDLKM_DIR="AnyKernel3/vendor_dlkm_modules"
-
 cp out/arch/arm64/boot/Image $KERNEL_COPY_TO
 echo "Copied kernel to $KERNEL_COPY_TO."
 
@@ -244,10 +240,4 @@ sed -E -i 's|([^: ]*/)([^/]*\.ko)([:]?)([ ]\|$)|/vendor_dlkm/lib/modules/\2\3\4|
 echo -e "\nCopying kernel headers..."
 cp -a "out/$HDR_STAGING/include/*" "$HDR_DEST/"
 
-# cd AnyKernel3
-# zip -r9 "../$ZIPNAME" * -x .git README.md *placeholder
-# cd ..
-# rm -rf AnyKernel3
-
 echo -e "\nCompleted in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
-# echo "$(realpath $ZIPNAME)"
