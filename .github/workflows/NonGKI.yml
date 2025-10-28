@@ -201,7 +201,7 @@ jobs:
           cp -rv ./vendor_ramdisk $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_boot_modules
 
           cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-          rm -r .git README.md
+          rm -rf .git README.md || true
           find . -type f -name 'placeholder' -delete
           find . -type d -empty -delete
 
@@ -242,7 +242,7 @@ jobs:
           cp -rv ./vendor_ramdisk $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_boot_modules
 
           cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-          rm -r .git README.md
+          rm -rf .git README.md || true
           find . -type f -name 'placeholder' -delete
           find . -type d -empty -delete
 
