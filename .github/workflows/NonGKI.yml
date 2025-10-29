@@ -237,7 +237,7 @@ jobs:
 
           cd $GITHUB_WORKSPACE/android-kernel/${DEVICE}-kernel
           cp -rv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
-          cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
+          cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/dtb
           cp -rv ./vendor_dlkm $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_dlkm_modules
           cp -rv ./vendor_ramdisk $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_boot_modules
 
