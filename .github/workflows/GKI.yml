@@ -246,12 +246,12 @@ jobs:
           
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
 
-          cd $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch
-          chmod 777 patch
-          ./patch
-          rm -rf Image
-          mv oImage Image
+          # cd $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/
+          # curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch
+          # chmod 777 patch
+          # ./patch
+          # rm -rf Image
+          # mv oImage Image
           
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
