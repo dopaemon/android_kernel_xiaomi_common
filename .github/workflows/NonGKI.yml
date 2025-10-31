@@ -196,10 +196,10 @@ jobs:
 
           cd $GITHUB_WORKSPACE/android-kernel/${DEVICE}-kernel
           cp -rv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
-          cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
-          cp -rv ./vendor_dlkm $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_dlkm_modules
-          cp -rv ./vendor_ramdisk $GITHUB_WORKSPACE/android-kernel/AnyKernel3/_vendor_boot_modules
-
+          cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/dtb
+          tar -cJf $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.tar.xz .
+          cd ./vendor_ramdisk && find . | cpio -o -H newc > ../vendor_ramdisk.cpio && cd ../
+          lz4 -l -B6 --content-size vendor_ramdisk.cpio $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.cpio.lz4
           cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
           rm -rf .git README.md || true
           find . -type f -name 'placeholder' -delete
