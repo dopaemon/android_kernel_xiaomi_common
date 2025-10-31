@@ -52,9 +52,9 @@ static void internal_polyval_update(const struct polyval_tfm_ctx *keys,
 		kernel_neon_begin();
 		pmull_polyval_update(keys, in, nblocks, accumulator);
 		kernel_neon_end();
-	} else {
-		polyval_update_non4k(keys->key_powers[NUM_KEY_POWERS-1], in,
-			nblocks, accumulator);
+	// } else {
+		// polyval_update_non4k(keys->key_powers[NUM_KEY_POWERS-1], in,
+			// nblocks, accumulator);
 	}
 }
 
@@ -64,8 +64,8 @@ static void internal_polyval_mul(u8 *op1, const u8 *op2)
 		kernel_neon_begin();
 		pmull_polyval_mul(op1, op2);
 		kernel_neon_end();
-	} else {
-		polyval_mul_non4k(op1, op2);
+	// } else {
+		// polyval_mul_non4k(op1, op2);
 	}
 }
 
