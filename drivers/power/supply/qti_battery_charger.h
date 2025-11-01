@@ -304,6 +304,11 @@ enum xm_property_id {
 	XM_PROP_SET_LEARNING_POWER_B,
 	XM_PROP_GET_LEARNING_POWER_B,
 	XM_PROP_GET_LEARNING_POWER_DEV_B,
+#ifndef CONFIG_MI_CHARGER_M81
+	XM_PROP_GET_MAX_LIFE_VOL,
+	XM_PROP_GET_MAX_LIFE_TEMP,
+	XM_PROP_GET_OVER_VOL_DURATION,
+#endif /* !CONFIG_MI_CHARGER_M81 */
 	/*********nvt fuelgauge feature*********/
 	/*fuelgauge test node*/
 	XM_PROP_FG1_QMAX,
@@ -464,6 +469,9 @@ struct wls_fw_resp_msg {
 enum xm_chg_debug_type {
 	CHG_WLS_DEBUG,
 	CHG_ADSP_LOG,
+#ifndef CONFIG_MI_CHARGER_M81
+	CHG_BATT_SN_CODE,
+#endif /* !CONFIG_MI_CHARGER_M81 */
 	CHG_DEBUG_TYPE_MAX,
 };
 
@@ -620,6 +628,9 @@ struct battery_chg_dev {
 	u8				*digest;
 	u32				*ss_auth_data;
 	char				wls_debug_data[CHG_DEBUG_DATA_LEN];
+#ifndef CONFIG_MI_CHARGER_M81
+	char				batt_sn_data[CHG_DEBUG_DATA_LEN];
+#endif /* !CONFIG_MI_CHARGER_M81 */
 	/*shutdown delay is supported*/
 	bool				shutdown_delay_en;
 	bool				support_2s_charging;
