@@ -42,7 +42,7 @@
  * in memory stack (0:default, fastest), or in memory heap (1:requires malloc()).
  */
 #ifndef LZ4_HEAPMODE
-#define LZ4_HEAPMODE 1
+#define LZ4_HEAPMODE 0
 #endif
 
 /*-************************************
@@ -1701,7 +1701,7 @@ int LZ4_compress_fast_extState_fastReset(void *state, const char *src,
 	}
 }
 
-int LZ4_compress_fast(const char* src, char* dest, int srcSize, int dstCapacity,
+int LZ4_compress_fast(const char *src, char *dest, int srcSize, int dstCapacity,
 		      int acceleration, void *wrkmem)
 {
     return LZ4_compress_fast_extState(wrkmem, src, dest, srcSize, dstCapacity, acceleration);
@@ -1770,12 +1770,26 @@ int LZ4_compress_destSize_extState(void *state, const char *src, char *dst,
 }
 
 int LZ4_compress_destSize(const char *src, char *dst, int *srcSizePtr,
-			  int targetDstSize, void *wrkmem)
+			  int targetDstSize)
 {
-	return LZ4_compress_destSize_extState_internal(
-		wrkmem, src, dst, srcSizePtr, targetDstSize, 1);
+#if (LZ4_HEAPMODE)
+	LZ4_stream_t *const ctx = (LZ4_stream_t *)ALLOC(sizeof(
+		LZ4_stream_t)); /* malloc-calloc always properly aligned */
+	if (ctx == NULL)
+		return 0;
+#else
+	LZ4_stream_t ctxBody;
+	LZ4_stream_t *const ctx = &ctxBody;
+#endif
+
+	int result = LZ4_compress_destSize_extState_internal(
+		ctx, src, dst, srcSizePtr, targetDstSize, 1);
+
+#if (LZ4_HEAPMODE)
+	FREEMEM(ctx);
+#endif
+	return result;
 }
-EXPORT_SYMBOL(LZ4_compress_destSize);
 
 /*-******************************
 *  Streaming functions
@@ -3000,7 +3014,6 @@ int LZ4_decompress_safe(const char *source, char *dest, int compressedSize,
 				      maxDecompressedSize, decode_full_block,
 				      noDict, (BYTE *)dest, NULL, 0);
 }
-EXPORT_SYMBOL(LZ4_decompress_safe);
 
 LZ4_FORCE_O2
 int LZ4_decompress_safe_partial(const char *src, char *dst, int compressedSize,
@@ -3011,7 +3024,6 @@ int LZ4_decompress_safe_partial(const char *src, char *dst, int compressedSize,
 				      partial_decode, noDict, (BYTE *)dst, NULL,
 				      0);
 }
-EXPORT_SYMBOL(LZ4_decompress_safe_partial);
 
 LZ4_FORCE_O2
 int LZ4_decompress_fast(const char *source, char *dest, int originalSize)
@@ -3020,7 +3032,6 @@ int LZ4_decompress_fast(const char *source, char *dest, int originalSize)
 	return LZ4_decompress_unsafe_generic((const BYTE *)source, (BYTE *)dest,
 					     originalSize, 0, NULL, 0);
 }
-EXPORT_SYMBOL(LZ4_decompress_fast);
 
 /*===== Instantiate a few more decoding cases, used more than once. =====*/
 
@@ -3173,7 +3184,6 @@ int LZ4_setStreamDecode(LZ4_streamDecode_t *LZ4_streamDecode,
 	lz4sd->extDictSize = 0;
 	return 1;
 }
-EXPORT_SYMBOL(LZ4_setStreamDecode);
 
 /*! LZ4_decoderRingBufferSize() :
  *  when setting a ring buffer for streaming decompression (optional scenario),
@@ -3260,7 +3270,6 @@ int LZ4_decompress_safe_continue(LZ4_streamDecode_t *LZ4_streamDecode,
 
 	return result;
 }
-EXPORT_SYMBOL(LZ4_decompress_safe_continue);
 
 LZ4_FORCE_O2 ssize_t LZ4_arm64_decompress_safe_partial(const void *source,
 						       void *dest,
@@ -3288,7 +3297,6 @@ LZ4_FORCE_O2 ssize_t LZ4_arm64_decompress_safe_partial(const void *source,
 					outputSize, partial_decode, noDict,
 					(BYTE *)dest, NULL, 0);
 }
-EXPORT_SYMBOL(LZ4_arm64_decompress_safe_partial);
 
 LZ4_FORCE_O2 ssize_t LZ4_arm64_decompress_safe(const void *source, void *dest,
 					       size_t inputSize,
@@ -3314,7 +3322,6 @@ LZ4_FORCE_O2 ssize_t LZ4_arm64_decompress_safe(const void *source, void *dest,
 					outputSize, decode_full_block, noDict,
 					(BYTE *)dest, NULL, 0);
 }
-EXPORT_SYMBOL(LZ4_arm64_decompress_safe);
 
 LZ4_FORCE_O2 int
 LZ4_decompress_fast_continue(LZ4_streamDecode_t *LZ4_streamDecode,
@@ -3362,7 +3369,6 @@ LZ4_decompress_fast_continue(LZ4_streamDecode_t *LZ4_streamDecode,
 
 	return result;
 }
-EXPORT_SYMBOL(LZ4_decompress_fast_continue);
 
 /*
 Advanced decoding functions :
@@ -3394,7 +3400,6 @@ int LZ4_decompress_safe_usingDict(const char *source, char *dest,
 						maxOutputSize, dictStart,
 						(size_t)dictSize);
 }
-EXPORT_SYMBOL(LZ4_decompress_safe_usingDict);
 
 int LZ4_decompress_safe_partial_usingDict(const char *source, char *dest,
 					  int compressedSize,
@@ -3434,7 +3439,6 @@ int LZ4_decompress_fast_usingDict(const char *source, char *dest,
 	return LZ4_decompress_fast_extDict(source, dest, originalSize,
 					   dictStart, (size_t)dictSize);
 }
-EXPORT_SYMBOL(LZ4_decompress_fast_usingDict);
 
 /*
 These decompression functions are deprecated and should no longer be used.

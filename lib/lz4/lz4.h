@@ -132,8 +132,8 @@ extern "C" {
  *  - See tests/freestanding.c to check its basic setup.
  */
 #if defined(LZ4_FREESTANDING) && (LZ4_FREESTANDING == 1)
-#define LZ4_HEAPMODE 1
-#define LZ4HC_HEAPMODE 1
+#define LZ4_HEAPMODE 0
+#define LZ4HC_HEAPMODE 0
 #define LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION 1
 #if !defined(LZ4_memcpy)
 #error "LZ4_FREESTANDING requires macro 'LZ4_memcpy'."
@@ -313,7 +313,7 @@ LZ4LIB_API int LZ4_compress_fast_extState(void *state, const char *src,
  *        See https://github.com/lz4/lz4/issues/859 for details
  */
 LZ4LIB_API int LZ4_compress_destSize(const char *src, char *dst,
-				     int *srcSizePtr, int targetDstSize, void *wrkmem);
+				     int *srcSizePtr, int targetDstSize);
 
 /*! LZ4_decompress_safe_partial() :
  *  Decompress an LZ4 compressed block, of size 'srcSize' at position 'src',

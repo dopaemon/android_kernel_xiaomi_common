@@ -80,6 +80,7 @@ struct usb_ep;
  *	Note that for writes (IN transfers) some data bytes may still
  *	reside in a device-side FIFO when the request is reported as
  *	complete.
+ * @explicit_status: If true, delays the status stage
  *
  * These are allocated/freed through the endpoint they're used with.  The
  * hardware's driver can add extra per-request data to the memory it returns,
@@ -125,7 +126,13 @@ struct usb_request {
 	int			status;
 	unsigned		actual;
 
-	ANDROID_KABI_RESERVE(1);
+	_ANDROID_KABI_REPLACE(_ANDROID_KABI_RESERVE(1),
+			 struct {
+				__u8 explicit_status:1;
+				__u8 android_kabi_reserved1_padding1;
+				__u16 android_kabi_reserved1_padding2;
+				__u32 android_kabi_reserved1_padding3;
+				});
 };
 
 /*-------------------------------------------------------------------------*/
@@ -925,6 +932,39 @@ extern void usb_gadget_udc_reset(struct usb_gadget *gadget,
 
 extern void usb_gadget_giveback_request(struct usb_ep *ep,
 		struct usb_request *req);
+
+/*-------------------------------------------------------------------------*/
+
+/**
+ * usb_gadget_control_complete - complete the status stage of a control
+ *	request, or delay it
+ * Context: in_interrupt()
+ *
+ * @gadget: gadget whose control request's status stage should be completed
+ * @request: usb request whose status stage should be completed
+ *
+ * This is called by device controller drivers before returning the completed
+ * request back to the gadget layer, to either complete or delay the status
+ * stage. It exits without doing anything if the request has a non-zero status,
+ * if it has zero length, or if its explicit_status flag is set.
+ */
+static inline void usb_gadget_control_complete(struct usb_gadget *gadget,
+		struct usb_request *request)
+{
+	struct usb_request *req;
+
+	if (request->explicit_status || request->status || !request->length)
+		return;
+
+	/* Send an implicit status-stage request for ep0 */
+	req = usb_ep_alloc_request(gadget->ep0, GFP_ATOMIC);
+	if (req) {
+		req->length = 0;
+		req->explicit_status = 1;
+		req->complete = usb_ep_free_request;
+		usb_ep_queue(gadget->ep0, req, GFP_ATOMIC);
+	}
+}
 
 /*-------------------------------------------------------------------------*/
 
