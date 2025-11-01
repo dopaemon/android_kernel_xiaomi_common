@@ -197,19 +197,13 @@ jobs:
           cd $GITHUB_WORKSPACE/android-kernel/${DEVICE}-kernel
           cp -rv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
           cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/dtb
-          cd /vendor_dlkm && tar -cJf $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.tar.xz . && cd ../
+          cd ./vendor_dlkm && tar -cJf $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.tar.xz . && cd ../
           cd ./vendor_ramdisk && find . | cpio -o -H newc > ../vendor_ramdisk.cpio && cd ../
           lz4 -l -B6 --content-size vendor_ramdisk.cpio $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.cpio.lz4
           cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
           rm -rf .git README.md || true
           find . -type f -name 'placeholder' -delete
           find . -type d -empty -delete
-
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch
-          chmod 777 patch
-          ./patch
-          rm -rf Image patch
-          mv oImage Image
 
           zip -r9 "$ZIP_NAME" *
           mv "$ZIP_NAME" $GITHUB_WORKSPACE/
@@ -238,7 +232,7 @@ jobs:
           cd $GITHUB_WORKSPACE/android-kernel/${DEVICE}-kernel
           cp -rv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
           cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/dtb
-          cd /vendor_dlkm && tar -cJf $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.tar.xz . && cd ../
+          cd ./vendor_dlkm && tar -cJf $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.tar.xz . && cd ../
           cd ./vendor_ramdisk && find . | cpio -o -H newc > ../vendor_ramdisk.cpio && cd ../
           lz4 -l -B6 --content-size vendor_ramdisk.cpio $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.cpio.lz4
           cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
