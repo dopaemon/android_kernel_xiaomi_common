@@ -53,16 +53,16 @@ ifneq ($(hostprogs),)
 include $(srctree)/scripts/Makefile.host
 endif
 
+# Do not include host rules unless needed
+ifneq ($(dtbo-y),)
+include scripts/Makefile.dtbo
+endif
+
 # Do not include userprogs rules unless needed.
 # $(sort ...) is used here to remove duplicated words and excessive spaces.
 userprogs := $(sort $(userprogs))
 ifneq ($(userprogs),)
 include $(srctree)/scripts/Makefile.userprogs
-endif
-
-# Do not include dtbo rules unless needed
-ifneq ($(dtbo-y),)
-include scripts/Makefile.dtbo
 endif
 
 ifndef obj

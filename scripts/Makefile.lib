@@ -342,10 +342,6 @@ DTC_FLAGS += $(call dtc-option,-Wnode_name_chars_strict) \
 	$(call dtc-option,-Winterrupt_provider)
 endif
 
-ifeq ($(CONFIG_OF_GENERATE_SYMBOLS),y)
-DTC_FLAGS += --symbols
-endif
-
 DTC_FLAGS += $(DTC_FLAGS_$(basetarget))
 
 # Generate an assembly file to wrap the output of the device tree compiler
@@ -374,13 +370,13 @@ endif
 
 quiet_cmd_dtc = DTC     $@
 cmd_dtc = $(HOSTCC) -E $(dtc_cpp_flags) -x assembler-with-cpp -o $(dtc-tmp) $< ; \
-	$(DTC) -O $(2) -o $@ -b 0 \
-		$(addprefix -i,$(dir $<) $(DTC_INCLUDE)) $(DTC_FLAGS) \
+	$(DTC) -O $(or $(4),$(patsubst .%,%,$(suffix $@))) -o $@ -b 0 \
+		$(addprefix -i,$(dir $<) $(DTC_INCLUDE)) $(3) $(DTC_FLAGS) \
 		-d $(depfile).dtc.tmp $(dtc-tmp) ; \
 	cat $(depfile).pre.tmp $(depfile).dtc.tmp > $(depfile)
 
 $(obj)/%.dtb: $(src)/%.dts $(DTC) FORCE
-	$(call if_changed_dep,dtc,dtb)
+	$(call if_changed_dep,dtc,dtb,-@)
 
 DT_CHECKER ?= dt-validate
 DT_BINDING_DIR := Documentation/devicetree/bindings
@@ -391,7 +387,7 @@ quiet_cmd_dtb_check =	CHECK   $@
       cmd_dtb_check =	$(DT_CHECKER) -u $(srctree)/$(DT_BINDING_DIR) -p $(DT_TMP_SCHEMA) $@
 
 define rule_dtc
-	$(call cmd_and_fixdep,dtc,yaml)
+	$(call cmd_and_fixdep,dtc)
 	$(call cmd,dtb_check)
 endef
 
@@ -399,11 +395,6 @@ $(obj)/%.dt.yaml: $(src)/%.dts $(DTC) $(DT_TMP_SCHEMA) FORCE
 	$(call if_changed_rule,dtc,yaml)
 
 dtc-tmp = $(subst $(comma),_,$(dot-target).dts.tmp)
-
-# mkdtimg
-#----------------------------------------------------------------------------
-quiet_cmd_mkdtimg = DTBOIMG $@
-cmd_mkdtimg = mkdtimg create $@ $(MKDTIMG_FLAGS) $(filter-out FORCE,$^)
 
 # Bzip2
 # ---------------------------------------------------------------------------
