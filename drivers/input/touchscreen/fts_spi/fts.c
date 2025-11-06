@@ -2571,19 +2571,16 @@ static int fts_set_report_rate(struct fts_ts_info *info, u32 rate)
 	u8 rate_cmd[10] = { 0xC0, 0x05, 0x00, 0x00, 0x64,
 			    0x0F, 0x02, 0x0F, 0x01, 0x04 };
 
-#ifdef CONFIG_TOUCHSCREEN_ST_FTS_V521_SPI_ALT_REPORT_RATE_CMD
 	if (info->sensor_sleep == true || info->resume_bit == 0)
 		return 0;
 
+#ifdef CONFIG_TOUCHSCREEN_ST_FTS_V521_SPI_ALT_REPORT_RATE_CMD
 	if (rate == 0x01) {
 		rate_cmd[2] = rate;
 		rate_cmd[4] = 0x64;
 		rate_cmd[6] = 0x02;
 	}
 #else
-	if (info->sensor_sleep == true || info->resume_bit == 0)
-		return 0;
-
 	rate_cmd[2] = rate;
 #endif
 
