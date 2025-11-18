@@ -2171,3 +2171,76 @@ source "arch/arm64/gunyah/Kconfig"
 if CRYPTO
 source "arch/arm64/crypto/Kconfig"
 endif
+
+menu "Xiaomi Device Target"
+config XIAOMI_CUPID
+        bool "Xiaomi 12"
+        help
+          Xiaomi 12 (cupid).
+
+          If unsure, say N
+
+config XIAOMI_ZEUS
+        bool "Xiaomi 12 Pro"
+        help
+          Xiaomi 12 Pro (zeus).
+
+          If unsure, say N
+
+config XIAOMI_MAYFLY
+        bool "Xiaomi 12S"
+        help
+          Xiaomi 12S (mayfly).
+
+          If unsure, say N
+
+config XIAOMI_UNICORN
+        bool "Xiaomi 12S Pro"
+        help
+          Xiaomi 12 Pro (unicorn).
+
+          If unsure, say N
+
+config XIAOMI_DITING
+        bool "Xiaomi 12T Pro"
+        help
+          Xiaomi 12T Pro (diting).
+
+          If unsure, say N
+
+config XIAOMI_INGRES
+        bool "Xiaomi Foco F4 GT"
+        help
+          Xiaomi Poco F4 GT (ingres).
+
+          If unsure, say N
+
+config XIAOMI_THOR
+        bool "Xiaomi 12S Ultra"
+        help
+          Xiaomi 12S Ultra (thor).
+
+          If unsure, say N
+
+config XIAOMI_MONDRIAN
+        bool "Xiaomi Redmi K60"
+        help
+          Xiaomi Redmi K60 (mondrian).
+
+          If unsure, say N
+
+config XIAOMI_MARBLE
+        bool "Xiaomi Poco F5"
+        help
+          Xiaomi Poco F5 (marble).
+
+          If unsure, say N
+
+config XIAOMI_ZIZHAN
+        bool "Xiaomi MIX Fold 2"
+        help
+          Xiaomi MIX Fold 2 (zizhan).
+
+          If unsure, say N
+
+endmenu
