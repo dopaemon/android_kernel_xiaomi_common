@@ -78,9 +78,6 @@ endif
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 dtbo-$(CONFIG_ARCH_WAIPIO) += waipio-rumi-overlay.dtbo \
 	waipio-mtp-pm8008-overlay.dtbo \
-	zeus-sm8450-pm8008-overlay.dtbo \
-	cupid-sm8450-pm8008-overlay.dtbo \
-	ingres-sm8450-pm8008-overlay.dtbo \
 	waipio-cdp-pm8008-overlay.dtbo \
 	waipio-qrd-pm8008-overlay.dtbo \
 	waipio-atp-pm8008-overlay.dtbo \
@@ -105,11 +102,27 @@ dtbo-$(CONFIG_ARCH_WAIPIO) += waipio-rumi-overlay.dtbo \
 	waipio-cdp-xr-pcie-overlay.dtbo \
 	waipio-mtp-xr-pcie-overlay.dtbo
 
+ifeq ($(CONFIG_XIAOMI_ZEUS),y)
+dtbo-$(CONFIG_ARCH_WAIPIO) += zeus-sm8450-pm8008-overlay.dtbo
+endif
+ifeq ($(CONFIG_XIAOMI_CUPID),y)
+dtbo-$(CONFIG_ARCH_WAIPIO) += cupid-sm8450-pm8008-overlay.dtbo
+endif
+ifeq ($(CONFIG_XIAOMI_INGRES),y)
+dtbo-$(CONFIG_ARCH_WAIPIO) += ingres-sm8450-pm8008-overlay.dtbo
+endif
+
 waipio-rumi-overlay.dtbo-base := waipio.dtb waipiop.dtb waipio-v2.dtb waipiop-v2.dtb
 waipio-mtp-pm8008-overlay.dtbo-base := waipio.dtb waipiop.dtb waipio-v2.dtb waipiop-v2.dtb waipio-lte.dtb
+ifeq ($(CONFIG_XIAOMI_ZEUS),y)
 zeus-sm8450-pm8008-overlay.dtbo-base := waipio.dtb waipiop.dtb waipio-v2.dtb waipiop-v2.dtb waipio-lte.dtb
+endif
+ifeq ($(CONFIG_XIAOMI_CUPID),y)
 cupid-sm8450-pm8008-overlay.dtbo-base := waipio.dtb waipiop.dtb waipio-v2.dtb waipiop-v2.dtb waipio-lte.dtb
+endif
+ifeq ($(CONFIG_XIAOMI_INGRES),y)
 ingres-sm8450-pm8008-overlay.dtbo-base := waipio.dtb waipiop.dtb waipio-v2.dtb waipiop-v2.dtb waipio-lte.dtb
+endif
 waipio-mtp-68disp-pm8008-overlay.dtbo-base := waipio.dtb waipiop.dtb waipio-v2.dtb waipiop-v2.dtb waipio-lte.dtb
 waipio-cdp-pm8008-overlay.dtbo-base := waipio.dtb waipiop.dtb waipio-v2.dtb waipiop-v2.dtb waipio-lte.dtb
 waipio-qrd-pm8008-overlay.dtbo-base := waipio.dtb waipiop.dtb waipio-v2.dtb waipiop-v2.dtb waipio-lte.dtb
@@ -299,7 +312,7 @@ endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 dtbo-$(CONFIG_ARCH_CAPE) += cape-mtp-pm8008-overlay.dtbo \
-        cape-mtp-120fps-pm8008-overlay.dtbo \
+	cape-mtp-120fps-pm8008-overlay.dtbo \
 	cape-mtp-nodisplay-pm8008-overlay.dtbo \
         cape-cdp-pm8008-overlay.dtbo \
         cape-cdp-qhd-pm8008-overlay.dtbo \
@@ -329,14 +342,29 @@ dtbo-$(CONFIG_ARCH_CAPE) += cape-mtp-pm8008-overlay.dtbo \
 	ukee-mtp-nodisplay-pm8008-overlay.dtbo \
 	ukee-mtp-nodisplay-pm8010-overlay.dtbo \
 	ukee-qrd-pm8008-overlay.dtbo \
-	ukee-qrd-pm8010-overlay.dtbo \
-	unicorn-sm8475-pm8008-overlay.dtbo \
-	thor-sm8475-pm8008-overlay.dtbo \
-	mayfly-sm8475-pm8008-overlay.dtbo \
-	mondrian-sm8475-pm8008-overlay.dtbo \
-	marble-sm7475-pm8008-overlay.dtbo \
-	zizhan-sm8475-pm8008-overlay.dtbo \
-	diting-sm8475-pm8008-overlay.dtbo
+	ukee-qrd-pm8010-overlay.dtbo
+
+ifeq ($(CONFIG_XIAOMI_UNICORN),y)
+dtbo-$(CONFIG_ARCH_CAPE) += unicorn-sm8475-pm8008-overlay.dtbo
+endif
+ifeq ($(CONFIG_XIAOMI_THOR),y)
+dtbo-$(CONFIG_ARCH_CAPE) += thor-sm8475-pm8008-overlay.dtbo
+endif
+ifeq ($(CONFIG_XIAOMI_MAYFLY),y)
+dtbo-$(CONFIG_ARCH_CAPE) += mayfly-sm8475-pm8008-overlay.dtbo
+endif
+ifeq ($(CONFIG_XIAOMI_MONDRIAN),y)
+dtbo-$(CONFIG_ARCH_CAPE) += mondrian-sm8475-pm8008-overlay.dtbo
+endif
+ifeq ($(CONFIG_XIAOMI_MARBLE),y)
+dtbo-$(CONFIG_ARCH_CAPE) += marble-sm7475-pm8008-overlay.dtbo
+endif
+ifeq ($(CONFIG_XIAOMI_ZIZHAN),y)
+dtbo-$(CONFIG_ARCH_CAPE) += zizhan-sm8475-pm8008-overlay.dtbo
+endif
+ifeq ($(CONFIG_XIAOMI_DITING),y)
+dtbo-$(CONFIG_ARCH_CAPE) += diting-sm8475-pm8008-overlay.dtbo
+endif
 
 cape-mtp-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
 cape-mtp-120fps-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
@@ -370,13 +398,27 @@ ukee-mtp-nodisplay-pm8008-overlay.dtbo-base := ukee.dtb
 ukee-mtp-nodisplay-pm8010-overlay.dtbo-base := ukee.dtb
 ukee-qrd-pm8008-overlay.dtbo-base := ukee.dtb
 ukee-qrd-pm8010-overlay.dtbo-base := ukee.dtb
+ifeq ($(CONFIG_XIAOMI_UNICORN),y)
 unicorn-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
+endif
+ifeq ($(CONFIG_XIAOMI_THOR),y)
 thor-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
+endif
+ifeq ($(CONFIG_XIAOMI_MAYFLY),y)
 mayfly-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
+endif
+ifeq ($(CONFIG_XIAOMI_MONDRIAN),y)
 mondrian-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
+endif
+ifeq ($(CONFIG_XIAOMI_MARBLE),y)
 marble-sm7475-pm8008-overlay.dtbo-base := ukee.dtb
+endif
+ifeq ($(CONFIG_XIAOMI_ZIZHAN),y)
 zizhan-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
+endif
+ifeq ($(CONFIG_XIAOMI_DITING),y)
 diting-sm8475-pm8008-overlay.dtbo-base := cape.dtb cape-v2.dtb capep.dtb
+endif
 
 else
 dtb-$(CONFIG_ARCH_CAPE) += cape-mtp-pm8008.dtb \
