@@ -14,7 +14,7 @@
 #   <nh_modules_dir>    Directory containing suspected NetHunter modules
 #   <staging_dir>       Kernel build staging directory with all modules
 #   <vendor_boot_list>  Path to vendor_boot.img's modules_list.txt
-#   <system_map>        Path to System.map file for depmod
+#   <system_map>        Path to System.map file for depmod (optional, can be empty "")
 #   <output_dir>        Output directory for organized modules
 #
 # ==============================================================================
@@ -60,8 +60,9 @@ show_help() {
     echo "Arguments:"
     echo "  <nh_modules_dir>    Directory containing suspected NetHunter modules"
     echo "  <staging_dir>       Kernel build staging directory with all modules"
-    echo "  <vendor_boot_list>  Path to vendor_boot.img's modules_list.txt"
-    echo "  <system_map>        Path to System.map file for depmod"
+    echo "  <vendor_boot_list>  Path to vendor_boot.img's modules_list.txt (or \"\" to skip separation)"
+    echo "  <system_map>        Path to System.map file for depmod (optional, use \"\" to skip)"
+    echo "                      If not provided, depmod will use module metadata only"
     echo "  <output_dir>        Output directory for organized modules"
     echo "  [strip_tool]        (Optional) Path to strip tool (llvm-strip or aarch64-linux-gnu-strip)"
     echo "                      Leave empty or provide \"\" to skip stripping"
@@ -274,7 +275,7 @@ elif [ "$#" -eq 0 ]; then
     read -e -p "Enter path to NetHunter modules directory: " NH_MODULE_DIR_RAW
     read -e -p "Enter path to kernel build staging directory: " STAGING_DIR_RAW
     read -e -p "Enter path to vendor_boot.img's modules_list.txt (or press Enter to skip separation): " VENDOR_BOOT_LIST_RAW
-    read -e -p "Enter path to System.map file: " SYSTEM_MAP_RAW
+    read -e -p "Enter path to System.map file (or press Enter to skip - will use module metadata only): " SYSTEM_MAP_RAW
     read -e -p "Enter output directory for organized modules: " OUTPUT_DIR_RAW
     read -e -p "Enter path to strip tool (llvm-strip/aarch64-linux-gnu-strip) or press Enter to skip: " STRIP_TOOL_RAW
 
@@ -289,7 +290,21 @@ fi
 NH_MODULE_DIR=$(sanitize_path "$NH_MODULE_DIR_RAW")
 STAGING_DIR=$(sanitize_path "$STAGING_DIR_RAW")
 VENDOR_BOOT_LIST=$(sanitize_path "$VENDOR_BOOT_LIST_RAW")
-SYSTEM_MAP=$(sanitize_path "$SYSTEM_MAP_RAW")
+
+# Handle System.map - make it optional
+SKIP_SYSTEM_MAP=false
+if [ -z "$SYSTEM_MAP_RAW" ]; then
+    SKIP_SYSTEM_MAP=true
+    SYSTEM_MAP=""
+else
+    SYSTEM_MAP=$(sanitize_path "$SYSTEM_MAP_RAW")
+    # Check if sanitized path is also empty (user entered just quotes/spaces)
+    if [ -z "$SYSTEM_MAP" ]; then
+        SKIP_SYSTEM_MAP=true
+        SYSTEM_MAP=""
+    fi
+fi
+
 OUTPUT_DIR=$(sanitize_path "$OUTPUT_DIR_RAW")
 STRIP_TOOL=$(sanitize_path "$STRIP_TOOL_RAW")
 
@@ -314,9 +329,15 @@ elif [ ! -f "$VENDOR_BOOT_LIST" ]; then
     exit 1
 fi
 
-if [ ! -f "$SYSTEM_MAP" ]; then
-    log_error "System.map file not found: '$SYSTEM_MAP'"
-    exit 1
+# Validate System.map if provided
+if [ "$SKIP_SYSTEM_MAP" = false ] && [ -n "$SYSTEM_MAP" ]; then
+    if [ ! -f "$SYSTEM_MAP" ]; then
+        log_error "System.map file not found: '$SYSTEM_MAP'"
+        exit 1
+    fi
+    log_info "System.map provided: $SYSTEM_MAP"
+else
+    log_info "System.map not provided - depmod will use module metadata only"
 fi
 
 # Handle optional output directory
@@ -575,7 +596,13 @@ generate_module_files() {
     
     # Run depmod to generate modules.dep
     cd "$base_dir"
-    depmod -b . -F "$SYSTEM_MAP" "$KERNEL_VERSION"
+    if [ "$SKIP_SYSTEM_MAP" = false ] && [ -n "$SYSTEM_MAP" ] && [ -f "$SYSTEM_MAP" ]; then
+        # Use System.map if provided
+        depmod -b . -F "$SYSTEM_MAP" "$KERNEL_VERSION"
+    else
+        # Use module metadata only (no System.map)
+        depmod -b . "$KERNEL_VERSION"
+    fi
     
     if [ $? -eq 0 ]; then
         log_info "✓ Generated modules.dep for $dir_name"
@@ -619,6 +646,7 @@ echo "  - Total modules processed: $TOTAL_MODULES"
 echo "  - vendor_boot modules: $VB_COUNT"
 echo "  - vendor_dlkm modules: $VD_COUNT"
 echo "  - Vendor boot separation: $([ "$SKIP_VENDOR_BOOT_SEPARATION" = true ] && echo "Skipped" || echo "Enabled")"
+echo "  - System.map used: $([ "$SKIP_SYSTEM_MAP" = false ] && [ -n "$SYSTEM_MAP" ] && echo "$(basename "$SYSTEM_MAP")" || echo "None (using module metadata)")"
 echo "  - Strip tool used: $([ -n "$STRIP_TOOL" ] && echo "$(basename "$STRIP_TOOL")" || echo "None")"
 echo "  - Output directory: $OUTPUT_DIR"
 echo ""
