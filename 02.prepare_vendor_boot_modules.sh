@@ -46,6 +46,22 @@ log_error() {
     echo "[ERROR] $1"
 }
 
+# Function to display inline progress (overwrites same line)
+show_progress() {
+    local current=$1
+    local total=$2
+    local action=$3
+    local name=$4
+    local percent=$((current * 100 / total))
+    printf "\r[INFO] %s: %d/%d (%d%%) %s" "$action" "$current" "$total" "$percent" "${name:0:50}"
+    [ -z "$name" ] || printf "%-50s" ""  # Clear remaining space
+}
+
+# Function to finish progress line (move to next line)
+finish_progress() {
+    printf "\n"
+}
+
 show_help() {
     echo "Usage: $0 [OPTIONS] [ARGUMENTS...]"
     echo ""
@@ -88,48 +104,44 @@ strip_modules() {
         return 1
     fi
 
-    log_info "Stripping modules to reduce size..."
-
     local stripped_count=0
     local total_size_before=0
     local total_size_after=0
+    local module_count=0
+    local current_index=0
 
+    # Count modules first
     for module in "$module_dir"/*.ko; do
         [ -f "$module" ] || continue
+        ((module_count++))
         size_before=$(stat -f%z "$module" 2>/dev/null || stat -c%s "$module" 2>/dev/null || echo "0")
         total_size_before=$((total_size_before + size_before))
     done
 
     for module in "$module_dir"/*.ko; do
         [ -f "$module" ] || continue
-
+        ((current_index++))
         module_name=$(basename "$module")
         size_before=$(stat -f%z "$module" 2>/dev/null || stat -c%s "$module" 2>/dev/null || echo "0")
 
+        show_progress "$current_index" "$module_count" "Stripping modules" "$module_name"
         "$strip_tool" --strip-debug --strip-unneeded "$module" 2>/dev/null
 
         if [ $? -eq 0 ]; then
             size_after=$(stat -f%z "$module" 2>/dev/null || stat -c%s "$module" 2>/dev/null || echo "0")
             total_size_after=$((total_size_after + size_after))
-
-            if [ "$size_before" -gt "$size_after" ]; then
-                reduction=$((size_before - size_after))
-                log_info "  ✓ Stripped $module_name: ${size_before} → ${size_after} bytes (-${reduction} bytes)"
-            else
-                log_info "  ✓ Processed $module_name: ${size_after} bytes (no reduction)"
-            fi
             ((stripped_count++))
         else
-            log_warning "  ✗ Failed to strip $module_name"
             size_after=$(stat -f%z "$module" 2>/dev/null || stat -c%s "$module" 2>/dev/null || echo "0")
             total_size_after=$((total_size_after + size_after))
         fi
     done
+    finish_progress
 
     if [ $stripped_count -gt 0 ]; then
         total_reduction=$((total_size_before - total_size_after))
-        log_info "Strip complete: $stripped_count modules processed"
-        log_info "Total size reduction: $total_reduction bytes ($(echo "scale=1; $total_reduction / 1024" | bc 2>/dev/null || echo "$total_reduction/1024")KB)"
+        reduction_kb=$((total_reduction / 1024))
+        log_info "Stripped $stripped_count/$module_count modules - Reduced by ${reduction_kb}KB"
     fi
 
     return 0
@@ -237,43 +249,45 @@ mkdir -p "$MODULE_WORK_DIR"
 
 print_header "Copying Initial Module Set"
 
+# Count total modules first
+TOTAL_MODULES_TO_COPY=$(wc -l < "$MODULES_LIST" | tr -d ' ')
 INITIAL_COUNT=0
 MISSING_MODULES=()
-log_info "Processing modules from list..."
+CURRENT_INDEX=0
 
 while IFS= read -r module_name || [ -n "$module_name" ]; do
     [ -z "$module_name" ] && continue
     module_name=$(echo "$module_name" | tr -d '\r\n' | xargs)
     [ -z "$module_name" ] && continue
-
-    log_info "Looking for: $module_name"
+    
+    ((CURRENT_INDEX++))
     module_path=$(find_module_in_staging "$module_name" "$STAGING_DIR")
 
     if [ -n "$module_path" ] && [ -f "$module_path" ]; then
-        cp "$module_path" "$MODULE_WORK_DIR/"
+        cp "$module_path" "$MODULE_WORK_DIR/" 2>/dev/null
         if [ $? -eq 0 ]; then
             ((INITIAL_COUNT++))
-            log_info "✓ Copied: $module_name"
+            show_progress "$CURRENT_INDEX" "$TOTAL_MODULES_TO_COPY" "Copying modules" "$module_name"
         else
-            log_warning "✗ Failed to copy: $module_name"
             MISSING_MODULES+=("$module_name")
             echo "$module_name" >> "$MISSING_MODULES_FILE"
+            show_progress "$CURRENT_INDEX" "$TOTAL_MODULES_TO_COPY" "Copying modules" "$module_name (FAILED)"
         fi
     else
         MISSING_MODULES+=("$module_name")
         echo "$module_name" >> "$MISSING_MODULES_FILE"
-        log_warning "✗ Module not found in staging: $module_name"
+        show_progress "$CURRENT_INDEX" "$TOTAL_MODULES_TO_COPY" "Copying modules" "$module_name (NOT FOUND)"
     fi
 done < "$MODULES_LIST"
+finish_progress
 
-log_info "Copied $INITIAL_COUNT modules from initial list"
+log_info "Copied $INITIAL_COUNT/$TOTAL_MODULES_TO_COPY modules"
 if [ ${#MISSING_MODULES[@]} -gt 0 ]; then
     log_warning "Missing ${#MISSING_MODULES[@]} modules from staging directory"
 fi
 
 print_header "Resolving Dependencies"
 
-log_info "Starting iterative dependency resolution..."
 PROCESSED_MODULES_FILE="$WORK_DIR/processed_modules.list"
 touch "$PROCESSED_MODULES_FILE"
 PROCESSING_QUEUE_FILE="$WORK_DIR/processing_queue.list"
@@ -282,10 +296,11 @@ find "$MODULE_WORK_DIR" -name "*.ko" -printf "%f\n" > "$PROCESSING_QUEUE_FILE"
 ITERATION=0
 while [ -s "$PROCESSING_QUEUE_FILE" ]; do
     ((ITERATION++))
-    log_info "Dependency resolution iteration $ITERATION"
     NEW_QUEUE_FILE="$WORK_DIR/new_queue_$ITERATION.list"
     touch "$NEW_QUEUE_FILE"
     NEW_DEPS_FOUND=0
+    QUEUE_SIZE=$(wc -l < "$PROCESSING_QUEUE_FILE" | tr -d ' ')
+    PROCESSED_IN_ITERATION=0
 
     while IFS= read -r module_name || [ -n "$module_name" ]; do
         [ -z "$module_name" ] && continue
@@ -294,13 +309,13 @@ while [ -s "$PROCESSING_QUEUE_FILE" ]; do
         fi
         module_path="$MODULE_WORK_DIR/$module_name"
         if [ ! -f "$module_path" ]; then
-            log_warning "Module file not found during processing: $module_name"
             continue
         fi
-        log_info "Processing dependencies for: $module_name"
+        ((PROCESSED_IN_ITERATION++))
+        show_progress "$PROCESSED_IN_ITERATION" "$QUEUE_SIZE" "Resolving dependencies (iteration $ITERATION)" "$module_name"
+        
         deps=$(modinfo -F depends "$module_path" 2>/dev/null | tr ',' '\n' | grep -v '^$' || true)
         if [ -n "$deps" ]; then
-            log_info "  Dependencies found: $(echo "$deps" | tr '\n' ' ')"
             while IFS= read -r dep_name || [ -n "$dep_name" ]; do
                 [ -z "$dep_name" ] && continue
                 dep_ko_name="${dep_name}.ko"
@@ -309,14 +324,12 @@ while [ -s "$PROCESSING_QUEUE_FILE" ]; do
                 fi
                 dep_path=$(find_module_in_staging "$dep_ko_name" "$STAGING_DIR")
                 if [ -n "$dep_path" ] && [ -f "$dep_path" ]; then
-                    log_info "  ✓ Adding missing dependency: $dep_ko_name"
-                    cp "$dep_path" "$MODULE_WORK_DIR/"
+                    cp "$dep_path" "$MODULE_WORK_DIR/" 2>/dev/null
                     if [ $? -eq 0 ]; then
                         echo "$dep_ko_name" >> "$NEW_QUEUE_FILE"
                         ((NEW_DEPS_FOUND++))
                     fi
                 else
-                    log_warning "  ✗ Dependency not found in staging: $dep_ko_name"
                     # Track missing dependency if not already tracked
                     if ! grep -Fxq "$dep_ko_name" "$MISSING_MODULES_FILE" 2>/dev/null; then
                         echo "$dep_ko_name" >> "$MISSING_MODULES_FILE"
@@ -324,20 +337,17 @@ while [ -s "$PROCESSING_QUEUE_FILE" ]; do
                     fi
                 fi
             done <<< "$deps"
-        else
-            log_info "  No dependencies found"
         fi
         echo "$module_name" >> "$PROCESSED_MODULES_FILE"
     done < "$PROCESSING_QUEUE_FILE"
+    finish_progress
 
-    log_info "Iteration $ITERATION complete - Added $NEW_DEPS_FOUND new dependencies"
     mv "$NEW_QUEUE_FILE" "$PROCESSING_QUEUE_FILE"
     if [ $ITERATION -gt 10 ]; then
         log_warning "Maximum iterations reached, stopping dependency resolution"
         break
     fi
     if [ $NEW_DEPS_FOUND -eq 0 ]; then
-        log_info "No new dependencies found, resolution complete"
         break
     fi
 done
@@ -355,29 +365,27 @@ fi
 print_header "Preparing Build Environment"
 STAGING_MODULES_DIR=$(dirname "$(find "$STAGING_DIR" -type f -name "modules.builtin" -path "*/lib/modules/*" | head -1)")
 if [ -d "$STAGING_MODULES_DIR" ]; then
-    log_info "Copying build files from $STAGING_MODULES_DIR"
     cp "$STAGING_MODULES_DIR"/modules.* "$MODULE_WORK_DIR/" 2>/dev/null
+    log_info "Build files copied"
 fi
 
 print_header "Generating Module Dependencies"
-log_info "Running depmod to generate new modules.dep..."
 cd "$WORK_DIR"
-depmod -b . -F "$SYSTEM_MAP" "$KERNEL_VERSION"
+depmod -b . -F "$SYSTEM_MAP" "$KERNEL_VERSION" 2>/dev/null
 if [ $? -ne 0 ]; then
     log_error "depmod failed"
     exit 1
 fi
-log_info "Module dependencies generated successfully"
+log_info "Module dependencies generated"
 
 print_header "Using OEM modules.load (No Modifications)"
-log_info "Copying OEM modules.load without adding or removing entries"
 cp "$OEM_LOAD_FILE" "$MODULE_WORK_DIR/modules.load"
-log_info "modules.load copied directly"
+log_info "OEM modules.load copied"
 
 print_header "Finalizing Output"
-log_info "Copying final module set to: $OUTPUT_DIR"
 cp "$MODULE_WORK_DIR"/*.ko "$OUTPUT_DIR/" 2>/dev/null || true
 cp "$MODULE_WORK_DIR"/modules.* "$OUTPUT_DIR/" 2>/dev/null || true
+log_info "Output files copied"
 
 FINAL_COUNT=$(ls -1 "$OUTPUT_DIR"/*.ko 2>/dev/null | wc -l)
 LOAD_COUNT=$(wc -l < "$OUTPUT_DIR/modules.load" 2>/dev/null || echo "0")
@@ -410,7 +418,4 @@ if [ -f "$MISSING_MODULES_FILE" ] && [ -s "$MISSING_MODULES_FILE" ]; then
     echo ""
 fi
 
-echo "Files created in $OUTPUT_DIR:"
-ls -lA "$OUTPUT_DIR" 2>/dev/null || echo "No files found in output directory"
-echo ""
 echo "Your vendor_boot module set is ready for packaging!"

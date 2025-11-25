@@ -54,6 +54,22 @@ log_error() {
     echo "[ERROR] $1"
 }
 
+# Function to display inline progress (overwrites same line)
+show_progress() {
+    local current=$1
+    local total=$2
+    local action=$3
+    local name=$4
+    local percent=$((current * 100 / total))
+    printf "\r[INFO] %s: %d/%d (%d%%) %s" "$action" "$current" "$total" "$percent" "${name:0:50}"
+    [ -z "$name" ] || printf "%-50s" ""  # Clear remaining space
+}
+
+# Function to finish progress line (move to next line)
+finish_progress() {
+    printf "\n"
+}
+
 show_help() {
     echo "Usage: $0 [OPTIONS] [ARGUMENTS...]"
     echo ""
@@ -101,33 +117,33 @@ strip_modules() {
         return 1
     fi
 
-    log_info "Stripping modules in $module_dir to reduce size..."
-
     local stripped_count=0
     local total_size_before=0
     local total_size_after=0
+    local module_count=0
+    local current_index=0
 
-    # Calculate total size before stripping
+    # Count modules first
     for module in "$module_dir"/*.ko; do
         [ -f "$module" ] || continue
+        ((module_count++))
         size_before=$(stat -f%z "$module" 2>/dev/null || stat -c%s "$module" 2>/dev/null || echo "0")
         total_size_before=$((total_size_before + size_before))
     done
 
     for module in "$module_dir"/*.ko; do
         [ -f "$module" ] || continue
-
+        ((current_index++))
         module_name=$(basename "$module")
 
-        # Strip the module
+        show_progress "$current_index" "$module_count" "Stripping modules" "$module_name"
         "$strip_tool" --strip-debug --strip-unneeded "$module" 2>/dev/null
 
         if [ $? -eq 0 ]; then
             ((stripped_count++))
-        else
-            log_warning "  ✗ Failed to strip $module_name"
         fi
     done
+    finish_progress
 
     # Calculate total size after stripping
     for module in "$module_dir"/*.ko; do
@@ -138,8 +154,8 @@ strip_modules() {
 
     if [ $stripped_count -gt 0 ]; then
         total_reduction=$((total_size_before - total_size_after))
-        log_info "Strip complete: $stripped_count modules processed"
-        log_info "Total size reduction: $total_reduction bytes ($(echo "scale=1; $total_reduction / 1024" | bc 2>/dev/null || echo "$total_reduction/1024")KB)"
+        reduction_kb=$((total_reduction / 1024))
+        log_info "Stripped $stripped_count/$module_count modules - Reduced by ${reduction_kb}KB"
     fi
 
     return 0
@@ -277,34 +293,39 @@ mkdir -p "$MODULE_WORK_DIR"
 
 print_header "Copying Initial Modules from vendor_dlkm List"
 
+# Count total modules first
+TOTAL_MODULES_TO_COPY=$(wc -l < "$MODULES_LIST" | tr -d ' ')
 INITIAL_COUNT=0
 MISSING_MODULES=()
+CURRENT_INDEX=0
 
 while IFS= read -r module_name || [ -n "$module_name" ]; do
     [ -z "$module_name" ] && continue
     module_name=$(echo "$module_name" | tr -d '\r\n' | xargs)
     [ -z "$module_name" ] && continue
-
+    
+    ((CURRENT_INDEX++))
     module_path=$(find_module_in_staging "$module_name" "$STAGING_DIR")
 
     if [ -n "$module_path" ] && [ -f "$module_path" ]; then
-        cp "$module_path" "$MODULE_WORK_DIR/"
+        cp "$module_path" "$MODULE_WORK_DIR/" 2>/dev/null
         if [ $? -eq 0 ]; then
             ((INITIAL_COUNT++))
-            log_info "✓ Copied: $module_name"
+            show_progress "$CURRENT_INDEX" "$TOTAL_MODULES_TO_COPY" "Copying modules" "$module_name"
         else
-            log_warning "✗ Failed to copy: $module_name"
             MISSING_MODULES+=("$module_name")
             echo "$module_name" >> "$MISSING_MODULES_FILE"
+            show_progress "$CURRENT_INDEX" "$TOTAL_MODULES_TO_COPY" "Copying modules" "$module_name (FAILED)"
         fi
     else
         MISSING_MODULES+=("$module_name")
         echo "$module_name" >> "$MISSING_MODULES_FILE"
-        log_warning "✗ Module not found in staging: $module_name"
+        show_progress "$CURRENT_INDEX" "$TOTAL_MODULES_TO_COPY" "Copying modules" "$module_name (NOT FOUND)"
     fi
 done < "$MODULES_LIST"
+finish_progress
 
-log_info "Copied $INITIAL_COUNT initial modules."
+log_info "Copied $INITIAL_COUNT/$TOTAL_MODULES_TO_COPY modules"
 if [ ${#MISSING_MODULES[@]} -gt 0 ]; then
     log_warning "Missing ${#MISSING_MODULES[@]} modules from staging directory"
 fi
@@ -317,25 +338,31 @@ if [ -n "$NH_MODULE_DIR" ]; then
     print_header "Processing NetHunter Modules"
 
     # 1. Copy suspected NetHunter modules to a temporary, isolated directory
-    log_info "Copying suspected NetHunter modules to temporary location..."
-    find "$NH_MODULE_DIR" -name "*.ko" -exec cp {} "$NH_TEMP_DIR/" \;
-
+    find "$NH_MODULE_DIR" -name "*.ko" -exec cp {} "$NH_TEMP_DIR/" \; 2>/dev/null
     INITIAL_NH_COUNT=$(find "$NH_TEMP_DIR" -name "*.ko" | wc -l)
-    log_info "Found $INITIAL_NH_COUNT suspected NetHunter modules."
+    log_info "Found $INITIAL_NH_COUNT NetHunter modules"
 
     # 2. Resolve dependencies for NetHunter modules in their isolated directory
-    log_info "Resolving dependencies for NetHunter modules..."
     PROCESSED_NH_MODULES="$WORK_DIR/processed_nh.list"
     find "$NH_TEMP_DIR" -name "*.ko" -printf "%f\n" > "$PROCESSED_NH_MODULES"
 
     NEW_DEPS_FOUND=1
+    ITERATION=0
     while [ "$NEW_DEPS_FOUND" -gt 0 ]; do
+        ((ITERATION++))
         NEW_DEPS_FOUND=0
 
         # Create a list of all modules currently in the temp dir
         CURRENT_MODULES_IN_TEMP=$(find "$NH_TEMP_DIR" -name "*.ko" -printf "%f\n")
+        TEMP_MODULE_COUNT=$(echo "$CURRENT_MODULES_IN_TEMP" | wc -l | tr -d ' ')
+        PROCESSED_COUNT=0
 
         for module_path in "$NH_TEMP_DIR"/*.ko; do
+            [ -f "$module_path" ] || continue
+            ((PROCESSED_COUNT++))
+            module_name=$(basename "$module_path")
+            show_progress "$PROCESSED_COUNT" "$TEMP_MODULE_COUNT" "Resolving NH dependencies (iter $ITERATION)" "$module_name"
+            
             deps=$(modinfo -F depends "$module_path" 2>/dev/null | tr ',' '\n' | grep -v '^$')
             for dep_name in $deps; do
                 dep_ko_name="${dep_name}.ko"
@@ -344,11 +371,9 @@ if [ -n "$NH_MODULE_DIR" ]; then
                 if ! echo "$CURRENT_MODULES_IN_TEMP" | grep -Fxq "$dep_ko_name"; then
                     dep_path=$(find_module_in_staging "$dep_ko_name" "$STAGING_DIR")
                     if [ -n "$dep_path" ]; then
-                        log_info "  ✓ Adding missing dependency for NH module: $dep_ko_name"
-                        cp "$dep_path" "$NH_TEMP_DIR/"
+                        cp "$dep_path" "$NH_TEMP_DIR/" 2>/dev/null
                         ((NEW_DEPS_FOUND++))
                     else
-                        log_warning "  ✗ Dependency not found in staging: $dep_ko_name"
                         # Track missing dependency if not already tracked
                         if ! grep -Fxq "$dep_ko_name" "$MISSING_MODULES_FILE" 2>/dev/null; then
                             echo "$dep_ko_name" >> "$MISSING_MODULES_FILE"
@@ -358,32 +383,28 @@ if [ -n "$NH_MODULE_DIR" ]; then
                 fi
             done
         done
-        [ "$NEW_DEPS_FOUND" -eq 0 ] && log_info "Dependency resolution for NetHunter modules complete."
+        finish_progress
+        [ "$NEW_DEPS_FOUND" -eq 0 ] && log_info "NetHunter dependency resolution complete"
     done
 
     # 3. Prune modules from the NetHunter temp folder (if list is provided)
     if [ -n "$VENDOR_BOOT_MODULES_LIST" ]; then
-        print_header "Pruning NetHunter modules present in vendor_boot"
         while IFS= read -r module_to_prune || [ -n "$module_to_prune" ]; do
             [ -z "$module_to_prune" ] && continue
             module_to_prune=$(echo "$module_to_prune" | tr -d '\r\n' | xargs)
 
             if [ -f "$NH_TEMP_DIR/$module_to_prune" ]; then
-                log_info "  - Pruning $module_to_prune (exists in vendor_boot)"
                 rm -f "$NH_TEMP_DIR/$module_to_prune"
                 ((PRUNED_COUNT++))
             fi
         done < "$VENDOR_BOOT_MODULES_LIST"
-        log_info "Pruned $PRUNED_COUNT modules from the NetHunter set."
-    else
-        log_info "Vendor_boot modules list not provided, skipping pruning step."
+        [ $PRUNED_COUNT -gt 0 ] && log_info "Pruned $PRUNED_COUNT modules (present in vendor_boot)"
     fi
 
     # 4. Copy final NetHunter modules to the main module folder
-    print_header "Merging Final NetHunter Modules"
     cp "$NH_TEMP_DIR"/*.ko "$MODULE_WORK_DIR/" 2>/dev/null
-    NH_COUNT=$(find "$NH_TEMP_DIR" -name "*.ko" | wc -l)
-    log_info "Copied $NH_COUNT final NetHunter modules to the main working directory."
+    NH_COUNT=$(find "$NH_TEMP_DIR" -name "*.ko" 2>/dev/null | wc -l)
+    [ $NH_COUNT -gt 0 ] && log_info "Merged $NH_COUNT NetHunter modules"
 else
     log_info "NetHunter module directory not provided, skipping NetHunter processing."
 fi
@@ -410,22 +431,20 @@ fi
 print_header "Preparing Build Environment"
 STAGING_MODULES_DIR=$(dirname "$(find "$STAGING_DIR" -type f -name "modules.builtin" -path "*/lib/modules/*" | head -1)")
 if [ -d "$STAGING_MODULES_DIR" ]; then
-    log_info "Copying build files from $STAGING_MODULES_DIR"
     cp "$STAGING_MODULES_DIR"/modules.* "$MODULE_WORK_DIR/" 2>/dev/null
+    log_info "Build files copied"
 fi
 
 # --- Generate New modules.dep ---
 
 print_header "Generating Module Dependencies"
-log_info "Running depmod to generate new modules.dep..."
 cd "$WORK_DIR"
-
-depmod -b . -F "$SYSTEM_MAP" "$KERNEL_VERSION"
+depmod -b . -F "$SYSTEM_MAP" "$KERNEL_VERSION" 2>/dev/null
 if [ $? -ne 0 ]; then
     log_error "depmod failed."
     exit 1
 fi
-log_info "Module dependencies generated successfully."
+log_info "Module dependencies generated"
 
 # --- Intelligent modules.load Generation ---
 
@@ -448,11 +467,13 @@ cp modules.load.base modules.load.final
 NEW_MODULE_COUNT=$(wc -l < new_modules.list)
 
 if [ "$NEW_MODULE_COUNT" -gt 0 ]; then
-    log_info "Found $NEW_MODULE_COUNT new modules to insert into load order."
-
+    CURRENT_INDEX=0
     > insertions.tsv
     while IFS= read -r new_module || [ -n "$new_module" ]; do
         [ -z "$new_module" ] && continue
+        ((CURRENT_INDEX++))
+        show_progress "$CURRENT_INDEX" "$NEW_MODULE_COUNT" "Generating load order" "$new_module"
+        
         dependents=$(grep -w -- "$new_module" modules.dep | cut -d: -f1 | sed 's/^\.\///')
         insertion_line=99999
 
@@ -462,17 +483,17 @@ if [ "$NEW_MODULE_COUNT" -gt 0 ]; then
         fi
         echo -e "$insertion_line\t$new_module" >> insertions.tsv
     done < new_modules.list
+    finish_progress
 
     # Insert modules based on dependencies
     while IFS=$'\t' read -r line_num module_to_insert; do
         if [ "$line_num" -eq 99999 ]; then
-            log_info "  Appending $module_to_insert"
             echo "$module_to_insert" >> modules.load.final
         else
-            log_info "  Inserting $module_to_insert at line $line_num"
             sed -i "${line_num}i$module_to_insert" modules.load.final
         fi
     done < <(sort -r -n insertions.tsv)
+    log_info "Inserted $NEW_MODULE_COUNT new modules into load order"
 fi
 mv modules.load.final modules.load
 rm -f our_modules.list oem_modules.list modules.load.base new_modules.list insertions.tsv
@@ -480,13 +501,13 @@ rm -f our_modules.list oem_modules.list modules.load.base new_modules.list inser
 # --- Copy Final Results ---
 
 print_header "Finalizing Output"
-log_info "Copying final module set to: $OUTPUT_DIR"
 cp *.ko modules.* "$OUTPUT_DIR/" 2>/dev/null
+log_info "Output files copied"
 
 # --- Summary ---
 
 FINAL_COUNT=$(ls -1 "$OUTPUT_DIR"/*.ko 2>/dev/null | wc -l)
-LOAD_COUNT=$(wc -l < "$OUTPUT_DIR/modules.load")
+LOAD_COUNT=$(wc -l < "$OUTPUT_DIR/modules.load" 2>/dev/null || echo "0")
 
 print_header "Process Complete!"
 echo "Vendor DLKM module preparation successful!"
@@ -518,7 +539,4 @@ if [ -f "$MISSING_MODULES_FILE" ] && [ -s "$MISSING_MODULES_FILE" ]; then
     echo ""
 fi
 
-echo "Files created in $OUTPUT_DIR:"
-ls -lA "$OUTPUT_DIR"
-echo ""
 echo "Your vendor_dlkm module set is ready for packaging!"

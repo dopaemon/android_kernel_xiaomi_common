@@ -45,6 +45,22 @@ log_error() {
     echo "[ERROR] $1"
 }
 
+# Function to display inline progress (overwrites same line)
+show_progress() {
+    local current=$1
+    local total=$2
+    local action=$3
+    local name=$4
+    local percent=$((current * 100 / total))
+    printf "\r[INFO] %s: %d/%d (%d%%) %s" "$action" "$current" "$total" "$percent" "${name:0:50}"
+    [ -z "$name" ] || printf "%-50s" ""  # Clear remaining space
+}
+
+# Function to finish progress line (move to next line)
+finish_progress() {
+    printf "\n"
+}
+
 show_help() {
     echo "Usage: $0 [OPTIONS] [ARGUMENTS...]"
     echo ""
@@ -197,36 +213,36 @@ strip_modules() {
         return 1
     fi
 
-    log_info "Stripping modules in $(basename "$module_dir") to reduce size..."
-
     local stripped_count=0
     local failed_count=0
     local total_size_before=0
     local total_size_after=0
+    local module_count=0
+    local current_index=0
 
-    # Calculate total size before stripping
+    # Calculate total size before stripping and count modules
     for module in "$module_dir"/*.ko; do
         [ -f "$module" ] || continue
+        ((module_count++))
         size_before=$(stat -f%z "$module" 2>/dev/null || stat -c%s "$module" 2>/dev/null || echo "0")
         total_size_before=$((total_size_before + size_before))
     done
 
     for module in "$module_dir"/*.ko; do
         [ -f "$module" ] || continue
-
+        ((current_index++))
         module_name=$(basename "$module")
 
-        # Strip the module (remove debug info and unneeded symbols)
+        show_progress "$current_index" "$module_count" "Stripping modules" "$module_name"
         "$strip_tool" --strip-debug --strip-unneeded "$module" 2>/dev/null
 
         if [ $? -eq 0 ]; then
             ((stripped_count++))
-            log_info "  ✓ Stripped: $module_name"
         else
             ((failed_count++))
-            log_warning "  ✗ Failed to strip: $module_name"
         fi
     done
+    finish_progress
 
     # Calculate total size after stripping
     for module in "$module_dir"/*.ko; do
@@ -238,8 +254,8 @@ strip_modules() {
     if [ $stripped_count -gt 0 ]; then
         total_reduction=$((total_size_before - total_size_after))
         reduction_kb=$((total_reduction / 1024))
-        log_info "Strip complete: $stripped_count modules stripped, $failed_count failed"
-        log_info "Total size reduction: $total_reduction bytes (${reduction_kb}KB)"
+        log_info "Stripped $stripped_count/$module_count modules - Reduced by ${reduction_kb}KB"
+        [ $failed_count -gt 0 ] && log_warning "$failed_count modules failed to strip"
     fi
 
     return 0
@@ -411,14 +427,20 @@ print_header "Collecting NetHunter Modules"
 NH_MODULES=()
 NH_COUNT=0
 
+# Count modules first
+TOTAL_NH_MODULES=$(find "$NH_MODULE_DIR" -name "*.ko" 2>/dev/null | wc -l | tr -d ' ')
+CURRENT_INDEX=0
+
 for module_path in "$NH_MODULE_DIR"/*.ko; do
     [ -f "$module_path" ] || continue
+    ((CURRENT_INDEX++))
     module_name=$(basename "$module_path")
-    cp "$module_path" "$ALL_DEPS_DIR/"
+    cp "$module_path" "$ALL_DEPS_DIR/" 2>/dev/null
     NH_MODULES+=("$module_name")
     ((NH_COUNT++))
-    log_info "✓ Found NetHunter module: $module_name"
+    show_progress "$CURRENT_INDEX" "$TOTAL_NH_MODULES" "Collecting NetHunter modules" "$module_name"
 done
+finish_progress
 
 log_info "Collected $NH_COUNT NetHunter modules"
 
@@ -440,11 +462,17 @@ ITERATION=1
 
 while [ "$NEW_DEPS_FOUND" -gt 0 ]; do
     NEW_DEPS_FOUND=0
-    log_info "Dependency resolution iteration $ITERATION..."
+    
+    # Count modules to process
+    MODULES_TO_PROCESS=$(find "$ALL_DEPS_DIR" -name "*.ko" 2>/dev/null | wc -l | tr -d ' ')
+    PROCESSED_COUNT=0
     
     # Check dependencies for all modules currently in our collection
     for module_path in "$ALL_DEPS_DIR"/*.ko; do
         [ -f "$module_path" ] || continue
+        ((PROCESSED_COUNT++))
+        module_name=$(basename "$module_path")
+        show_progress "$PROCESSED_COUNT" "$MODULES_TO_PROCESS" "Resolving dependencies (iter $ITERATION)" "$module_name"
         
         # Get dependencies for this module
         deps=$(modinfo -F depends "$module_path" 2>/dev/null | tr ',' '\n' | grep -v '^$')
@@ -458,12 +486,10 @@ while [ "$NEW_DEPS_FOUND" -gt 0 ]; do
                 dep_path=$(find_module_in_staging "$dep_ko_name" "$STAGING_DIR")
                 
                 if [ -n "$dep_path" ] && [ -f "$dep_path" ]; then
-                    log_info "  ✓ Adding dependency: $dep_ko_name"
-                    cp "$dep_path" "$ALL_DEPS_DIR/"
+                    cp "$dep_path" "$ALL_DEPS_DIR/" 2>/dev/null
                     ALL_REQUIRED_MODULES+=("$dep_ko_name")
                     ((NEW_DEPS_FOUND++))
                 else
-                    log_warning "  ✗ Dependency not found: $dep_ko_name"
                     # Track missing dependency if not already tracked
                     if ! grep -Fxq "$dep_ko_name" "$MISSING_MODULES_FILE" 2>/dev/null; then
                         echo "$dep_ko_name" >> "$MISSING_MODULES_FILE"
@@ -473,6 +499,7 @@ while [ "$NEW_DEPS_FOUND" -gt 0 ]; do
             fi
         done
     done
+    finish_progress
     
     ((ITERATION++))
     [ "$NEW_DEPS_FOUND" -eq 0 ] && log_info "Dependency resolution complete after $((ITERATION-1)) iterations"
@@ -485,25 +512,25 @@ log_info "Total modules required: $TOTAL_MODULES (NetHunter + dependencies)"
 
 print_header "Organizing Modules into Output Directories"
 
+TOTAL_TO_ORGANIZE=${#ALL_REQUIRED_MODULES[@]}
+CURRENT_INDEX=0
+
 if [ "$SKIP_VENDOR_BOOT_SEPARATION" = true ]; then
-    log_info "Vendor boot separation skipped - placing all modules in vendor_dlkm"
-    
     # Copy all modules to vendor_dlkm
     for module_name in "${ALL_REQUIRED_MODULES[@]}"; do
         module_path="$ALL_DEPS_DIR/$module_name"
         [ -f "$module_path" ] || continue
-        
-        cp "$module_path" "$VD_MODULE_DIR/"
+        ((CURRENT_INDEX++))
+        show_progress "$CURRENT_INDEX" "$TOTAL_TO_ORGANIZE" "Organizing modules" "$module_name"
+        cp "$module_path" "$VD_MODULE_DIR/" 2>/dev/null
         ((VD_COUNT++))
-        log_info "→ vendor_dlkm: $module_name"
     done
+    finish_progress
     
     VB_COUNT=0
-    log_info "All $VD_COUNT modules placed in vendor_dlkm"
+    log_info "Placed $VD_COUNT modules in vendor_dlkm"
     
 else
-    log_info "Organizing modules based on vendor_boot modules list"
-    
     # Read vendor_boot modules list into array for faster lookup
     declare -A VENDOR_BOOT_MODULES
     while IFS= read -r module_name || [ -n "$module_name" ]; do
@@ -520,22 +547,22 @@ else
     for module_name in "${ALL_REQUIRED_MODULES[@]}"; do
         module_path="$ALL_DEPS_DIR/$module_name"
         [ -f "$module_path" ] || continue
+        ((CURRENT_INDEX++))
+        show_progress "$CURRENT_INDEX" "$TOTAL_TO_ORGANIZE" "Organizing modules" "$module_name"
         
         if [[ -n "${VENDOR_BOOT_MODULES[$module_name]}" ]]; then
             # Module should go to vendor_boot
-            cp "$module_path" "$VB_MODULE_DIR/"
+            cp "$module_path" "$VB_MODULE_DIR/" 2>/dev/null
             ((VB_COUNT++))
-            log_info "→ vendor_boot: $module_name"
         else
             # Module should go to vendor_dlkm
-            cp "$module_path" "$VD_MODULE_DIR/"
+            cp "$module_path" "$VD_MODULE_DIR/" 2>/dev/null
             ((VD_COUNT++))
-            log_info "→ vendor_dlkm: $module_name"
         fi
     done
+    finish_progress
 
-    log_info "Organized $VB_COUNT modules into vendor_boot"
-    log_info "Organized $VD_COUNT modules into vendor_dlkm"
+    log_info "Organized $VB_COUNT modules into vendor_boot, $VD_COUNT into vendor_dlkm"
 fi
 
 # --- Module Stripping ---
@@ -677,18 +704,6 @@ if [ -f "$MISSING_MODULES_FILE" ] && [ -s "$MISSING_MODULES_FILE" ]; then
     echo "Missing modules list saved to: $MISSING_MODULES_FILE"
     echo ""
     log_warning "Some modules are missing - review the list above and take appropriate action"
-    echo ""
-fi
-
-if [ "$SKIP_VENDOR_BOOT_SEPARATION" = false ] && [ $VB_COUNT -gt 0 ]; then
-    echo "vendor_boot contents:"
-    ls -la "$OUTPUT_DIR/vendor_boot/lib/modules/$KERNEL_VERSION/" 2>/dev/null || echo "  (no files)"
-    echo ""
-fi
-
-if [ $VD_COUNT -gt 0 ]; then
-    echo "vendor_dlkm contents:"
-    ls -la "$OUTPUT_DIR/vendor_dlkm/lib/modules/$KERNEL_VERSION/" 2>/dev/null || echo "  (no files)"
     echo ""
 fi
 
