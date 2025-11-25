@@ -368,6 +368,11 @@ fi
 mkdir -p "$OUTPUT_DIR/vendor_dlkm"
 log_info "Created vendor_dlkm directory"
 
+# Initialize missing modules tracking file
+MISSING_MODULES_FILE="$OUTPUT_DIR/missing_modules.txt"
+MISSING_MODULES=()
+> "$MISSING_MODULES_FILE"
+
 # Create temporary work directories
 WORK_DIR=$(mktemp -d)
 ALL_DEPS_DIR="$WORK_DIR/all_deps"
@@ -459,6 +464,11 @@ while [ "$NEW_DEPS_FOUND" -gt 0 ]; do
                     ((NEW_DEPS_FOUND++))
                 else
                     log_warning "  ✗ Dependency not found: $dep_ko_name"
+                    # Track missing dependency if not already tracked
+                    if ! grep -Fxq "$dep_ko_name" "$MISSING_MODULES_FILE" 2>/dev/null; then
+                        echo "$dep_ko_name" >> "$MISSING_MODULES_FILE"
+                        MISSING_MODULES+=("$dep_ko_name")
+                    fi
                 fi
             fi
         done
@@ -650,6 +660,25 @@ echo "  - System.map used: $([ "$SKIP_SYSTEM_MAP" = false ] && [ -n "$SYSTEM_MAP
 echo "  - Strip tool used: $([ -n "$STRIP_TOOL" ] && echo "$(basename "$STRIP_TOOL")" || echo "None")"
 echo "  - Output directory: $OUTPUT_DIR"
 echo ""
+
+# Check and display missing modules warning
+if [ -f "$MISSING_MODULES_FILE" ] && [ -s "$MISSING_MODULES_FILE" ]; then
+    MISSING_COUNT=$(wc -l < "$MISSING_MODULES_FILE" | tr -d ' ')
+    print_header "⚠️  MISSING MODULES WARNING"
+    echo "The following $MISSING_COUNT module(s) were NOT found in the staging directory:"
+    echo ""
+    cat "$MISSING_MODULES_FILE" | sed 's/^/  - /'
+    echo ""
+    echo "These modules may be:"
+    echo "  1. Not compiled (enable them in kernel config and rebuild)"
+    echo "  2. Proprietary modules (extract from stock ROM)"
+    echo "  3. Out-of-tree modules (compile separately)"
+    echo ""
+    echo "Missing modules list saved to: $MISSING_MODULES_FILE"
+    echo ""
+    log_warning "Some modules are missing - review the list above and take appropriate action"
+    echo ""
+fi
 
 if [ "$SKIP_VENDOR_BOOT_SEPARATION" = false ] && [ $VB_COUNT -gt 0 ]; then
     echo "vendor_boot contents:"

@@ -246,6 +246,8 @@ fi
 log_info "Creating clean output directory: $OUTPUT_DIR"
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
+MISSING_MODULES_FILE="$OUTPUT_DIR/missing_modules.txt"
+> "$MISSING_MODULES_FILE"  # Initialize missing modules file
 
 # Create temporary work directory
 WORK_DIR=$(mktemp -d)
@@ -292,16 +294,19 @@ while IFS= read -r module_name || [ -n "$module_name" ]; do
             log_info "✓ Copied: $module_name"
         else
             log_warning "✗ Failed to copy: $module_name"
+            MISSING_MODULES+=("$module_name")
+            echo "$module_name" >> "$MISSING_MODULES_FILE"
         fi
     else
         MISSING_MODULES+=("$module_name")
+        echo "$module_name" >> "$MISSING_MODULES_FILE"
         log_warning "✗ Module not found in staging: $module_name"
     fi
 done < "$MODULES_LIST"
 
 log_info "Copied $INITIAL_COUNT initial modules."
 if [ ${#MISSING_MODULES[@]} -gt 0 ]; then
-    log_warning "Missing ${#MISSING_MODULES[@]} modules from staging: ${MISSING_MODULES[*]}"
+    log_warning "Missing ${#MISSING_MODULES[@]} modules from staging directory"
 fi
 
 # --- NetHunter Module Processing ---
@@ -344,6 +349,11 @@ if [ -n "$NH_MODULE_DIR" ]; then
                         ((NEW_DEPS_FOUND++))
                     else
                         log_warning "  ✗ Dependency not found in staging: $dep_ko_name"
+                        # Track missing dependency if not already tracked
+                        if ! grep -Fxq "$dep_ko_name" "$MISSING_MODULES_FILE" 2>/dev/null; then
+                            echo "$dep_ko_name" >> "$MISSING_MODULES_FILE"
+                            MISSING_MODULES+=("$dep_ko_name")
+                        fi
                     fi
                 fi
             done
@@ -488,6 +498,26 @@ echo "  - NetHunter modules added: $NH_COUNT"
 echo "  - Vendor boot modules pruned: $PRUNED_COUNT"
 echo "  - Output directory:      $OUTPUT_DIR"
 echo ""
+
+# Check and display missing modules warning
+if [ -f "$MISSING_MODULES_FILE" ] && [ -s "$MISSING_MODULES_FILE" ]; then
+    MISSING_COUNT=$(wc -l < "$MISSING_MODULES_FILE" | tr -d ' ')
+    print_header "⚠️  MISSING MODULES WARNING"
+    echo "The following $MISSING_COUNT module(s) were NOT found in the staging directory:"
+    echo ""
+    cat "$MISSING_MODULES_FILE" | sed 's/^/  - /'
+    echo ""
+    echo "These modules may be:"
+    echo "  1. Not compiled (enable them in kernel config and rebuild)"
+    echo "  2. Proprietary modules (extract from stock ROM)"
+    echo "  3. Out-of-tree modules (compile separately)"
+    echo ""
+    echo "Missing modules list saved to: $MISSING_MODULES_FILE"
+    echo ""
+    log_warning "Some modules are missing - review the list above and take appropriate action"
+    echo ""
+fi
+
 echo "Files created in $OUTPUT_DIR:"
 ls -lA "$OUTPUT_DIR"
 echo ""
