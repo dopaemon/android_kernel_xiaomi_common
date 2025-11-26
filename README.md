@@ -147,3 +147,88 @@ ravindu644@ubuntu:~/Desktop/Kernels/android_kernel_a166p/nethunter (stable-conne
 ath6kl_core.ko  ath9k_common.ko  ath9k_hw.ko  carl9170.ko  mac80211.ko  rndis_host.ko  rt2500usb.ko  rt2800usb.ko  rt2x00usb.ko  rtl8187.ko   zd1201.ko
 ath6kl_usb.ko   ath9k_htc.ko     ath.ko       cfg80211.ko  mt7601u.ko   rndis_wlan.ko  rt2800lib.ko  rt2x00lib.ko  rt73usb.ko    rtl8xxxu.ko  zd1211rw.ko
 ```
+
+---
+
+## 4. `04.prepare_only_nethunter_modules.sh` - Extract and Organize NetHunter/DLKM Modules
+
+This script is designed to extract NetHunter or custom DLKM modules and their dependencies, organizing them intelligently into `vendor_boot` and `vendor_dlkm` folders. It's particularly useful for wiring up newly built DLKM modules.
+
+**Key Features:**
+- Treats all user-provided modules as DLKM modules (always places them in `vendor_dlkm`)
+- Intelligent module placement when both vendor_boot and vendor_dlkm lists are provided:
+  - Modules in both partitions → copied to both locations
+  - Modules only in vendor_boot → vendor_boot only (pruned from vendor_dlkm)
+  - Modules only in vendor_dlkm → vendor_dlkm only
+- Supports non-GKI devices (can skip both lists to place all modules in a single folder)
+- Optional System.map support (uses module metadata if not provided)
+
+### Usage
+
+**Show Help Message**
+```bash
+./04.prepare_only_nethunter_modules.sh --help
+```
+
+**Interactive Mode**
+```bash
+./04.prepare_only_nethunter_modules.sh
+```
+
+**Argument Mode**
+Provide all paths as arguments. To skip optional paths, pass an empty string `""`.
+
+**Example (with intelligent placement for GKI devices):**
+```bash
+# Usage: ./04.prepare_only_nethunter_modules.sh <nh_modules_dir> <staging_dir> <vendor_boot_list> <vendor_dlkm_list> <system_map> <output_dir> [strip_tool]
+
+./04.prepare_only_nethunter_modules.sh \
+  /path/to/nethunter_modules \
+  /path/to/kernel_build/out/msm-kernel/staging \
+  /path/to/vendor_boot/modules_list.txt \
+  /path/to/vendor_dlkm/modules_list.txt \
+  /path/to/kernel_build/out/System.map \
+  ./output/nethunter_modules \
+  /path/to/toolchain/bin/llvm-strip
+```
+
+**Example (for non-GKI devices - single folder):**
+```bash
+./04.prepare_only_nethunter_modules.sh \
+  /path/to/nethunter_modules \
+  /path/to/kernel_build/out/msm-kernel/staging \
+  "" \
+  "" \
+  "" \
+  ./output/nethunter_modules \
+  /path/to/toolchain/bin/llvm-strip
+```
+
+**Example (minimal - skip System.map and strip tool):**
+```bash
+./04.prepare_only_nethunter_modules.sh \
+  /path/to/nethunter_modules \
+  /path/to/kernel_build/out/msm-kernel/staging \
+  /path/to/vendor_boot/modules_list.txt \
+  /path/to/vendor_dlkm/modules_list.txt \
+  "" \
+  ./output/nethunter_modules
+```
+
+### Module Placement Logic
+
+When both vendor_boot and vendor_dlkm lists are provided:
+
+1. **User-provided modules** → Always go to `vendor_dlkm` (treated as DLKM modules)
+   - If also in vendor_boot → copied to both locations
+
+2. **Dependencies**:
+   - In both lists → copied to both partitions
+   - Only in vendor_boot → vendor_boot only (pruned from vendor_dlkm)
+   - Only in vendor_dlkm → vendor_dlkm only
+   - Not in either list → vendor_dlkm (dependency of DLKM modules)
+
+When vendor_boot list is skipped:
+- All modules go to `vendor_dlkm` folder (single folder output)
+
+This ensures that newly built DLKM modules are properly organized and their dependencies are correctly placed based on where they exist in the stock partitions.

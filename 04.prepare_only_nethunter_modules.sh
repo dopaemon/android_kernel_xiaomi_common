@@ -70,13 +70,18 @@ show_help() {
     echo "  1. Interactive Mode: Run without any arguments to be prompted for each path."
     echo "     $0"
     echo ""
-    echo "  2. Non-Interactive (Argument) Mode: Provide all 5-6 paths as arguments."
-    echo "     $0 <nh_modules_dir> <staging_dir> <vendor_boot_list> <system_map> <output_dir> [strip_tool]"
+    echo "  2. Non-Interactive (Argument) Mode: Provide all 5-7 paths as arguments."
+    echo "     $0 <nh_modules_dir> <staging_dir> <vendor_boot_list> <vendor_dlkm_list> <system_map> <output_dir> [strip_tool]"
     echo ""
     echo "Arguments:"
-    echo "  <nh_modules_dir>    Directory containing suspected NetHunter modules"
+    echo "  <nh_modules_dir>    Directory containing suspected NetHunter/DLKM modules"
     echo "  <staging_dir>       Kernel build staging directory with all modules"
     echo "  <vendor_boot_list>  Path to vendor_boot.img's modules_list.txt (or \"\" to skip separation)"
+    echo "  <vendor_dlkm_list>  Path to vendor_dlkm.img's modules_list.txt (optional, use \"\" to skip)"
+    echo "                      If provided, enables intelligent module placement:"
+    echo "                      - Modules in both lists → copied to both partitions"
+    echo "                      - Modules only in vendor_boot → vendor_boot only"
+    echo "                      - All user-provided modules → vendor_dlkm (treated as DLKM)"
     echo "  <system_map>        Path to System.map file for depmod (optional, use \"\" to skip)"
     echo "                      If not provided, depmod will use module metadata only"
     echo "  <output_dir>        Output directory for organized modules"
@@ -273,31 +278,33 @@ print_header "NetHunter Module Extractor"
 # --- Input Collection ---
 
 # Non-Interactive (Argument) Mode
-if [ "$#" -eq 5 ] || [ "$#" -eq 6 ]; then
+if [ "$#" -eq 6 ] || [ "$#" -eq 7 ]; then
     log_info "Running in Non-Interactive Mode."
     NH_MODULE_DIR_RAW="$1"
     STAGING_DIR_RAW="$2"
     VENDOR_BOOT_LIST_RAW="$3"
-    SYSTEM_MAP_RAW="$4"
-    OUTPUT_DIR_RAW="$5"
-    STRIP_TOOL_RAW="${6:-}"  # Optional 6th argument
+    VENDOR_DLKM_LIST_RAW="$4"
+    SYSTEM_MAP_RAW="$5"
+    OUTPUT_DIR_RAW="$6"
+    STRIP_TOOL_RAW="${7:-}"  # Optional 7th argument
 
 # Interactive Mode
 elif [ "$#" -eq 0 ]; then
     log_info "Running in Interactive Mode."
-    echo "This script extracts NetHunter modules and organizes them with their dependencies."
+    echo "This script extracts NetHunter/DLKM modules and organizes them with their dependencies."
     echo "Please provide the required paths."
     echo ""
-    read -e -p "Enter path to NetHunter modules directory: " NH_MODULE_DIR_RAW
+    read -e -p "Enter path to NetHunter/DLKM modules directory: " NH_MODULE_DIR_RAW
     read -e -p "Enter path to kernel build staging directory: " STAGING_DIR_RAW
     read -e -p "Enter path to vendor_boot.img's modules_list.txt (or press Enter to skip separation): " VENDOR_BOOT_LIST_RAW
+    read -e -p "Enter path to vendor_dlkm.img's modules_list.txt (or press Enter to skip): " VENDOR_DLKM_LIST_RAW
     read -e -p "Enter path to System.map file (or press Enter to skip - will use module metadata only): " SYSTEM_MAP_RAW
     read -e -p "Enter output directory for organized modules: " OUTPUT_DIR_RAW
     read -e -p "Enter path to strip tool (llvm-strip/aarch64-linux-gnu-strip) or press Enter to skip: " STRIP_TOOL_RAW
 
 # Invalid arguments
 else
-    log_error "Invalid number of arguments. Use 0 for interactive mode or 5-6 for non-interactive."
+    log_error "Invalid number of arguments. Use 0 for interactive mode or 6-7 for non-interactive."
     show_help
     exit 1
 fi
@@ -306,6 +313,7 @@ fi
 NH_MODULE_DIR=$(sanitize_path "$NH_MODULE_DIR_RAW")
 STAGING_DIR=$(sanitize_path "$STAGING_DIR_RAW")
 VENDOR_BOOT_LIST=$(sanitize_path "$VENDOR_BOOT_LIST_RAW")
+VENDOR_DLKM_LIST=$(sanitize_path "$VENDOR_DLKM_LIST_RAW")
 
 # Handle System.map - make it optional
 SKIP_SYSTEM_MAP=false
@@ -343,6 +351,19 @@ if [ -z "$VENDOR_BOOT_LIST" ]; then
 elif [ ! -f "$VENDOR_BOOT_LIST" ]; then
     log_error "Vendor boot modules list not found: '$VENDOR_BOOT_LIST'"
     exit 1
+fi
+
+# Handle vendor_dlkm list - optional, enables intelligent placement
+SKIP_VENDOR_DLKM_LIST=false
+if [ -z "$VENDOR_DLKM_LIST" ]; then
+    SKIP_VENDOR_DLKM_LIST=true
+    log_info "Vendor DLKM modules list not provided - using simple separation logic"
+elif [ ! -f "$VENDOR_DLKM_LIST" ]; then
+    log_warning "Vendor DLKM modules list not found: '$VENDOR_DLKM_LIST'. Using simple separation logic."
+    SKIP_VENDOR_DLKM_LIST=true
+    VENDOR_DLKM_LIST=""
+else
+    log_info "Vendor DLKM modules list provided - enabling intelligent module placement"
 fi
 
 # Validate System.map if provided
@@ -515,8 +536,17 @@ print_header "Organizing Modules into Output Directories"
 TOTAL_TO_ORGANIZE=${#ALL_REQUIRED_MODULES[@]}
 CURRENT_INDEX=0
 
+# Track which modules are user-provided (NetHunter/DLKM modules)
+declare -A USER_PROVIDED_MODULES
+for module_name in "${NH_MODULES[@]}"; do
+    USER_PROVIDED_MODULES["$module_name"]=1
+done
+
 if [ "$SKIP_VENDOR_BOOT_SEPARATION" = true ]; then
-    # Copy all modules to vendor_dlkm
+    # Copy all modules to vendor_dlkm (single folder for non-GKI or simple setups)
+    VB_COUNT=0
+    VD_COUNT=0
+    
     for module_name in "${ALL_REQUIRED_MODULES[@]}"; do
         module_path="$ALL_DEPS_DIR/$module_name"
         [ -f "$module_path" ] || continue
@@ -527,8 +557,7 @@ if [ "$SKIP_VENDOR_BOOT_SEPARATION" = true ]; then
     done
     finish_progress
     
-    VB_COUNT=0
-    log_info "Placed $VD_COUNT modules in vendor_dlkm"
+    log_info "Placed $VD_COUNT modules in vendor_dlkm (single folder)"
     
 else
     # Read vendor_boot modules list into array for faster lookup
@@ -540,25 +569,78 @@ else
         VENDOR_BOOT_MODULES["$module_name"]=1
     done < "$VENDOR_BOOT_LIST"
 
+    # Read vendor_dlkm modules list if provided
+    declare -A VENDOR_DLKM_MODULES
+    if [ "$SKIP_VENDOR_DLKM_LIST" = false ]; then
+        while IFS= read -r module_name || [ -n "$module_name" ]; do
+            [ -z "$module_name" ] && continue
+            module_name=$(echo "$module_name" | tr -d '\r\n' | xargs)
+            [ -z "$module_name" ] && continue
+            VENDOR_DLKM_MODULES["$module_name"]=1
+        done < "$VENDOR_DLKM_LIST"
+    fi
+
     VB_COUNT=0
     VD_COUNT=0
 
-    # Organize modules
+    # Organize modules with intelligent placement logic
     for module_name in "${ALL_REQUIRED_MODULES[@]}"; do
         module_path="$ALL_DEPS_DIR/$module_name"
         [ -f "$module_path" ] || continue
         ((CURRENT_INDEX++))
         show_progress "$CURRENT_INDEX" "$TOTAL_TO_ORGANIZE" "Organizing modules" "$module_name"
         
-        if [[ -n "${VENDOR_BOOT_MODULES[$module_name]}" ]]; then
-            # Module should go to vendor_boot
-            cp "$module_path" "$VB_MODULE_DIR/" 2>/dev/null
-            ((VB_COUNT++))
+        IN_VENDOR_BOOT=0
+        IN_VENDOR_DLKM=0
+        IS_USER_PROVIDED=0
+        
+        [[ -n "${VENDOR_BOOT_MODULES[$module_name]}" ]] && IN_VENDOR_BOOT=1
+        [[ -n "${VENDOR_DLKM_MODULES[$module_name]}" ]] && IN_VENDOR_DLKM=1
+        [[ -n "${USER_PROVIDED_MODULES[$module_name]}" ]] && IS_USER_PROVIDED=1
+        
+        # Logic:
+        # 1. All user-provided modules → vendor_dlkm (they are DLKM modules)
+        # 2. If module exists in both vendor_boot AND vendor_dlkm → copy to BOTH
+        # 3. If module exists ONLY in vendor_boot (not in vendor_dlkm) → vendor_boot only
+        # 4. If module exists ONLY in vendor_dlkm → vendor_dlkm only
+        # 5. If module not in either list → vendor_dlkm (dependency of DLKM modules)
+        
+        COPY_TO_VB=0
+        COPY_TO_VD=0
+        
+        if [ $IS_USER_PROVIDED -eq 1 ]; then
+            # User-provided modules always go to vendor_dlkm
+            COPY_TO_VD=1
+            # Also copy to vendor_boot if it exists there too
+            [ $IN_VENDOR_BOOT -eq 1 ] && COPY_TO_VB=1
+        elif [ "$SKIP_VENDOR_DLKM_LIST" = false ]; then
+            # Intelligent placement with vendor_dlkm list
+            if [ $IN_VENDOR_BOOT -eq 1 ] && [ $IN_VENDOR_DLKM -eq 1 ]; then
+                # Module exists in both → copy to both
+                COPY_TO_VB=1
+                COPY_TO_VD=1
+            elif [ $IN_VENDOR_BOOT -eq 1 ] && [ $IN_VENDOR_DLKM -eq 0 ]; then
+                # Module only in vendor_boot → vendor_boot only (prune from vendor_dlkm)
+                COPY_TO_VB=1
+            elif [ $IN_VENDOR_BOOT -eq 0 ] && [ $IN_VENDOR_DLKM -eq 1 ]; then
+                # Module only in vendor_dlkm → vendor_dlkm only
+                COPY_TO_VD=1
+            else
+                # Module not in either list → vendor_dlkm (dependency of DLKM modules)
+                COPY_TO_VD=1
+            fi
         else
-            # Module should go to vendor_dlkm
-            cp "$module_path" "$VD_MODULE_DIR/" 2>/dev/null
-            ((VD_COUNT++))
+            # Simple placement without vendor_dlkm list
+            if [ $IN_VENDOR_BOOT -eq 1 ]; then
+                COPY_TO_VB=1
+            else
+                COPY_TO_VD=1
+            fi
         fi
+        
+        # Copy modules to appropriate locations
+        [ $COPY_TO_VB -eq 1 ] && cp "$module_path" "$VB_MODULE_DIR/" 2>/dev/null && ((VB_COUNT++))
+        [ $COPY_TO_VD -eq 1 ] && cp "$module_path" "$VD_MODULE_DIR/" 2>/dev/null && ((VD_COUNT++))
     done
     finish_progress
 
@@ -678,11 +760,12 @@ print_header "Extraction Complete!"
 echo "NetHunter module extraction successful!"
 echo ""
 echo "Summary:"
-echo "  - NetHunter modules found: $NH_COUNT"
+echo "  - NetHunter/DLKM modules found: $NH_COUNT"
 echo "  - Total modules processed: $TOTAL_MODULES"
 echo "  - vendor_boot modules: $VB_COUNT"
 echo "  - vendor_dlkm modules: $VD_COUNT"
 echo "  - Vendor boot separation: $([ "$SKIP_VENDOR_BOOT_SEPARATION" = true ] && echo "Skipped" || echo "Enabled")"
+echo "  - Vendor DLKM list: $([ "$SKIP_VENDOR_DLKM_LIST" = true ] && echo "Not provided (simple separation)" || echo "Provided (intelligent placement)")"
 echo "  - System.map used: $([ "$SKIP_SYSTEM_MAP" = false ] && [ -n "$SYSTEM_MAP" ] && echo "$(basename "$SYSTEM_MAP")" || echo "None (using module metadata)")"
 echo "  - Strip tool used: $([ -n "$STRIP_TOOL" ] && echo "$(basename "$STRIP_TOOL")" || echo "None")"
 echo "  - Output directory: $OUTPUT_DIR"
