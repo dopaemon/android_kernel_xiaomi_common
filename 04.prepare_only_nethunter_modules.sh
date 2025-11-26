@@ -70,8 +70,8 @@ show_help() {
     echo "  1. Interactive Mode: Run without any arguments to be prompted for each path."
     echo "     $0"
     echo ""
-    echo "  2. Non-Interactive (Argument) Mode: Provide all 5-7 paths as arguments."
-    echo "     $0 <nh_modules_dir> <staging_dir> <vendor_boot_list> <vendor_dlkm_list> <system_map> <output_dir> [strip_tool]"
+    echo "  2. Non-Interactive (Argument) Mode: Provide all 6-8 paths as arguments."
+    echo "     $0 <nh_modules_dir> <staging_dir> <vendor_boot_list> <vendor_dlkm_list> <system_map> <output_dir> [strip_tool] [blacklist_file]"
     echo ""
     echo "Arguments:"
     echo "  <nh_modules_dir>    Directory containing suspected NetHunter/DLKM modules"
@@ -87,6 +87,9 @@ show_help() {
     echo "  <output_dir>        Output directory for organized modules"
     echo "  [strip_tool]        (Optional) Path to strip tool (llvm-strip or aarch64-linux-gnu-strip)"
     echo "                      Leave empty or provide \"\" to skip stripping"
+    echo "  [blacklist_file]    (Optional) Path to modules.blacklist file containing module names"
+    echo "                      to exclude from final output (one module per line, e.g., sec.ko)"
+    echo "                      Blacklisted modules will be pruned after dependency resolution."
     echo ""
     echo "Options:"
     echo "  -h, --help          Show this help message and exit."
@@ -278,7 +281,7 @@ print_header "NetHunter Module Extractor"
 # --- Input Collection ---
 
 # Non-Interactive (Argument) Mode
-if [ "$#" -eq 6 ] || [ "$#" -eq 7 ]; then
+if [ "$#" -ge 6 ] && [ "$#" -le 8 ]; then
     log_info "Running in Non-Interactive Mode."
     NH_MODULE_DIR_RAW="$1"
     STAGING_DIR_RAW="$2"
@@ -286,7 +289,8 @@ if [ "$#" -eq 6 ] || [ "$#" -eq 7 ]; then
     VENDOR_DLKM_LIST_RAW="$4"
     SYSTEM_MAP_RAW="$5"
     OUTPUT_DIR_RAW="$6"
-    STRIP_TOOL_RAW="${7:-}"  # Optional 7th argument
+    STRIP_TOOL_RAW="${7:-}"      # Optional 7th argument
+    BLACKLIST_FILE_RAW="${8:-}"  # Optional 8th argument
 
 # Interactive Mode
 elif [ "$#" -eq 0 ]; then
@@ -301,10 +305,11 @@ elif [ "$#" -eq 0 ]; then
     read -e -p "Enter path to System.map file (or press Enter to skip - will use module metadata only): " SYSTEM_MAP_RAW
     read -e -p "Enter output directory for organized modules: " OUTPUT_DIR_RAW
     read -e -p "Enter path to strip tool (llvm-strip/aarch64-linux-gnu-strip) or press Enter to skip: " STRIP_TOOL_RAW
+    read -e -p "Enter path to modules.blacklist file (or press Enter to skip): " BLACKLIST_FILE_RAW
 
 # Invalid arguments
 else
-    log_error "Invalid number of arguments. Use 0 for interactive mode or 6-7 for non-interactive."
+    log_error "Invalid number of arguments. Use 0 for interactive mode or 6-8 for non-interactive."
     show_help
     exit 1
 fi
@@ -331,6 +336,7 @@ fi
 
 OUTPUT_DIR=$(sanitize_path "$OUTPUT_DIR_RAW")
 STRIP_TOOL=$(sanitize_path "$STRIP_TOOL_RAW")
+BLACKLIST_FILE=$(sanitize_path "$BLACKLIST_FILE_RAW")
 
 # Validate inputs
 if [ ! -d "$NH_MODULE_DIR" ]; then
@@ -387,6 +393,18 @@ fi
 if [ -n "$STRIP_TOOL" ] && [ ! -x "$STRIP_TOOL" ]; then
     log_warning "Strip tool not found or not executable: '$STRIP_TOOL'. Module stripping will be skipped."
     STRIP_TOOL=""
+fi
+
+# Handle blacklist file - optional
+SKIP_BLACKLIST=false
+if [ -z "$BLACKLIST_FILE" ]; then
+    SKIP_BLACKLIST=true
+elif [ ! -f "$BLACKLIST_FILE" ]; then
+    log_warning "Blacklist file not found: '$BLACKLIST_FILE'. Blacklist pruning will be skipped."
+    SKIP_BLACKLIST=true
+    BLACKLIST_FILE=""
+else
+    log_info "Blacklist file provided: $BLACKLIST_FILE"
 fi
 
 print_header "Initialization"
@@ -528,6 +546,100 @@ done
 
 TOTAL_MODULES=${#ALL_REQUIRED_MODULES[@]}
 log_info "Total modules required: $TOTAL_MODULES (NetHunter + dependencies)"
+
+# --- Prune Blacklisted Modules ---
+BLACKLISTED_COUNT=0
+if [ "$SKIP_BLACKLIST" = false ]; then
+    print_header "Pruning Blacklisted Modules"
+    
+    # Read blacklist into array
+    declare -A BLACKLISTED_MODULES
+    while IFS= read -r module_name || [ -n "$module_name" ]; do
+        [ -z "$module_name" ] && continue
+        module_name=$(echo "$module_name" | tr -d '\r\n' | xargs)
+        [ -z "$module_name" ] && continue
+        # Ensure .ko extension
+        [[ "$module_name" == *.ko ]] || module_name="${module_name}.ko"
+        BLACKLISTED_MODULES["$module_name"]=1
+    done < "$BLACKLIST_FILE"
+    
+    # Prune blacklisted modules from working directory
+    for module_name in "${!BLACKLISTED_MODULES[@]}"; do
+        if [ -f "$ALL_DEPS_DIR/$module_name" ]; then
+            rm -f "$ALL_DEPS_DIR/$module_name"
+            ((BLACKLISTED_COUNT++))
+            log_info "  ✗ Pruned blacklisted module: $module_name"
+        fi
+    done
+    
+    # Rebuild ALL_REQUIRED_MODULES array without blacklisted modules
+    if [ $BLACKLISTED_COUNT -gt 0 ]; then
+        TEMP_MODULES=()
+        for module_name in "${ALL_REQUIRED_MODULES[@]}"; do
+            [[ -z "${BLACKLISTED_MODULES[$module_name]}" ]] && TEMP_MODULES+=("$module_name")
+        done
+        ALL_REQUIRED_MODULES=("${TEMP_MODULES[@]}")
+    fi
+    
+    if [ $BLACKLISTED_COUNT -gt 0 ]; then
+        log_info "Pruned $BLACKLISTED_COUNT blacklisted module(s)"
+        
+        # Re-resolve dependencies after pruning (to clean up orphaned dependencies)
+        print_header "Re-resolving Dependencies After Blacklist Pruning"
+        
+        ITERATION=1
+        NEW_DEPS_FOUND=1
+        
+        while [ "$NEW_DEPS_FOUND" -gt 0 ] && [ $ITERATION -le 3 ]; do
+            NEW_DEPS_FOUND=0
+            
+            # Count modules to process
+            MODULES_TO_PROCESS=$(find "$ALL_DEPS_DIR" -name "*.ko" 2>/dev/null | wc -l | tr -d ' ')
+            PROCESSED_COUNT=0
+            
+            # Check dependencies for all modules currently in our collection
+            for module_path in "$ALL_DEPS_DIR"/*.ko; do
+                [ -f "$module_path" ] || continue
+                ((PROCESSED_COUNT++))
+                module_name=$(basename "$module_path")
+                show_progress "$PROCESSED_COUNT" "$MODULES_TO_PROCESS" "Re-resolving dependencies (iter $ITERATION)" "$module_name"
+                
+                # Get dependencies for this module
+                deps=$(modinfo -F depends "$module_path" 2>/dev/null | tr ',' '\n' | grep -v '^$')
+                
+                for dep_name in $deps; do
+                    dep_ko_name="${dep_name}.ko"
+                    
+                    # Skip if blacklisted
+                    [[ -n "${BLACKLISTED_MODULES[$dep_ko_name]}" ]] && continue
+                    
+                    # Check if we already have this dependency
+                    if [ ! -f "$ALL_DEPS_DIR/$dep_ko_name" ]; then
+                        # Find dependency in staging
+                        dep_path=$(find_module_in_staging "$dep_ko_name" "$STAGING_DIR")
+                        
+                        if [ -n "$dep_path" ] && [ -f "$dep_path" ]; then
+                            cp "$dep_path" "$ALL_DEPS_DIR/" 2>/dev/null
+                            ALL_REQUIRED_MODULES+=("$dep_ko_name")
+                            ((NEW_DEPS_FOUND++))
+                        fi
+                    fi
+                done
+            done
+            finish_progress
+            
+            ((ITERATION++))
+        done
+        
+        # Update total modules count
+        TOTAL_MODULES=$(find "$ALL_DEPS_DIR" -name "*.ko" 2>/dev/null | wc -l | tr -d ' ')
+        log_info "Dependency re-resolution complete - Final module count: $TOTAL_MODULES"
+    else
+        log_info "No blacklisted modules found in current module set"
+    fi
+else
+    log_info "Blacklist file not provided, skipping blacklist pruning"
+fi
 
 # --- Module Organization ---
 

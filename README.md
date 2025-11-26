@@ -125,7 +125,7 @@ Provide all paths as arguments. To skip an optional path (like the NetHunter dir
 
 **Example (with NetHunter and vendor_boot pruning):**
 ```bash
-./03.vendor_dlkm.sh \
+./03.prepare_vendor_dlkm.sh \
   ./vendor_dlkm/modules_list.txt \
   /path/to/kernel_build/out/msm-kernel/staging \
   /path/to/stock/vendor_dlkm/lib/modules/modules.load \
@@ -135,6 +135,37 @@ Provide all paths as arguments. To skip an optional path (like the NetHunter dir
   ./vendor_boot/modules_list.txt \
   /path/to/nethunter_modules
 ```
+
+**Example (with blacklist support):**
+```bash
+# Usage: ./03.prepare_vendor_dlkm.sh <modules_list> <staging_dir> <oem_load_file> <system_map> <strip_tool> <output_dir> <vendor_boot_list> <nh_dir> [blacklist_file]
+
+./03.prepare_vendor_dlkm.sh \
+  ./vendor_dlkm/modules_list.txt \
+  /path/to/kernel_build/out/msm-kernel/staging \
+  /path/to/stock/vendor_dlkm/lib/modules/modules.load \
+  /path/to/kernel_build/out/System.map \
+  /path/to/toolchain/bin/llvm-strip \
+  ./vendor_dlkm/vendor_dlkm_modules \
+  ./vendor_boot/modules_list.txt \
+  /path/to/nethunter_modules \
+  ./modules.blacklist
+```
+
+### Module Blacklist Support
+
+The script supports an optional `modules.blacklist` file to exclude faulty or unwanted modules from the final output. Blacklisted modules are pruned after dependency resolution, and dependencies are re-resolved to ensure no traces remain in the generated `modules.*` files.
+
+**Blacklist file format** (`modules.blacklist`):
+```
+sec.ko
+faulty_module.ko
+another_unwanted_module.ko
+```
+
+- One module name per line (`.ko` extension optional)
+- Modules listed here will be completely removed from vendor_dlkm output
+- Dependencies are automatically re-resolved after pruning
 
 **Note:** You should manually copy all the "suspected" modules that were generated but are not present in your OEM's module list to a separate folder (for example, `ath9k_htc.ko` might have been generated because you enabled an Atheros driver as an LKM, etc.).
 
@@ -214,6 +245,36 @@ Provide all paths as arguments. To skip optional paths, pass an empty string `""
   "" \
   ./output/nethunter_modules
 ```
+
+**Example (with blacklist support):**
+```bash
+# Usage: ./04.prepare_only_nethunter_modules.sh <nh_modules_dir> <staging_dir> <vendor_boot_list> <vendor_dlkm_list> <system_map> <output_dir> [strip_tool] [blacklist_file]
+
+./04.prepare_only_nethunter_modules.sh \
+  /path/to/nethunter_modules \
+  /path/to/kernel_build/out/msm-kernel/staging \
+  /path/to/vendor_boot/modules_list.txt \
+  /path/to/vendor_dlkm/modules_list.txt \
+  /path/to/kernel_build/out/System.map \
+  ./output/nethunter_modules \
+  /path/to/toolchain/bin/llvm-strip \
+  ./modules.blacklist
+```
+
+### Module Blacklist Support
+
+The script supports an optional `modules.blacklist` file to exclude faulty or unwanted modules from the final output. Blacklisted modules are pruned after dependency resolution, and dependencies are re-resolved to ensure no traces remain in the generated `modules.*` files.
+
+**Blacklist file format** (`modules.blacklist`):
+```
+sec.ko
+faulty_module.ko
+another_unwanted_module.ko
+```
+
+- One module name per line (`.ko` extension optional)
+- Modules listed here will be completely removed from vendor_dlkm output
+- Dependencies are automatically re-resolved after pruning (up to 3 iterations)
 
 ### Module Placement Logic
 

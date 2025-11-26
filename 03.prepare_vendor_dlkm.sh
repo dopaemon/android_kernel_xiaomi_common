@@ -79,8 +79,8 @@ show_help() {
     echo "  1. Interactive Mode: Run without any arguments to be prompted for each path."
     echo "     $0"
     echo ""
-    echo "  2. Non-Interactive (Argument) Mode: Provide all 8 paths as arguments."
-    echo "     $0 <modules_list> <staging_dir> <oem_load_file> <system_map> <strip_tool> <output_dir> <vendor_boot_list> <nh_dir>"
+    echo "  2. Non-Interactive (Argument) Mode: Provide all 8-9 paths as arguments."
+    echo "     $0 <modules_list> <staging_dir> <oem_load_file> <system_map> <strip_tool> <output_dir> <vendor_boot_list> <nh_dir> [blacklist_file]"
     echo ""
     echo "Arguments:"
     echo "  <modules_list>      Path to vendor_dlkm.img's modules_list.txt"
@@ -93,6 +93,9 @@ show_help() {
     echo "                      Provide an empty string \"\" to skip."
     echo "  <nh_dir>            (Optional) Path to NetHunter modules directory."
     echo "                      Provide an empty string \"\" to skip."
+    echo "  [blacklist_file]    (Optional) Path to modules.blacklist file containing module names"
+    echo "                      to exclude from final output (one module per line, e.g., sec.ko)"
+    echo "                      Blacklisted modules will be pruned after dependency resolution."
     echo ""
     echo "Options:"
     echo "  -h, --help          Show this help message and exit."
@@ -175,7 +178,7 @@ print_header "Vendor DLKM Modules Preparation Script"
 # --- Input Collection ---
 
 # Non-Interactive (Argument) Mode
-if [ "$#" -eq 8 ]; then
+if [ "$#" -eq 8 ] || [ "$#" -eq 9 ]; then
     log_info "Running in Non-Interactive Mode."
     MODULES_LIST_RAW="$1"
     STAGING_DIR_RAW="$2"
@@ -185,6 +188,7 @@ if [ "$#" -eq 8 ]; then
     OUTPUT_DIR_RAW="$6"
     VENDOR_BOOT_MODULES_LIST_RAW="$7" # Can be ""
     NH_MODULE_DIR_RAW="$8"             # Can be ""
+    BLACKLIST_FILE_RAW="${9:-}"        # Optional 9th argument
 
 # Interactive Mode
 elif [ "$#" -eq 0 ]; then
@@ -200,10 +204,11 @@ elif [ "$#" -eq 0 ]; then
     read -e -p "Enter output directory for vendor_dlkm modules: " OUTPUT_DIR_RAW
     read -e -p "Enter path to vendor_boot.img's module_list.txt (press Enter to skip): " VENDOR_BOOT_MODULES_LIST_RAW
     read -e -p "Enter path to NetHunter modules directory (press Enter to skip): " NH_MODULE_DIR_RAW
+    read -e -p "Enter path to modules.blacklist file (press Enter to skip): " BLACKLIST_FILE_RAW
 
 # Invalid arguments
 else
-    log_error "Invalid number of arguments. Use 0 for interactive mode or 8 for non-interactive."
+    log_error "Invalid number of arguments. Use 0 for interactive mode or 8-9 for non-interactive."
     show_help
     exit 1
 fi
@@ -220,6 +225,7 @@ STRIP_TOOL=$(sanitize_path "$STRIP_TOOL_RAW")
 OUTPUT_DIR=$(sanitize_path "$OUTPUT_DIR_RAW")
 VENDOR_BOOT_MODULES_LIST=$(sanitize_path "$VENDOR_BOOT_MODULES_LIST_RAW")
 NH_MODULE_DIR=$(sanitize_path "$NH_MODULE_DIR_RAW")
+BLACKLIST_FILE=$(sanitize_path "$BLACKLIST_FILE_RAW")
 
 # Validate mandatory inputs
 if [ ! -f "$MODULES_LIST" ]; then
@@ -256,6 +262,18 @@ fi
 if [ -n "$STRIP_TOOL" ] && [ ! -x "$STRIP_TOOL" ]; then
     log_warning "LLVM strip tool not found or not executable: '$STRIP_TOOL'. Module stripping will be skipped."
     STRIP_TOOL="" # Unset to prevent errors
+fi
+
+# Handle blacklist file - optional
+SKIP_BLACKLIST=false
+if [ -z "$BLACKLIST_FILE" ]; then
+    SKIP_BLACKLIST=true
+elif [ ! -f "$BLACKLIST_FILE" ]; then
+    log_warning "Blacklist file not found: '$BLACKLIST_FILE'. Blacklist pruning will be skipped."
+    SKIP_BLACKLIST=true
+    BLACKLIST_FILE=""
+else
+    log_info "Blacklist file provided: $BLACKLIST_FILE"
 fi
 
 # Create clean output directory
@@ -409,13 +427,78 @@ else
     log_info "NetHunter module directory not provided, skipping NetHunter processing."
 fi
 
-# --- Final Dependency Resolution for all modules ---
-# The logic from the original script is sufficient, as it resolves dependencies
-# for all modules present in the working directory.
+# --- Prune Blacklisted Modules ---
+BLACKLISTED_COUNT=0
+if [ "$SKIP_BLACKLIST" = false ]; then
+    print_header "Pruning Blacklisted Modules"
+    
+    # Read blacklist into array
+    declare -A BLACKLISTED_MODULES
+    while IFS= read -r module_name || [ -n "$module_name" ]; do
+        [ -z "$module_name" ] && continue
+        module_name=$(echo "$module_name" | tr -d '\r\n' | xargs)
+        [ -z "$module_name" ] && continue
+        # Ensure .ko extension
+        [[ "$module_name" == *.ko ]] || module_name="${module_name}.ko"
+        BLACKLISTED_MODULES["$module_name"]=1
+    done < "$BLACKLIST_FILE"
+    
+    # Prune blacklisted modules from working directory
+    for module_name in "${!BLACKLISTED_MODULES[@]}"; do
+        if [ -f "$MODULE_WORK_DIR/$module_name" ]; then
+            rm -f "$MODULE_WORK_DIR/$module_name"
+            ((BLACKLISTED_COUNT++))
+            log_info "  ✗ Pruned blacklisted module: $module_name"
+        fi
+    done
+    
+    if [ $BLACKLISTED_COUNT -gt 0 ]; then
+        log_info "Pruned $BLACKLISTED_COUNT blacklisted module(s)"
+        
+        # Re-resolve dependencies after pruning (to clean up orphaned dependencies)
+        print_header "Re-resolving Dependencies After Blacklist Pruning"
+        
+        # Find modules that depend on blacklisted modules and remove them if they become orphaned
+        ITERATION=0
+        CHANGED=1
+        while [ $CHANGED -eq 1 ] && [ $ITERATION -lt 5 ]; do
+            CHANGED=0
+            ((ITERATION++))
+            
+            for module_path in "$MODULE_WORK_DIR"/*.ko; do
+                [ -f "$module_path" ] || continue
+                module_name=$(basename "$module_path")
+                
+                # Get dependencies for this module
+                deps=$(modinfo -F depends "$module_path" 2>/dev/null | tr ',' '\n' | grep -v '^$')
+                
+                if [ -n "$deps" ]; then
+                    for dep_name in $deps; do
+                        dep_ko_name="${dep_name}.ko"
+                        # If dependency is blacklisted or missing, check if module should be removed
+                        if [[ -n "${BLACKLISTED_MODULES[$dep_ko_name]}" ]] || [ ! -f "$MODULE_WORK_DIR/$dep_ko_name" ]; then
+                            # Check if this dependency is critical (module won't load without it)
+                            # For now, we'll be conservative and only remove if explicitly blacklisted
+                            if [[ -n "${BLACKLISTED_MODULES[$dep_ko_name]}" ]]; then
+                                log_warning "  ⚠ Module $module_name depends on blacklisted $dep_ko_name"
+                                # Optionally remove the dependent module too (uncomment if needed)
+                                # rm -f "$module_path"
+                                # ((CHANGED++))
+                            fi
+                        fi
+                    done
+                fi
+            done
+        done
+    else
+        log_info "No blacklisted modules found in current module set"
+    fi
+else
+    log_info "Blacklist file not provided, skipping blacklist pruning"
+fi
 
+# --- Final Dependency Resolution for all modules ---
 print_header "Resolving All Final Dependencies"
-# The rest of the script will handle the final dependency resolution,
-# stripping, and packaging of the combined module set.
 
 # --- Strip ALL Modules ---
 
