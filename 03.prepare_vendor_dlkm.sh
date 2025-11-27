@@ -578,8 +578,64 @@ if [ "$NEW_MODULE_COUNT" -gt 0 ]; then
     done < <(sort -r -n insertions.tsv)
     log_info "Inserted $NEW_MODULE_COUNT new modules into load order"
 fi
-mv modules.load.final modules.load
-rm -f our_modules.list oem_modules.list modules.load.base new_modules.list insertions.tsv
+
+# Filter out dependency modules from NEW modules only (preserve OEM modules.load as-is)
+# modprobe will automatically load dependencies, so we don't need to list them for new modules
+print_header "Filtering Dependency Modules from New Modules"
+
+# Create a map of all modules that are dependencies
+> dependencies_map.txt
+while IFS=':' read -r module deps_line || [ -n "$module" ]; do
+    [ -z "$module" ] && continue
+    clean_module=$(basename "$module")
+    
+    if [ -n "$deps_line" ]; then
+        clean_deps=$(echo "$deps_line" | sed 's/^ *//' | sed 's/ *$//')
+        if [ -n "$clean_deps" ]; then
+            for dep in $clean_deps; do
+                clean_dep=$(basename "$dep")
+                echo "$clean_dep" >> dependencies_map.txt
+            done
+        fi
+    fi
+done < modules.dep
+
+# Filter dependency modules from NEW modules only, preserving relative order
+# OEM modules are preserved as-is, new modules are filtered inline
+> modules.load.filtered
+FILTERED_COUNT=0
+NEW_TOTAL_COUNT=0
+
+while IFS= read -r module_name || [ -n "$module_name" ]; do
+    [ -z "$module_name" ] && continue
+    
+    # Check if this module is from OEM list
+    if grep -Fxq "$module_name" oem_modules.list 2>/dev/null; then
+        # OEM module - preserve as-is (keep original order)
+        echo "$module_name" >> modules.load.filtered
+    else
+        # New module - count it and filter out if it's a dependency
+        ((NEW_TOTAL_COUNT++))
+        if ! grep -Fxq "$module_name" dependencies_map.txt 2>/dev/null; then
+            # This is a leaf module (not a dependency) - keep it in original position
+            echo "$module_name" >> modules.load.filtered
+        else
+            # This is a dependency module - filter it out
+            ((FILTERED_COUNT++))
+        fi
+    fi
+done < modules.load.final
+
+mv modules.load.filtered modules.load
+
+if [ $FILTERED_COUNT -gt 0 ]; then
+    NEW_FILTERED_COUNT=$((NEW_TOTAL_COUNT - FILTERED_COUNT))
+    log_info "Filtered $FILTERED_COUNT dependency modules from new modules (kept $NEW_FILTERED_COUNT leaf modules)"
+    log_info "OEM modules.load entries preserved as-is with original ordering"
+    log_info "modprobe will automatically load dependencies when needed"
+fi
+
+rm -f our_modules.list oem_modules.list modules.load.base new_modules.list insertions.tsv dependencies_map.txt modules.load.final
 
 # --- Copy Final Results ---
 

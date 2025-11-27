@@ -113,15 +113,15 @@ find_module_in_staging() {
     find "$staging_dir" -name "$module_name" -type f -print -quit 2>/dev/null
 }
 
-# Function to generate proper load order based on dependencies (topological sort)
+# Function to generate proper load order - only leaf modules (not dependencies of others)
 generate_load_order_from_deps() {
     local temp_deps="temp_deps.txt"
     local temp_load="temp_load.txt"
-    local processed="processed_modules.txt"
+    local dependencies_map="deps_map.txt"
     
-    # Parse modules.dep to create a cleaner dependency map
+    # Parse modules.dep to identify which modules are dependencies
     > "$temp_deps"
-    > "$processed"
+    > "$dependencies_map"
     
     # Extract dependencies and create a mapping
     while IFS=':' read -r module deps_line || [ -n "$module" ]; do
@@ -138,29 +138,44 @@ generate_load_order_from_deps() {
                 for dep in $clean_deps; do
                     clean_dep=$(basename "$dep")
                     echo "$clean_module:$clean_dep" >> "$temp_deps"
+                    # Mark this dependency as being used by another module
+                    echo "$clean_dep" >> "$dependencies_map"
                 done
-            else
-                # Module has no dependencies
-                echo "$clean_module:" >> "$temp_deps"
             fi
-        else
-            # Module has no dependencies
-            echo "$clean_module:" >> "$temp_deps"
         fi
     done < modules.dep
-    
-    # Topological sort implementation
-    > "$temp_load"
-    local changed=1
-    local iteration=1
     
     # Get list of all modules
     local all_modules=($(ls -1 *.ko 2>/dev/null))
     
+    # Only include modules that are NOT dependencies of other modules (leaf modules)
+    > "$temp_load"
+    for module_file in "${all_modules[@]}"; do
+        [ ! -f "$module_file" ] && continue
+        
+        # Check if this module is a dependency of any other module
+        if ! grep -Fxq "$module_file" "$dependencies_map" 2>/dev/null; then
+            # This is a leaf module (not a dependency) - add it to load order
+            echo "$module_file" >> "$temp_load"
+        fi
+    done
+    
+    # Sort leaf modules by their dependencies (topological order)
+    # This ensures dependencies are loaded before modules that depend on them
+    # even though we're only loading leaf modules
+    local sorted_load="sorted_load.txt"
+    > "$sorted_load"
+    local processed="processed_modules.txt"
+    > "$processed"
+    
+    local changed=1
+    local iteration=1
+    
     while [ $changed -eq 1 ] && [ $iteration -le 50 ]; do
         changed=0
         
-        for module_file in "${all_modules[@]}"; do
+        while IFS= read -r module_file || [ -n "$module_file" ]; do
+            [ -z "$module_file" ] && continue
             [ ! -f "$module_file" ] && continue
             
             # Skip if already processed
@@ -168,7 +183,7 @@ generate_load_order_from_deps() {
                 continue
             fi
             
-            # Check if all dependencies are already processed
+            # Check if all dependencies are already processed (or don't exist in leaf modules)
             local can_process=1
             local module_deps=""
             
@@ -178,37 +193,41 @@ generate_load_order_from_deps() {
             if [ -n "$module_deps" ]; then
                 for dep in $module_deps; do
                     [ -z "$dep" ] && continue
-                    if ! grep -Fxq "$dep" "$processed" 2>/dev/null; then
-                        can_process=0
-                        break
+                    # Check if dependency is in our leaf modules list
+                    if grep -Fxq "$dep" "$temp_load" 2>/dev/null; then
+                        # If dependency is a leaf module and not processed, wait
+                        if ! grep -Fxq "$dep" "$processed" 2>/dev/null; then
+                            can_process=0
+                            break
+                        fi
                     fi
                 done
             fi
             
             # If all dependencies are satisfied, add this module
             if [ $can_process -eq 1 ]; then
-                echo "$module_file" >> "$temp_load"
+                echo "$module_file" >> "$sorted_load"
                 echo "$module_file" >> "$processed"
                 changed=1
             fi
-        done
+        done < "$temp_load"
         
         ((iteration++))
     done
     
-    # Handle any remaining modules (circular dependencies or orphans)
-    for module_file in "${all_modules[@]}"; do
-        [ ! -f "$module_file" ] && continue
+    # Add any remaining modules (shouldn't happen, but handle edge cases)
+    while IFS= read -r module_file || [ -n "$module_file" ]; do
+        [ -z "$module_file" ] && continue
         if ! grep -Fxq "$module_file" "$processed" 2>/dev/null; then
-            echo "$module_file" >> "$temp_load"
+            echo "$module_file" >> "$sorted_load"
         fi
-    done
+    done < "$temp_load"
     
     # Final output
-    mv "$temp_load" modules.load
+    mv "$sorted_load" modules.load
     
     # Cleanup
-    rm -f "$temp_deps" "$processed"
+    rm -f "$temp_deps" "$temp_load" "$dependencies_map" "$processed"
 }
 
 # Function to strip modules using strip tool
