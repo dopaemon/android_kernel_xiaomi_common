@@ -9,11 +9,11 @@ endif
 ifeq ($(KERNEL_BUILD), 1)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
-	AUDIO_BLD_DIR := $(shell pwd)/kernel/msm-5.4
+	AUDIO_BLD_DIR := $(srctree)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 endif
 
-ifeq ($(KERNEL_BUILD), 0)
+ifeq (0, 0)
 	ifeq ($(CONFIG_ARCH_KONA), y)
 		include $(AUDIO_ROOT)/config/konaauto.conf
 		INCS    +=  -include $(AUDIO_ROOT)/config/konaautoconf.h
@@ -28,10 +28,10 @@ ifeq ($(KERNEL_BUILD), 0)
 		INCS    +=  -include $(AUDIO_ROOT)/config/waipioautoconf.h
 	endif
 
- 	ifeq ($(CONFIG_ARCH_PARROT), y)
- 		include $(AUDIO_ROOT)/config/waipioauto.conf
- 		INCS    +=  -include $(AUDIO_ROOT)/config/waipioautoconf.h
- 	endif
+	ifeq ($(CONFIG_ARCH_PARROT), y)
+		include $(AUDIO_ROOT)/config/waipioauto.conf
+		INCS    +=  -include $(AUDIO_ROOT)/config/waipioautoconf.h
+	endif
 
 endif
 
@@ -81,16 +81,16 @@ ifeq ($(TARGET_PRODUCT), $(filter $(TARGET_PRODUCT), taro))
        CDEFINES += -DCONFIG_AUDIO_SMARTPA_STEREO
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), ingres))
+ifdef CONFIG_XIAOMI_INGRES
 	CDEFINES += -DCONFIG_SWITCH_PROTECTION
 	CDEFINES += -DCONFIG_TARGET_PRODUCT_INGRES
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), liuqin))
+ifdef CONFIG_XIAOMI_LIUQIN
 	CDEFINES += -DCONFIG_MMHARDWARE_DETECTION
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), yudi))
+ifdef CONFIG_XIAOMI_YUDI
 	CDEFINES += -DCONFIG_MMHARDWARE_DETECTION
 endif
 
@@ -104,19 +104,19 @@ CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
 		-Werror\
 		-D__linux__
 
-ifneq (,$(filter $(TARGET_PRODUCT), dagda zeus))
+ifdef CONFIG_XIAOMI_ZEUS
 	CDEFINES += -DCONFIG_TARGET_PRODUCT_ZEUS
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), cupid))
+ifdef CONFIG_XIAOMI_CUPID
 	CDEFINES += -DCONFIG_TARGET_PRODUCT_CUPID
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), taranis thor))
+ifdef CONFIG_XIAOMI_THOR
 	CDEFINES += -DCONFIG_TARGET_PRODUCT_THOR
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), diting))
+ifdef CONFIG_XIAOMI_DITING
         CDEFINES += -DCONFIG_TARGET_PRODUCT_DITING
 endif
 
@@ -135,7 +135,7 @@ ifeq ($(call cc-option-yn, -Wheader-guard),y)
 EXTRA_CFLAGS += -Wheader-guard
 endif
 
-ifeq ($(KERNEL_BUILD), 0)
+ifeq (0, 0)
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/ipc/Module.symvers
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/dsp/Module.symvers
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/asoc/Module.symvers
