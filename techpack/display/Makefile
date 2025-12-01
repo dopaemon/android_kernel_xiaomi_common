@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
+ccflags-y := -Wno-unused-function
 KBUILD_OPTIONS+= DISPLAY_ROOT=$(KERNEL_SRC)/$(M)
 
 all:
