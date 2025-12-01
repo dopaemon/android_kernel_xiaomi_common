@@ -102,7 +102,7 @@ jobs:
             matrix='["ziyi"]'
           elif [ "$BUILD_DEVICE" = "ingres" ]; then
             matrix='["ingres"]'
-          elif [ "$BUILD_DEVICE" = "ingres" ]; then
+          elif [ "$BUILD_DEVICE" = "gki" ]; then
             matrix='["gki"]'
           elif [ "$BUILD_DEVICE" = "all" ]; then
             matrix='["mayfly", "cupid", "unicorn", "zeus", "diting", "marble", "mondrian", "thor", "zizhan", "ziyi", "ingres", "gki"]'
