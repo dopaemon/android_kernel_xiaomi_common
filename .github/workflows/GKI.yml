@@ -101,7 +101,7 @@ jobs:
           elif [ "$BUILD_DEVICE" = "ziyi" ]; then
             matrix='["ziyi"]'
           elif [ "$BUILD_DEVICE" = "ingres" ]; then
-            matrix='["ziyi"]'
+            matrix='["ingres"]'
           elif [ "$BUILD_DEVICE" = "ingres" ]; then
             matrix='["gki"]'
           elif [ "$BUILD_DEVICE" = "all" ]; then
