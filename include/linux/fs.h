@@ -979,7 +979,7 @@ struct file {
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_OEM_DATA(1);
 } __randomize_layout
-  __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */
+  __attribute__((aligned(8)));
 
 struct file_handle {
 	__u32 handle_bytes;
