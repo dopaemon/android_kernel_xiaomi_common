@@ -142,8 +142,8 @@ jobs:
             Build: DoraCore Kernel For GKI Linux 5.10.y
             Linux: Linux 5.10.y
             Type: GKI
-            Developer: @dopaemon
-            Credits: @ArianK16a, @bachnxuan, @Gelbpunkt, @ztc1997, @pzqqt, @KernelToast, @Arter97, @ramabondanp, @Gosth15, @Flopster101, @bheatleyyy, @keosh1, @n08i40k, @ParsaAslaniYC, ...
+            Developer: dopaemon
+            Credits: ArianK16a, bachnxuan, Gelbpunkt, ztc1997, pzqqt, KernelToast, Arter97, ramabondanp, Gosth15, Flopster101, bheatleyyy, keosh1, n08i40k, ParsaAslaniYC, ...
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
