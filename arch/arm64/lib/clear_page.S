@@ -15,6 +15,7 @@
  *	x0 - dest
  */
 	.p2align 4
+	.p2align 4
 SYM_FUNC_START_PI(clear_page)
 	mrs	x1, dczid_el0
 	tbnz	x1, #4, 2f	/* Branch if DC ZVA is prohibited */
