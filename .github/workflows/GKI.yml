@@ -282,6 +282,7 @@ jobs:
           echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
 
           if [ "$DEVICE" != "gki" ]; then
+             cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
              cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
              cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> arch/arm64/configs/gki_defconfig
              cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
