@@ -138,6 +138,7 @@ jobs:
           name: DoraCore Build ${{ steps.set-tag.outputs.tag }}
           draft: ${{ github.event.inputs.RELEASE == 'draft' }}
           prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
+          make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
           body: |
             Build: DoraCore Kernel For GKI Linux 5.10.y
             Linux: Linux 5.10.y
