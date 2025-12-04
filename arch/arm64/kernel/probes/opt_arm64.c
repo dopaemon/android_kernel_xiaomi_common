@@ -6,13 +6,14 @@
  */
 
 #include <linux/jump_label.h>
-#include <linux/slab.h>
 #include <linux/kprobes.h>
+#include <linux/wordpart.h>
 
 #include <asm/cacheflush.h>
 #include <asm/compiler.h>
 #include <asm/insn.h>
 #include <asm/kprobes.h>
+#include <asm/text-patching.h>
 
 #define OPTPROBE_BATCH_SIZE 64
 
@@ -72,9 +73,9 @@ int arch_prepared_optinsn(struct arch_optimized_insn *optinsn)
 	return optinsn->trampoline != NULL;
 }
 
-int arch_within_optimized_kprobe(struct optimized_kprobe *op, unsigned long addr)
+int arch_within_optimized_kprobe(struct optimized_kprobe *op, kprobe_opcode_t *addr)
 {
-	return (unsigned long)op->kp.addr == addr;
+	return op->kp.addr == addr;
 }
 
 static int optprobe_check_branch_limit(unsigned long pc, unsigned long addr)
