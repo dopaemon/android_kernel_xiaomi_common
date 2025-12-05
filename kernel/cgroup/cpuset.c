@@ -236,6 +236,7 @@ static inline bool task_is_booster(struct task_struct *tsk)
 	       !strcmp(comm, "PERFD-SERVER") ||
 	       !strcmp(comm, "init.qcom.post_");
 }
+EXPORT_SYMBOL_GPL(task_is_booster);
 
 static inline struct cpuset *css_cs(struct cgroup_subsys_state *css)
 {
