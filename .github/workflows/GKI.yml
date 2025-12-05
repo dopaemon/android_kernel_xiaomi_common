@@ -329,6 +329,8 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-kernelsu
           fi
 
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out
+          rm -rf $GITHUB_WORKSPACE/android-kernel/commit/out
           ccache -s
 
       - name: Build Selected Devices NonKSU
@@ -372,6 +374,8 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-standard
           fi
 
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out
+          rm -rf $GITHUB_WORKSPACE/android-kernel/commit/out
           ccache -s
 
       - name: Create Flashable Both Image
