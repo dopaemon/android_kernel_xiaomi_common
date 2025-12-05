@@ -283,7 +283,7 @@ jobs:
         id: cache-ccache
         uses: actions/cache@v4
         with:
-          path: $GITHUB_WORKSPACE/ccache
+          path: /home/runner/work/android_kernel_xiaomi_common/android_kernel_xiaomi_common/ccache
           key: ccache-Rebase
           restore-keys: |
             ccache-
