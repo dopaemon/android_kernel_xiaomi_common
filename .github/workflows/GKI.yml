@@ -172,6 +172,9 @@ jobs:
           echo "===== Initial Total Disk Space in GB ====="
           df -BG
 
+      - name: Clean-up
+        uses: rokibhasansagar/slimhub_actions@main
+
       - name: Download Apache Arrow's util_free_space.sh
         run: |
           curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
