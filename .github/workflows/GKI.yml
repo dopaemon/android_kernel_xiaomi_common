@@ -10,7 +10,6 @@ on:
         type: choice
         options:
         - Rebase
-        - lindroid
       KERNEL_GIT:
         description: 'Kernel Source Code'
         required: true
@@ -256,6 +255,15 @@ jobs:
           sudo mount -a
           sudo sysctl vm.swappiness=10
 
+      - name: Cache CCACHE
+        id: cache-ccache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/work/android_kernel_xiaomi_common/android_kernel_xiaomi_common/ccache
+          key: ccache-${{ matrix.device }}-${{ github.event.inputs.KERNEL_BRANCH }}
+          restore-keys: |
+            ccache-${{ matrix.device }}-
+
       - name: Setup CCACHE
         run: |
           sudo mkdir -p $GITHUB_WORKSPACE/ccache
@@ -264,9 +272,11 @@ jobs:
           export CCACHE_DIR=$GITHUB_WORKSPACE/ccache
           export CCACHE_EXEC=$(which ccache)
           export USE_CCACHE=1
+          export CCACHE_COMPILERCHECK="none"
+          export CCACHE_NOHASHDIR="true"
+          export CCACHE_HARDLINK="true"
           ccache -M 20G
           ccache -o compression=true
-          ccache -z
 
           echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
           echo "CCACHE_HASHDIR=1" >> $GITHUB_ENV
@@ -278,15 +288,20 @@ jobs:
           echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
           echo "CC='ccache clang'" >> $GITHUB_ENV
           echo "CXX='ccache clang++'" >> $GITHUB_ENV
+          echo "CCACHE_COMPILERCHECK='none'" >> $GITHUB_ENV
+          echo "CCACHE_NOHASHDIR='true'" >> $GITHUB_ENV
+          echo "CCACHE_HARDLINK='true'" >> $GITHUB_ENV
+          echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros" >> "$GITHUB_WORKSPACE/ccache/ccache.conf"
 
-      - name: Cache CCACHE
-        id: cache-ccache
-        uses: actions/cache@v4
-        with:
-          path: /home/runner/work/android_kernel_xiaomi_common/android_kernel_xiaomi_common/ccache
-          key: ccache-Rebase
-          restore-keys: |
-            ccache-
+      - name: CCACHE Infomation
+        run: |
+          echo "First Status ccache:"
+          ccache -s
+          if [ "${{ steps.cache-ccache.outputs.cache-hit }}" == 'true' ]; then
+            echo "\n\n"
+            echo "CCACHE Infomation:"
+            ccache -sv
+          fi
 
       - name: Build Selected Devices KSU
         if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
@@ -296,6 +311,12 @@ jobs:
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
 
+          export CCACHE_DIR=$GITHUB_WORKSPACE/ccache
+          export CCACHE_EXEC=$(which ccache)
+          export USE_CCACHE=1
+          export CCACHE_COMPILERCHECK="none"
+          export CCACHE_NOHASHDIR="true"
+          export CCACHE_HARDLINK="true"
           export CCACHE_EXEC=$(which ccache)
           export CC="ccache clang"
           export HOSTCC="ccache clang"
@@ -336,8 +357,6 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-kernelsu
           fi
 
-          ccache -s
-
       - name: Build Selected Devices NonKSU
         if: (github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
@@ -346,6 +365,12 @@ jobs:
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
 
+          export CCACHE_DIR=$GITHUB_WORKSPACE/ccache
+          export CCACHE_EXEC=$(which ccache)
+          export USE_CCACHE=1
+          export CCACHE_COMPILERCHECK="none"
+          export CCACHE_NOHASHDIR="true"
+          export CCACHE_HARDLINK="true"
           export CCACHE_EXEC=$(which ccache)
           export CC="ccache clang"
           export HOSTCC="ccache clang"
@@ -382,8 +407,6 @@ jobs:
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-standard
           fi
-
-          ccache -s
 
       - name: Create Flashable Both Image
         if: github.event.inputs.BUILD_TARGET == 'Both' && github.event.inputs.KERNEL_BRANCH != 'lindroid'
