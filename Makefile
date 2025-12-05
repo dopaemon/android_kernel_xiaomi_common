@@ -432,11 +432,11 @@ HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
-ifdef CONFIG_BUILD_WITH_CCACHE
+ifeq ($(CONFIG_BUILD_WITH_CCACHE),y)
 CCACHE := $(shell which ccache)
 endif
 
-ifdef CONFIG_BUILD_WITH_CCACHE
+ifeq ($(CONFIG_BUILD_WITH_CCACHE),y)
 ifneq ($(LLVM),)
 HOSTCC	= $(CCACHE) clang
 HOSTCXX	= $(CCACHE) clang++
@@ -466,7 +466,7 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
-ifdef CONFIG_BUILD_WITH_CCACHE
+ifeq ($(CONFIG_BUILD_WITH_CCACHE),y)
 ifneq ($(LLVM),)
 CC		= $(CCACHE) clang
 LD		= $(CCACHE) ld.lld
