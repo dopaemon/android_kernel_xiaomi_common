@@ -283,7 +283,7 @@ jobs:
         id: cache-ccache
         uses: actions/cache@v4
         with:
-          path: /tmp/ccache
+          path: $GITHUB_WORKSPACE/ccache
           key: ccache-Rebase
           restore-keys: |
             ccache-
