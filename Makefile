@@ -434,6 +434,9 @@ HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
 ifdef CONFIG_BUILD_WITH_CCACHE
 CCACHE := $(shell which ccache)
+endif
+
+ifdef CONFIG_BUILD_WITH_CCACHE
 ifneq ($(LLVM),)
 HOSTCC	= $(CCACHE) clang
 HOSTCXX	= $(CCACHE) clang++
@@ -441,14 +444,14 @@ else
 HOSTCC	= $(CCACHE) gcc
 HOSTCXX	= $(CCACHE) g++
 endif
-endif
-
+else
 ifneq ($(LLVM),)
 HOSTCC  = clang
 HOSTCXX = clang++
 else
 HOSTCC  = gcc
 HOSTCXX = g++
+endif
 endif
 
 KBUILD_USERHOSTCFLAGS := -Wall -Wmissing-prototypes -Wstrict-prototypes \
@@ -483,7 +486,7 @@ OBJDUMP		= $(CCACHE) $(CROSS_COMPILE)objdump
 READELF		= $(CCACHE) $(CROSS_COMPILE)readelf
 STRIP		= $(CCACHE) $(CROSS_COMPILE)strip
 endif
-endif
+else
 ifneq ($(LLVM),)
 CC              = clang
 LD              = ld.lld
@@ -502,6 +505,7 @@ OBJCOPY         = $(CROSS_COMPILE)objcopy
 OBJDUMP         = $(CROSS_COMPILE)objdump
 READELF         = $(CROSS_COMPILE)readelf
 STRIP           = $(CROSS_COMPILE)strip
+endif
 endif
 PAHOLE		= pahole
 RESOLVE_BTFIDS	= $(objtree)/tools/bpf/resolve_btfids/resolve_btfids
