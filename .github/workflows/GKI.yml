@@ -231,13 +231,42 @@ jobs:
         run: |
           git clone -b ${{ github.event.inputs.CLANG_BRANCH }} --depth=1 --single-branch ${{ github.event.inputs.CLANG_PREBUILT }} $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
 
-      - name: Set up ccache
+      - name: Setup Ramdisk
         run: |
-          mkdir -p ~/.cache/bazel
-          ccache --version
-          ccache --max-size=2G
-          ccache --set-config=compression=true
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          sudo mkdir /tmp/ramdisk
+          sudo chmod 777 /tmp/ramdisk
+          sudo mount -t tmpfs -o size=10G rdisk1 /tmp/ramdisk
+          sudo mount | tail -n 1
+          sudo umount /tmp/ramdisk/
+          sudo dd if=/dev/zero of=/tmp/ramdisk/zero bs=4k count=100000
+          sudo dd if=/tmp/ramdisk/zero of=/dev/null bs=4k count=100000
+          sudo mount -a
+          sudo sysctl vm.swappiness=10
+
+      - name: Setup CCACHE
+        run: |
+          sudo mkdir -p /tmp/ccache
+          sudo chmod 7777 /tmp/ccache
+
+          export CCACHE_DIR=/tmp/ccache
+          export CCACHE_EXEC=$(which ccache)
+          export USE_CCACHE=1
+          ccache -M 20G
+          ccache -o compression=true
+          ccache -z
+
+          echo "CCACHE_DIR=/tmp/ccache" >> $GITHUB_ENV
+          echo "CCACHE_EXEC=$(which ccache)" >> $GITHUB_ENV
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
+
+      - name: Cache CCACHE
+        id: cache-ccache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ccache
+          key: ccache-Rebase
+          restore-keys: |
+            ccache-
 
       - name: Build Selected Devices KSU
         if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
@@ -252,6 +281,7 @@ jobs:
           git reset --hard HEAD
           rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
           echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
 
           if [ "$DEVICE" != "gki" ]; then
              cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
@@ -263,17 +293,10 @@ jobs:
           (
              set +e
              cd ../
-             CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+             time KBUILD_BUILD_TIMESTAMP='' CC='ccache clang' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
           )
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
-
-          # cd $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/
-          # curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch
-          # chmod 777 patch
-          # ./patch
-          # rm -rf Image
-          # mv oImage Image
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
@@ -289,6 +312,8 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-kernelsu
           fi
 
+          ccache -s
+
       - name: Build Selected Devices NonKSU
         if: (github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
@@ -302,6 +327,7 @@ jobs:
           git reset --hard HEAD
           rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
           echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
 
           if [ "$DEVICE" != "gki" ]; then
              cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
@@ -313,7 +339,7 @@ jobs:
           (
              set +e
              cd ../
-             CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+             time KBUILD_BUILD_TIMESTAMP='' CC='ccache clang' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
           )
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
@@ -329,34 +355,7 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-standard
           fi
 
-      - name: Build Lindroid Kernel
-        if: github.event.inputs.KERNEL_BRANCH == 'lindroid'
-        run: |
-          set -e
-          DEVICE="${{ matrix.device }}"
-          TARGET="${{ github.event.inputs.BUILD_TARGET }}"
-          ZIP_NAME=""
-
-          cd $GITHUB_WORKSPACE/android-kernel
-          cd ./common/
-          git reset --hard HEAD
-          rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
-
-          if [ "$DEVICE" != "gki" ]; then
-             cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
-             cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> arch/arm64/configs/gki_defconfig
-             cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
-          fi
-
-          cd ../
-          CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
-          [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
-
-          ZIP_NAME="DoraCore-${DEVICE}-LinDroid-5.10-A12-${BUILD_DATE}.zip"
-          cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-          cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image
-          zip -r9 "$ZIP_NAME" *
-          mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+          ccache -s
 
       - name: Create Flashable Both Image
         if: github.event.inputs.BUILD_TARGET == 'Both' && github.event.inputs.KERNEL_BRANCH != 'lindroid'
