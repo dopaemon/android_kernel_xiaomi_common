@@ -186,15 +186,35 @@ jobs:
           rm -rf ./build/_setup_env.sh
           wget -O ./build/_setup_env.sh https://raw.githubusercontent.com/dopaemon/android_kernel_xiaomi_common/refs/heads/master/.github/scripts/_setup_env.sh
           chmod +x ./build/_setup_env.sh
-          git clone -b ${{ github.event.inputs.KERNEL_BRANCH }} --recurse-submodules -j$(nproc --all) --depth=1 --single-branch --no-tags --filter=blob:none ${{ github.event.inputs.KERNEL_GIT }} ./common
-          git clone -b lineage-22.2 --single-branch --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450-modules.git sm8450-modules
-          git clone -b lineage-22.2 --single-branch --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450-devicetrees.git sm8450-devicetrees
+          git clone -b lineage-23.0 --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_sm8450-modules.git sm8450-modules
+          git clone -b lineage-23.0 --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_sm8450-devicetrees.git sm8450-devicetrees
           if [ "$TARGET" != "Both" ]; then
              git clone -b master --depth=1 --single-branch ${{ github.event.inputs.ANYKERNEL_GIT }} ./AnyKernel3
           else
              git clone -b volume --depth=1 --single-branch ${{ github.event.inputs.ANYKERNEL_GIT }} ./AnyKernel3
           fi
           rm -rf ./AnyKernel3/.git
+
+      - name: Cache Kernel
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: android-kernel/common
+          key: kernel-${{ github.event.inputs.KERNEL_BRANCH }}
+          restore-keys: |
+            kernel-
+
+      - name: Clone Kernel if cache missed
+        if: steps.cache-kernel.outputs.cache-hit != 'true'
+        run: |
+          git clone -b ${{ github.event.inputs.KERNEL_BRANCH }} --recurse-submodules -j$(nproc --all) --single-branch --no-tags ${{ github.event.inputs.KERNEL_GIT }} android-kernel/common
+
+      - name: Sync Kernel if cache complete
+        if: steps.cache-kernel.outputs.cache-hit == 'true'
+        run: |
+          cd android-kernel/common
+          git fetch origin Rebase
+          git submodule update --init --recursive
 
       - name: Cache Clang
         id: cache-clang
@@ -244,7 +264,7 @@ jobs:
              cd ../
              CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
           )
-          
+
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
 
           # cd $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/
@@ -253,10 +273,10 @@ jobs:
           # ./patch
           # rm -rf Image
           # mv oImage Image
-          
+
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
-          
+
           if [ "$TARGET" != "Both" ]; then
              ZIP_NAME="DoraCore-${DEVICE}-KSU-5.10-A12-${BUILD_DATE}.zip"
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
@@ -294,7 +314,7 @@ jobs:
              cd ../
              CC='ccache' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
           )
-          
+
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
 
           if [ "$TARGET" != "Both" ]; then
