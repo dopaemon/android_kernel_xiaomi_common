@@ -214,6 +214,7 @@ jobs:
         run: |
           cd android-kernel/common
           git fetch origin Rebase
+          git reset --hard FETCH_HEAD
           git submodule update --init --recursive
 
       - name: Cache Clang
