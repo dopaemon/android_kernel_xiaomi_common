@@ -125,7 +125,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set tag as timestamp
         id: set-tag
@@ -165,7 +165,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check Initial Disk Space
         run: |
@@ -174,10 +174,6 @@ jobs:
 
       - name: Clean-up
         uses: rokibhasansagar/slimhub_actions@main
-
-      # - name: Download Apache Arrow's util_free_space.sh
-      #   run: |
-      #     curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
 
       - name: Check Disk Space After Cleanup
         run: |
@@ -250,31 +246,38 @@ jobs:
 
       - name: Setup Ramdisk
         run: |
-          sudo mkdir /tmp/ramdisk
-          sudo chmod 777 /tmp/ramdisk
-          sudo mount -t tmpfs -o size=10G rdisk1 /tmp/ramdisk
+          sudo mkdir -p $GITHUB_WORKSPACE/ramdisk
+          sudo chmod 777 $GITHUB_WORKSPACE/ramdisk
+          sudo mount -t tmpfs -o size=10G rdisk1 $GITHUB_WORKSPACE/ramdisk
           sudo mount | tail -n 1
-          sudo umount /tmp/ramdisk/
-          sudo dd if=/dev/zero of=/tmp/ramdisk/zero bs=4k count=100000
-          sudo dd if=/tmp/ramdisk/zero of=/dev/null bs=4k count=100000
+          sudo umount $GITHUB_WORKSPACE/ramdisk
+          sudo dd if=/dev/zero of=$GITHUB_WORKSPACE/ramdisk/zero bs=4k count=100000
+          sudo dd if=$GITHUB_WORKSPACE/ramdisk/zero of=/dev/null bs=4k count=100000
           sudo mount -a
           sudo sysctl vm.swappiness=10
 
       - name: Setup CCACHE
         run: |
-          sudo mkdir -p /tmp/ccache
-          sudo chmod 7777 /tmp/ccache
+          sudo mkdir -p $GITHUB_WORKSPACE/ccache
+          sudo chmod 7777 $GITHUB_WORKSPACE/ccache
 
-          export CCACHE_DIR=/tmp/ccache
+          export CCACHE_DIR=$GITHUB_WORKSPACE/ccache
           export CCACHE_EXEC=$(which ccache)
           export USE_CCACHE=1
           ccache -M 20G
           ccache -o compression=true
           ccache -z
 
-          echo "CCACHE_DIR=/tmp/ccache" >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+          echo "CCACHE_HASHDIR=1" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=20G" >> $GITHUB_ENV
+          echo "CCACHE_COMPRESSLEVEL=9" >> $GITHUB_ENV
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/ccache" >> $GITHUB_ENV
           echo "CCACHE_EXEC=$(which ccache)" >> $GITHUB_ENV
           echo "USE_CCACHE=1" >> $GITHUB_ENV
+          echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
+          echo "CC='ccache clang'" >> $GITHUB_ENV
+          echo "CXX='ccache clang++'" >> $GITHUB_ENV
 
       - name: Cache CCACHE
         id: cache-ccache
@@ -310,7 +313,7 @@ jobs:
           (
              set +e
              cd ../
-             time KBUILD_BUILD_TIMESTAMP='' CC='ccache clang' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+             time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
           )
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
@@ -329,8 +332,6 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-kernelsu
           fi
 
-          rm -rf $GITHUB_WORKSPACE/android-kernel/out
-          rm -rf $GITHUB_WORKSPACE/android-kernel/common/out
           ccache -s
 
       - name: Build Selected Devices NonKSU
@@ -358,7 +359,7 @@ jobs:
           (
              set +e
              cd ../
-             time KBUILD_BUILD_TIMESTAMP='' CC='ccache clang' LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+             time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
           )
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
@@ -374,8 +375,6 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-standard
           fi
 
-          rm -rf $GITHUB_WORKSPACE/android-kernel/out
-          rm -rf $GITHUB_WORKSPACE/android-kernel/common/out
           ccache -s
 
       - name: Create Flashable Both Image
