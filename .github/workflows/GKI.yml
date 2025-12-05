@@ -243,18 +243,6 @@ jobs:
         run: |
           git clone -b ${{ github.event.inputs.CLANG_BRANCH }} --depth=1 --single-branch ${{ github.event.inputs.CLANG_PREBUILT }} $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
 
-      - name: Setup Ramdisk
-        run: |
-          sudo mkdir -p $GITHUB_WORKSPACE/ramdisk
-          sudo chmod 777 $GITHUB_WORKSPACE/ramdisk
-          sudo mount -t tmpfs -o size=10G rdisk1 $GITHUB_WORKSPACE/ramdisk
-          sudo mount | tail -n 1
-          sudo umount $GITHUB_WORKSPACE/ramdisk
-          sudo dd if=/dev/zero of=$GITHUB_WORKSPACE/ramdisk/zero bs=4k count=100000
-          sudo dd if=$GITHUB_WORKSPACE/ramdisk/zero of=/dev/null bs=4k count=100000
-          sudo mount -a
-          sudo sysctl vm.swappiness=10
-
       - name: Cache CCACHE
         id: cache-ccache
         uses: actions/cache@v4
