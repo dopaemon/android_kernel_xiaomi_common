@@ -433,6 +433,7 @@ HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
 ifeq ($(CONFIG_BUILD_WITH_CCACHE),y)
+$(info *** CCACHE ENABLED: Using ccache for kernel build ***)
 CCACHE := $(shell which ccache)
 endif
 
