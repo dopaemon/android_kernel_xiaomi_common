@@ -167,6 +167,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check Initial Disk Space
+        run: |
+          echo "===== Initial Total Disk Space in GB ====="
+          df -BG
+
+      - name: Download Apache Arrow's util_free_space.sh
+        run: |
+          curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
+
+      - name: Check Disk Space After Cleanup
+        run: |
+          echo "===== Total Disk Space After Cleanup in GB ====="
+          df -BG
+
       - name: Build Environment
         run: |
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
