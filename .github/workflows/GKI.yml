@@ -296,6 +296,13 @@ jobs:
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
 
+          export CCACHE_EXEC=$(which ccache)
+          export CC="ccache clang"
+          export HOSTCC="ccache clang"
+          export HOSTCXX="ccache clang++"
+          export CXX="ccache clang++"
+          export USE_CCACHE=1
+
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
           git reset --hard HEAD
@@ -310,11 +317,8 @@ jobs:
              cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
           fi
 
-          (
-             set +e
-             cd ../
-             time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
-          )
+          cd ../
+          time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
 
@@ -342,6 +346,13 @@ jobs:
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
 
+          export CCACHE_EXEC=$(which ccache)
+          export CC="ccache clang"
+          export HOSTCC="ccache clang"
+          export HOSTCXX="ccache clang++"
+          export CXX="ccache clang++"
+          export USE_CCACHE=1
+
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
           git reset --hard HEAD
@@ -356,11 +367,8 @@ jobs:
              cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
           fi
 
-          (
-             set +e
-             cd ../
-             time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
-          )
+          cd ../
+          time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
 
