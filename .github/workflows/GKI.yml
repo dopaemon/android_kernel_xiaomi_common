@@ -439,7 +439,7 @@ jobs:
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
 
-          export CCACHE_LOGFILE='${{ github.workspace }}/$DEVICE-KSU-ccache.log'
+          export CCACHE_LOGFILE='${{ github.workspace }}/$DEVICE-NonKSU-ccache.log'
           export CCACHE_COMPILERCHECK="none"
           export CCACHE_BASEDIR="${{ github.workspace }}"
           export CCACHE_NOHASHDIR="true"
@@ -450,6 +450,7 @@ jobs:
 
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
+          export PRELOAD_LIBS="$GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/lib64/libfakestat.so $GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/lib64/libfaketimeMT.so"
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
