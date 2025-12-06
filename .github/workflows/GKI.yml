@@ -261,8 +261,8 @@ jobs:
         run: |
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
-          echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"' >> $GITHUB_ENV
-          echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"' >> $GITHUB_ENV
+          # echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"' >> $GITHUB_ENV
+          # echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"' >> $GITHUB_ENV
           CLANG_DIR="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin"
           CLANG_VERSION="$($CLANG_DIR/clang --version | head -n 1)"
           LLD_VERSION="$($CLANG_DIR/ld.lld --version | head -n 1)"
@@ -273,7 +273,7 @@ jobs:
       - name: First Setup CCACHE
         run: |
           CCACHE_DIR="${{ github.workspace }}/ccache"
-          sudo mkdir -p $CCACHE_DIR
+          mkdir -p $CCACHE_DIR
           sudo chmod 7777 $CCACHE_DIR
           echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
           echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}" >> $GITHUB_ENV
@@ -328,6 +328,9 @@ jobs:
           export CCACHE_DIR="${{ env.CCACHE_DIR }}"
           export CCACHE_MAXSIZE="3G"
           export KERNEL_USE_CCACHE=1
+
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
@@ -432,6 +435,9 @@ jobs:
           export CCACHE_DIR="${{ env.CCACHE_DIR }}"
           export CCACHE_MAXSIZE="3G"
           export KERNEL_USE_CCACHE=1
+
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
