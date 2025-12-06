@@ -273,7 +273,7 @@ jobs:
       - name: First Setup CCACHE
         run: |
           CCACHE_DIR="${{ github.workspace }}/ccache"
-          mkdir -p "$CCACHE_DIR"
+          sudo mkdir -p $CCACHE_DIR
           sudo chmod 7777 $CCACHE_DIR
           echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
           echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}" >> $GITHUB_ENV
