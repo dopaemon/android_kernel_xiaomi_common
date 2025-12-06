@@ -74,7 +74,8 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - id: set-matrix
+      - name: Matrix Setup
+        id: set-matrix
         shell: bash
         env:
           BUILD_DEVICE: ${{ github.event.inputs.BUILD_DEVICE }}
