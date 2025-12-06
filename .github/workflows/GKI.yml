@@ -171,13 +171,13 @@ jobs:
           echo "===== Initial Total Disk Space in GB ====="
           df -BG
 
-      - name: Clean-up
-        uses: rokibhasansagar/slimhub_actions@main
+      # - name: Clean-up
+        # uses: rokibhasansagar/slimhub_actions@main
 
-      - name: Check Disk Space After Cleanup
-        run: |
-          echo "===== Total Disk Space After Cleanup in GB ====="
-          df -BG
+      # - name: Check Disk Space After Cleanup
+        # run: |
+          # echo "===== Total Disk Space After Cleanup in GB ====="
+          # df -BG
 
       - name: Build Environment
         run: |
@@ -188,7 +188,7 @@ jobs:
             curl bison flex make binutils git perl gcc python3 \
             python-is-python3 bc libssl-dev libelf-dev \
             bc aria2 zip unzip ccache binutils-aarch64-linux-gnu \
-            tar witch wget zip unzip
+            tar which wget zip unzip
           cd $GITHUB_WORKSPACE && mkdir -p library && cd library/
           wget https://github.com/cctv18/libfakestat/releases/latest/download/libfakestat.tar.gz
           wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfaketimeMT.so
