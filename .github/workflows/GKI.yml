@@ -258,7 +258,7 @@ jobs:
           git clone -b ${{ github.event.inputs.CLANG_BRANCH }} --depth=1 --single-branch ${{ github.event.inputs.CLANG_PREBUILT }} $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
 
       - name: Setup Enviroment
-        with: |
+        run: |
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
           echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"' >> $GITHUB_ENV
@@ -271,7 +271,7 @@ jobs:
           echo "LLD Version: $LLD_VERSION"
 
       - name: First Setup CCACHE
-        with: |
+        run: |
           CCACHE_DIR="${{ github.workspace }}/ccache"
           mkdir -p "$CCACHE_DIR"
           sudo chmod 7777 $CCACHE_DIR
