@@ -287,6 +287,7 @@ jobs:
               echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros" >> "$GITHUB_WORKSPACE/ccache/ccache.conf"
           else
               echo "[CCACHE] sloppiness already exists, skip"
+              cat $GITHUB_WORKSPACE/ccache/ccache.conf
           fi
 
       - name: CCACHE Infomation
