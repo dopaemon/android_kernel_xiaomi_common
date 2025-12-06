@@ -188,7 +188,7 @@ jobs:
             curl bison flex make binutils git perl gcc python3 \
             python-is-python3 bc libssl-dev libelf-dev \
             bc aria2 zip unzip ccache binutils-aarch64-linux-gnu \
-            tar witch wget
+            tar witch wget zip unzip
           cd $GITHUB_WORKSPACE && mkdir -p library && cd library/
           wget https://github.com/cctv18/libfakestat/releases/latest/download/libfakestat.tar.gz
           wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfaketimeMT.so
@@ -269,7 +269,6 @@ jobs:
           echo "Prebuilts Infomation:"
           echo "Clang Version: $CLANG_VERSION"
           echo "LLD Version: $LLD_VERSION"
-          pahole_version=$(pahole --version 2>/dev/null | head -n1); [ -z "$pahole_version" ] && echo "pahole版本：未安装" || echo "pahole版本：$pahole_version"
 
       - name: First Setup CCACHE
         with: |
