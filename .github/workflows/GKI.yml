@@ -183,6 +183,10 @@ jobs:
         run: |
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           echo "BUILD_DATE=$(TZ=Asia/Ho_Chi_Minh date +'%Y-%m%d-%H%M')" >> $GITHUB_ENV
+          sudo apt-mark hold firefox
+          sudo apt-mark hold libc-bin
+          sudo apt purge man-db
+          sudo rm -rf /var/lib/man-db/auto-update
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             curl bison flex make binutils git perl gcc python3 \
@@ -220,6 +224,12 @@ jobs:
              git clone -b volume --depth=1 --single-branch ${{ github.event.inputs.ANYKERNEL_GIT }} ./AnyKernel3
           fi
           rm -rf ./AnyKernel3/.git
+          rm -rf ${{ github.workspace }}/android-kernel/prebuilts/build-tools
+          cd ${{ github.workspace }}/android-kernel/prebuilts
+          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang20-r547379/build-tools.zip -o build-tools.zip
+          unzip -q build-tools.zip
+          rm -rf build-tools.zip
+
 
       - name: Cache Kernel
         id: cache-kernel
