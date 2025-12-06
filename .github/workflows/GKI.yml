@@ -183,9 +183,23 @@ jobs:
         run: |
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           echo "BUILD_DATE=$(TZ=Asia/Ho_Chi_Minh date +'%Y-%m%d-%H%M')" >> $GITHUB_ENV
-          cd $GITHUB_WORKSPACE
           sudo apt-get update
-          sudo apt-get install -y git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler rename libelf-dev dwarves wget openjdk-8-jdk which
+          sudo apt-get install -y --no-install-recommends \
+            curl bison flex make binutils git perl gcc python3 \
+            python-is-python3 bc libssl-dev libelf-dev \
+            bc aria2 zip unzip ccache binutils-aarch64-linux-gnu \
+            tar witch wget
+          cd $GITHUB_WORKSPACE && mkdir -p library && cd library/
+          wget https://github.com/cctv18/libfakestat/releases/latest/download/libfakestat.tar.gz
+          wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfaketimeMT.so
+          tar -xf libfakestat.tar.gz
+          sudo chmod 7777 ./*.so
+          rm libfakestat.tar.gz
+          export SO_DIR=$(pwd)
+          export PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"
+          echo "SO_DIR=$(pwd)" >> $GITHUB_ENV
+          echo 'PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"' >> $GITHUB_ENV
+          cd $GITHUB_WORKSPACE
           sudo wget -O /usr/bin/repo http://commondatastorage.googleapis.com/git-repo-downloads/repo
           sudo chmod +x /usr/bin/repo
           git config --global user.name "${{ github.actor }}"
@@ -193,7 +207,7 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/android-kernel && cd $GITHUB_WORKSPACE/android-kernel
           repo init --depth=1 --u ${{ github.event.inputs.KERNEL_GIT }} -b manifest
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
-          git clone -b build --single-branch https://github.com/dopaemon/android_kernel_xiaomi_common.git build
+          git clone -b build --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git build
           rm -rf .git .github .repo common
           rm -rf ./build/_setup_env.sh
           wget -O ./build/_setup_env.sh https://raw.githubusercontent.com/dopaemon/android_kernel_xiaomi_common/refs/heads/master/.github/scripts/_setup_env.sh
@@ -243,52 +257,44 @@ jobs:
         run: |
           git clone -b ${{ github.event.inputs.CLANG_BRANCH }} --depth=1 --single-branch ${{ github.event.inputs.CLANG_PREBUILT }} $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
 
+      - name: Setup Enviroment
+        with: |
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
+          echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"' >> $GITHUB_ENV
+          echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"' >> $GITHUB_ENV
+          CLANG_DIR="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin"
+          CLANG_VERSION="$($CLANG_DIR/clang --version | head -n 1)"
+          LLD_VERSION="$($CLANG_DIR/ld.lld --version | head -n 1)"
+          echo "Prebuilts Infomation:"
+          echo "Clang Version: $CLANG_VERSION"
+          echo "LLD Version: $LLD_VERSION"
+          pahole_version=$(pahole --version 2>/dev/null | head -n1); [ -z "$pahole_version" ] && echo "pahole版本：未安装" || echo "pahole版本：$pahole_version"
+
+      - name: First Setup CCACHE
+        with: |
+          CCACHE_DIR="${{ github.workspace }}/ccache"
+          mkdir -p "$CCACHE_DIR"
+          sudo chmod 7777 $CCACHE_DIR
+          echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}" >> $GITHUB_ENV
+
       - name: Cache CCACHE
         id: cache-ccache
         uses: actions/cache@v4
         with:
-          path: /home/runner/work/android_kernel_xiaomi_common/android_kernel_xiaomi_common/ccache
+          path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ matrix.device }}-${{ github.event.inputs.KERNEL_BRANCH }}
           restore-keys: |
             ccache-${{ matrix.device }}-
 
       - name: Setup CCACHE
         run: |
-          sudo mkdir -p $GITHUB_WORKSPACE/ccache
-          sudo chmod 7777 $GITHUB_WORKSPACE/ccache
-
-          export CCACHE_DIR=$GITHUB_WORKSPACE/ccache
-          export CCACHE_EXEC=$(which ccache)
-          export USE_CCACHE=1
-          export CCACHE_COMPILERCHECK="none"
-          export CCACHE_NOHASHDIR="true"
-          export CCACHE_HARDLINK="true"
-          ccache -M 20G
-          ccache -o compression=true
-
-          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-          echo "CCACHE_HASHDIR=1" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=20G" >> $GITHUB_ENV
-          echo "CCACHE_COMPRESSLEVEL=9" >> $GITHUB_ENV
-          echo "CCACHE_DIR=$GITHUB_WORKSPACE/ccache" >> $GITHUB_ENV
-          echo "CCACHE_EXEC=$(which ccache)" >> $GITHUB_ENV
-          echo "USE_CCACHE=1" >> $GITHUB_ENV
-          echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
-          echo "CC='ccache clang'" >> $GITHUB_ENV
-          echo "CXX='ccache clang++'" >> $GITHUB_ENV
-          echo "CCACHE_COMPILERCHECK='none'" >> $GITHUB_ENV
-          echo "CCACHE_NOHASHDIR='true'" >> $GITHUB_ENV
-          echo "CCACHE_HARDLINK='true'" >> $GITHUB_ENV
-
-          CCACHE_CONF="$GITHUB_WORKSPACE/ccache/ccache.conf"
-          SLOP_VALUE="sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros"
-          if ! grep -Fxq "$SLOP_VALUE" "$CCACHE_CONF"; then
-              echo "[CCACHE] Added sloppiness config"
-              echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros" >> "$GITHUB_WORKSPACE/ccache/ccache.conf"
-          else
-              echo "[CCACHE] sloppiness already exists, skip"
-              cat $GITHUB_WORKSPACE/ccache/ccache.conf
-          fi
+          ccache --set-config=cache_dir=${{ env.CCACHE_DIR }}
+          ccache --set-config=max_size=5G
+          ccache --set-config=sloppiness=time_macros,include_file_ctime,include_file_mtime,file_stat_matches
+          ccache --set-config=hash_dir=false
+          ccache -s
 
       - name: CCACHE Infomation
         run: |
@@ -300,6 +306,13 @@ jobs:
             ccache -sv
           fi
 
+      - name: Fakestats - Faketime
+        run: |
+          export FAKESTAT="2025-05-25 12:00:00"
+          export FAKETIME="@2025-05-25 13:00:00"
+          echo "FAKESTAT=$FAKESTAT" >> $GITHUB_ENV
+          echo "FAKETIME=$FAKETIME" >> $GITHUB_ENV
+
       - name: Build Selected Devices KSU
         if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
@@ -308,16 +321,13 @@ jobs:
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
 
-          export CCACHE_DIR=$GITHUB_WORKSPACE/ccache
-          export CCACHE_EXEC=$(which ccache)
-          export USE_CCACHE=1
+          export CCACHE_LOGFILE='${{ github.workspace }}/$DEVICE-KSU-ccache.log'
           export CCACHE_COMPILERCHECK="none"
+          export CCACHE_BASEDIR="${{ github.workspace }}"
           export CCACHE_NOHASHDIR="true"
           export CCACHE_HARDLINK="true"
-          export CC="ccache clang"
-          export HOSTCC="ccache clang"
-          export HOSTCXX="ccache clang++"
-          export CXX="ccache clang++"
+          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+          export CCACHE_MAXSIZE="3G"
           export KERNEL_USE_CCACHE=1
 
           cd $GITHUB_WORKSPACE/android-kernel
@@ -327,6 +337,37 @@ jobs:
           echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
 
+          rm -rf *-wrapper
+          rm -rf test-wrapper.sh
+          touch cc-wrapper
+          touch ld-wrapper
+          chmod +x *-wrapper
+          echo '#!/bin/bash' > cc-wrapper
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> cc-wrapper
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> cc-wrapper
+          echo 'export FAKETIME="'$FAKETIME'"' >> cc-wrapper
+          echo 'ccache clang "$@"' >> cc-wrapper
+          echo '#!/bin/bash' > ld-wrapper
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> ld-wrapper
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> ld-wrapper
+          echo 'export FAKETIME="'$FAKETIME'"' >> ld-wrapper
+          echo 'ld.lld "$@"' >> ld-wrapper
+          touch test-wrapper.sh
+          chmod +x test-wrapper.sh
+          echo '#!/bin/bash' > test-wrapper.sh
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> test-wrapper.sh
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> test-wrapper.sh
+          echo 'export FAKETIME="'$FAKETIME'"' >> test-wrapper.sh
+          echo 'echo ">>> Wrapper check enviroment."' >> test-wrapper.sh
+          echo 'exec "$@"' >> test-wrapper.sh
+          chmod +x test-wrapper.sh
+          ./test-wrapper.sh date
+          ./test-wrapper.sh stat ./Makefile
+          chmod +x cc-wrapper ld-wrapper
+          LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
+
+          export LLVM=1
+
           if [ "$DEVICE" != "gki" ]; then
              cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
              cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
@@ -334,10 +375,33 @@ jobs:
              cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
           fi
 
-          cd ../
-          time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+          # cd ../
+          # time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+          make -j$(nproc --all) \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE=aarch64-linux-gnu- \
+               CC="ccache clang" \
+               LD="ld.lld" \
+               HOSTLD=ld.lld \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               KCFLAGS+=-O2 \
+               KCFLAGS+=-Wno-error \
+               gki_defconfig
 
-          [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
+          make -j$(nproc --all) \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE=aarch64-linux-gnu- \
+               CC="$(pwd)/cc-wrapper" \
+               LD="$(pwd)/ld-wrapper" \
+               HOSTLD=ld.lld \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               KCFLAGS+=-O2 \
+               KCFLAGS+=-Wno-error
+
+          # [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
+          [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
@@ -345,12 +409,12 @@ jobs:
           if [ "$TARGET" != "Both" ]; then
              ZIP_NAME="DoraCore-${DEVICE}-KSU-5.10-A12-${BUILD_DATE}.zip"
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
              zip -r9 "$ZIP_NAME" *
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
           else
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-kernelsu
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-kernelsu
           fi
 
       - name: Build Selected Devices NonKSU
@@ -361,16 +425,13 @@ jobs:
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
 
-          export CCACHE_DIR=$GITHUB_WORKSPACE/ccache
-          export CCACHE_EXEC=$(which ccache)
-          export USE_CCACHE=1
+          export CCACHE_LOGFILE='${{ github.workspace }}/$DEVICE-KSU-ccache.log'
           export CCACHE_COMPILERCHECK="none"
+          export CCACHE_BASEDIR="${{ github.workspace }}"
           export CCACHE_NOHASHDIR="true"
           export CCACHE_HARDLINK="true"
-          export CC="ccache clang"
-          export HOSTCC="ccache clang"
-          export HOSTCXX="ccache clang++"
-          export CXX="ccache clang++"
+          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+          export CCACHE_MAXSIZE="3G"
           export KERNEL_USE_CCACHE=1
 
           cd $GITHUB_WORKSPACE/android-kernel
@@ -380,6 +441,37 @@ jobs:
           echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
 
+          rm -rf *-wrapper
+          rm -rf test-wrapper.sh
+          touch cc-wrapper
+          touch ld-wrapper
+          chmod +x *-wrapper
+          echo '#!/bin/bash' > cc-wrapper
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> cc-wrapper
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> cc-wrapper
+          echo 'export FAKETIME="'$FAKETIME'"' >> cc-wrapper
+          echo 'ccache clang "$@"' >> cc-wrapper
+          echo '#!/bin/bash' > ld-wrapper
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> ld-wrapper
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> ld-wrapper
+          echo 'export FAKETIME="'$FAKETIME'"' >> ld-wrapper
+          echo 'ld.lld "$@"' >> ld-wrapper
+          touch test-wrapper.sh
+          chmod +x test-wrapper.sh
+          echo '#!/bin/bash' > test-wrapper.sh
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> test-wrapper.sh
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> test-wrapper.sh
+          echo 'export FAKETIME="'$FAKETIME'"' >> test-wrapper.sh
+          echo 'echo ">>> Wrapper check enviroment."' >> test-wrapper.sh
+          echo 'exec "$@"' >> test-wrapper.sh
+          chmod +x test-wrapper.sh
+          ./test-wrapper.sh date
+          ./test-wrapper.sh stat ./Makefile
+          chmod +x cc-wrapper ld-wrapper
+          LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
+
+          export LLVM=1
+
           if [ "$DEVICE" != "gki" ]; then
              cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
              cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
@@ -387,20 +479,43 @@ jobs:
              cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
           fi
 
-          cd ../
-          time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+          # cd ../
+          # time CCACHE_EXEC=$(which ccache) CC="ccache clang" SKIP_MRPROPER=1 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j$(nproc --all) || true
+          make -j$(nproc --all) \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE=aarch64-linux-gnu- \
+               CC="ccache clang" \
+               LD="ld.lld" \
+               HOSTLD=ld.lld \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               KCFLAGS+=-O2 \
+               KCFLAGS+=-Wno-error \
+               gki_defconfig
 
-          [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
+          make -j$(nproc --all) \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE=aarch64-linux-gnu- \
+               CC="$(pwd)/cc-wrapper" \
+               LD="$(pwd)/ld-wrapper" \
+               HOSTLD=ld.lld \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               KCFLAGS+=-O2 \
+               KCFLAGS+=-Wno-error
+
+          # [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
+          [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
 
           if [ "$TARGET" != "Both" ]; then
              ZIP_NAME="DoraCore-${DEVICE}-NonKSU-5.10-A12-${BUILD_DATE}.zip"
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
              zip -r9 "$ZIP_NAME" *
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
           else
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image ./Image-standard
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-standard
           fi
 
       - name: Create Flashable Both Image
