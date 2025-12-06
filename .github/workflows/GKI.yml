@@ -271,7 +271,7 @@ jobs:
               # --no-tags \
               # https://gitlab.com/clangsantoni/zyc_clang.git \
               # $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
-          mkdir -p $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
+          mkdir -p $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
           # cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/
           # aria2c -s16 -x16 -k1M https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
           # tar -xvf Clang-22.0.0git-20250928.tar.gz
@@ -407,25 +407,20 @@ jobs:
           make -j$(nproc --all) \
                LLVM=1 \
                ARCH=arm64 \
-               CROSS_COMPILE=aarch64-linux-gnu- \
+               CROSS_COMPILE="ccache aarch64-linux-gnu-" \
                CC="ccache clang" \
-               LD="ld.lld" \
-               HOSTLD=ld.lld \
                O=$GITHUB_WORKSPACE/android-kernel/out \
-               KCFLAGS+=-O2 \
-               KCFLAGS+=-Wno-error \
+               LLVM_IAS=1 \
                gki_defconfig
 
           make -j$(nproc --all) \
                LLVM=1 \
                ARCH=arm64 \
-               CROSS_COMPILE=aarch64-linux-gnu- \
+               CROSS_COMPILE="ccache aarch64-linux-gnu-" \
                CC="$(pwd)/cc-wrapper" \
                LD="$(pwd)/ld-wrapper" \
-               HOSTLD=ld.lld \
                O=$GITHUB_WORKSPACE/android-kernel/out \
-               KCFLAGS+=-O2 \
-               KCFLAGS+=-Wno-error \
+               LLVM_IAS=1 \
                Image
 
           # [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
@@ -515,25 +510,20 @@ jobs:
           make -j$(nproc --all) \
                LLVM=1 \
                ARCH=arm64 \
-               CROSS_COMPILE=aarch64-linux-gnu- \
+               CROSS_COMPILE="ccache aarch64-linux-gnu-" \
                CC="ccache clang" \
-               LD="ld.lld" \
-               HOSTLD=ld.lld \
                O=$GITHUB_WORKSPACE/android-kernel/out \
-               KCFLAGS+=-O2 \
-               KCFLAGS+=-Wno-error \
+               LLVM_IAS=1 \
                gki_defconfig
 
           make -j$(nproc --all) \
                LLVM=1 \
                ARCH=arm64 \
-               CROSS_COMPILE=aarch64-linux-gnu- \
+               CROSS_COMPILE="ccache aarch64-linux-gnu-" \
                CC="$(pwd)/cc-wrapper" \
                LD="$(pwd)/ld-wrapper" \
-               HOSTLD=ld.lld \
                O=$GITHUB_WORKSPACE/android-kernel/out \
-               KCFLAGS+=-O2 \
-               KCFLAGS+=-Wno-error \
+               LLVM_IAS=1 \
                Image
 
           # [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
