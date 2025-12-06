@@ -401,7 +401,8 @@ jobs:
                HOSTLD=ld.lld \
                O=$GITHUB_WORKSPACE/android-kernel/out \
                KCFLAGS+=-O2 \
-               KCFLAGS+=-Wno-error
+               KCFLAGS+=-Wno-error \
+               Image
 
           # [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
@@ -508,7 +509,8 @@ jobs:
                HOSTLD=ld.lld \
                O=$GITHUB_WORKSPACE/android-kernel/out \
                KCFLAGS+=-O2 \
-               KCFLAGS+=-Wno-error
+               KCFLAGS+=-Wno-error \
+               Image
 
           # [ -f "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10/dist/Image" ] || { exit 1; }
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
