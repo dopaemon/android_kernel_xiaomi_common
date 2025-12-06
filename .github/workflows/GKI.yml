@@ -279,7 +279,15 @@ jobs:
           echo "CCACHE_COMPILERCHECK='none'" >> $GITHUB_ENV
           echo "CCACHE_NOHASHDIR='true'" >> $GITHUB_ENV
           echo "CCACHE_HARDLINK='true'" >> $GITHUB_ENV
-          echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros" >> "$GITHUB_WORKSPACE/ccache/ccache.conf"
+
+          CCACHE_CONF="$GITHUB_WORKSPACE/ccache/ccache.conf"
+          SLOP_VALUE="sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros"
+          if ! grep -Fxq "$SLOP_VALUE" "$CCACHE_CONF"; then
+              echo "[CCACHE] Added sloppiness config"
+              echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros" >> "$GITHUB_WORKSPACE/ccache/ccache.conf"
+          else
+              echo "[CCACHE] sloppiness already exists, skip"
+          fi
 
       - name: CCACHE Infomation
         run: |
@@ -305,12 +313,11 @@ jobs:
           export CCACHE_COMPILERCHECK="none"
           export CCACHE_NOHASHDIR="true"
           export CCACHE_HARDLINK="true"
-          export CCACHE_EXEC=$(which ccache)
           export CC="ccache clang"
           export HOSTCC="ccache clang"
           export HOSTCXX="ccache clang++"
           export CXX="ccache clang++"
-          export USE_CCACHE=1
+          export KERNEL_USE_CCACHE=1
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
@@ -359,12 +366,11 @@ jobs:
           export CCACHE_COMPILERCHECK="none"
           export CCACHE_NOHASHDIR="true"
           export CCACHE_HARDLINK="true"
-          export CCACHE_EXEC=$(which ccache)
           export CC="ccache clang"
           export HOSTCC="ccache clang"
           export HOSTCXX="ccache clang++"
           export CXX="ccache clang++"
-          export USE_CCACHE=1
+          export KERNEL_USE_CCACHE=1
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
