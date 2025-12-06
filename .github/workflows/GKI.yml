@@ -195,10 +195,10 @@ jobs:
           tar -xf libfakestat.tar.gz
           sudo chmod 7777 ./*.so
           rm libfakestat.tar.gz
-          export SO_DIR=$(pwd)
-          export PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"
-          echo "SO_DIR=$(pwd)" >> $GITHUB_ENV
-          echo 'PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"' >> $GITHUB_ENV
+          # export SO_DIR=$(pwd)
+          # export PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"
+          # echo "SO_DIR=$(pwd)" >> $GITHUB_ENV
+          # echo 'PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"' >> $GITHUB_ENV
           cd $GITHUB_WORKSPACE
           sudo wget -O /usr/bin/repo http://commondatastorage.googleapis.com/git-repo-downloads/repo
           sudo chmod +x /usr/bin/repo
@@ -320,7 +320,7 @@ jobs:
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
 
-          export CCACHE_LOGFILE='${{ github.workspace }}/$DEVICE-KSU-ccache.log'
+          export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-KSU-ccache.log"
           export CCACHE_COMPILERCHECK="none"
           export CCACHE_BASEDIR="${{ github.workspace }}"
           export CCACHE_NOHASHDIR="true"
@@ -331,6 +331,7 @@ jobs:
 
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
+          export PRELOAD_LIBS="$GITHUB_WORKSPACE/library/libfakestat.so $GITHUB_WORKSPACE/library/libfaketimeMT.so"
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
