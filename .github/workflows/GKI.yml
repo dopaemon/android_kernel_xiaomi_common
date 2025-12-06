@@ -397,7 +397,7 @@ jobs:
           make -j$(nproc --all) \
                LLVM=1 \
                ARCH=arm64 \
-               CROSS_COMPILE="ccache aarch64-linux-gnu-" \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
                CC="ccache clang" \
                O=$GITHUB_WORKSPACE/android-kernel/out \
                LLVM_IAS=1 \
@@ -406,7 +406,7 @@ jobs:
           make -j$(nproc --all) \
                LLVM=1 \
                ARCH=arm64 \
-               CROSS_COMPILE="ccache aarch64-linux-gnu-" \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
                CC="$(pwd)/cc-wrapper" \
                LD="$(pwd)/ld-wrapper" \
                O=$GITHUB_WORKSPACE/android-kernel/out \
