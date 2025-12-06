@@ -230,7 +230,6 @@ jobs:
           unzip -q build-tools.zip
           rm -rf build-tools.zip
 
-
       - name: Cache Kernel
         id: cache-kernel
         uses: actions/cache@v4
@@ -273,10 +272,14 @@ jobs:
               # https://gitlab.com/clangsantoni/zyc_clang.git \
               # $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
           mkdir -p $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
-          cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/
-          aria2c -s16 -x16 -k1M https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
-          tar -xvf Clang-22.0.0git-20250928.tar.gz
-          rm -rf Clang-22.0.0git-20250928.tar.gz
+          # cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/
+          # aria2c -s16 -x16 -k1M https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
+          # tar -xvf Clang-22.0.0git-20250928.tar.gz
+          # rm -rf Clang-22.0.0git-20250928.tar.gz
+          cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/
+          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang20-r547379/clang-r547379.zip -o clang.zip &&
+          unzip -q clang.zip -d clang-r416183b
+          rm -rf clang.zip
 
       - name: Setup Enviroment
         run: |
