@@ -380,7 +380,7 @@ jobs:
           chmod +x cc-wrapper ld-wrapper
           LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
 
-          export LLVM=1
+          rm ./android/abi_gki_protected_exports_* || true
 
           if [ "$DEVICE" != "gki" ]; then
              cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
@@ -488,7 +488,7 @@ jobs:
           chmod +x cc-wrapper ld-wrapper
           LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
 
-          export LLVM=1
+          rm ./android/abi_gki_protected_exports_* || true
 
           if [ "$DEVICE" != "gki" ]; then
              cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
