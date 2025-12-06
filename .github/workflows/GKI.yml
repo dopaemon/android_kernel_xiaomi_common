@@ -193,16 +193,6 @@ jobs:
             python-is-python3 bc libssl-dev libelf-dev \
             bc aria2 zip unzip ccache binutils-aarch64-linux-gnu \
             tar which wget zip unzip
-          cd $GITHUB_WORKSPACE && mkdir -p library && cd library/
-          wget https://github.com/cctv18/libfakestat/releases/latest/download/libfakestat.tar.gz
-          wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfaketimeMT.so
-          tar -xf libfakestat.tar.gz
-          sudo chmod 7777 ./*.so
-          rm libfakestat.tar.gz
-          # export SO_DIR=$(pwd)
-          # export PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"
-          # echo "SO_DIR=$(pwd)" >> $GITHUB_ENV
-          # echo 'PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"' >> $GITHUB_ENV
           cd $GITHUB_WORKSPACE
           sudo wget -O /usr/bin/repo http://commondatastorage.googleapis.com/git-repo-downloads/repo
           sudo chmod +x /usr/bin/repo
@@ -225,10 +215,10 @@ jobs:
           fi
           rm -rf ./AnyKernel3/.git
           rm -rf ${{ github.workspace }}/android-kernel/prebuilts/build-tools
+          rm -rf ${{ github.workspace }}/android-kernel/prebuilts/kernel-build-tools
           cd ${{ github.workspace }}/android-kernel/prebuilts
-          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang20-r547379/build-tools.zip -o build-tools.zip
-          unzip -q build-tools.zip
-          rm -rf build-tools.zip
+          git clone -b build-tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/android-kernel/prebuilts/build-tools
+          git clone -b build-tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/android-kernel/prebuilts/kernel-build-tools
 
       - name: Cache Kernel
         id: cache-kernel
@@ -355,7 +345,7 @@ jobs:
 
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
-          export PRELOAD_LIBS="$GITHUB_WORKSPACE/library/libfakestat.so $GITHUB_WORKSPACE/library/libfaketimeMT.so"
+          export PRELOAD_LIBS="$GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/lib64/libfakestat.so $GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/lib64/libfaketimeMT.so"
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
