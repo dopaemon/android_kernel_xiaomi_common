@@ -3251,12 +3251,11 @@ static ssize_t get_learn_power_dev_b_show(struct class *c,
 }
 static CLASS_ATTR_RO(get_learn_power_dev_b);
 
-#ifndef CONFIG_MI_CHARGER_M81
-static ssize_t batt_sn_show(struct class *c,
-					struct class_attribute *attr, char *buf)
+static ssize_t batt_sn_show(struct class *c, struct class_attribute *attr,
+			    char *buf)
 {
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
+	struct battery_chg_dev *bcdev =
+		container_of(c, struct battery_chg_dev, battery_class);
 	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
 	struct chg_debug_msg req_msg = { { 0 } };
 	int rc;
@@ -3275,11 +3274,11 @@ static ssize_t batt_sn_show(struct class *c,
 }
 static CLASS_ATTR_RO(batt_sn);
 
-static ssize_t max_life_vol_show(struct class *c,
-					struct class_attribute *attr, char *buf)
+static ssize_t max_life_vol_show(struct class *c, struct class_attribute *attr,
+				 char *buf)
 {
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
+	struct battery_chg_dev *bcdev =
+		container_of(c, struct battery_chg_dev, battery_class);
 	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
 	int rc;
 
@@ -3287,15 +3286,16 @@ static ssize_t max_life_vol_show(struct class *c,
 	if (rc < 0)
 		return rc;
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[XM_PROP_GET_MAX_LIFE_VOL]);
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 pst->prop[XM_PROP_GET_MAX_LIFE_VOL]);
 }
 static CLASS_ATTR_RO(max_life_vol);
 
-static ssize_t max_life_temp_show(struct class *c,
-					struct class_attribute *attr, char *buf)
+static ssize_t max_life_temp_show(struct class *c, struct class_attribute *attr,
+				  char *buf)
 {
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
+	struct battery_chg_dev *bcdev =
+		container_of(c, struct battery_chg_dev, battery_class);
 	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
 	int rc;
 
@@ -3303,15 +3303,16 @@ static ssize_t max_life_temp_show(struct class *c,
 	if (rc < 0)
 		return rc;
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[XM_PROP_GET_MAX_LIFE_TEMP]);
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 pst->prop[XM_PROP_GET_MAX_LIFE_TEMP]);
 }
 static CLASS_ATTR_RO(max_life_temp);
 
 static ssize_t over_vol_duration_show(struct class *c,
-					struct class_attribute *attr, char *buf)
+				      struct class_attribute *attr, char *buf)
 {
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
+	struct battery_chg_dev *bcdev =
+		container_of(c, struct battery_chg_dev, battery_class);
 	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
 	int rc;
 
@@ -3319,10 +3320,10 @@ static ssize_t over_vol_duration_show(struct class *c,
 	if (rc < 0)
 		return rc;
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[XM_PROP_GET_OVER_VOL_DURATION]);
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 pst->prop[XM_PROP_GET_OVER_VOL_DURATION]);
 }
 static CLASS_ATTR_RO(over_vol_duration);
-#endif /* !CONFIG_MI_CHARGER_M81 */
 
 static ssize_t get_learn_time_dev_show(struct class *c,
 					struct class_attribute *attr, char *buf)
@@ -5087,6 +5088,10 @@ static struct attribute *xiaomi_battery_class_attrs[] = {
 	&class_attr_set_learn_power_b.attr,
 	&class_attr_get_learn_power_b.attr,
 	&class_attr_get_learn_power_dev_b.attr,
+	&class_attr_batt_sn.attr,
+	&class_attr_max_life_vol.attr,
+	&class_attr_max_life_temp.attr,
+	&class_attr_over_vol_duration.attr,
 #if defined(CONFIG_MI_DTPT) && defined(CONFIG_DUAL_FUEL_GAUGE)
 	&class_attr_fg2_over_peak_flag.attr,
 	&class_attr_fg2_current_deviation.attr,
