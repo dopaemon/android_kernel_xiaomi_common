@@ -331,12 +331,12 @@ jobs:
       - name: Setup Docker First Time
         if: steps.cache-sccache-redis.outputs.cache-hit != 'true'
         run: |
-          sudo docker run -d -p 6379:6379 redis
+          sudo docker run --name=redis -d -p 6379:6379 redis
 
       - name: Setup Docker
         if: steps.cache-sccache-redis.outputs.cache-hit == 'true'
         run: |
-          sudo docker run -d -p 6379:6379 -v /data/sccache.rdb:/data/dump.rdb redis
+          sudo docker run --name=redis -d -p 6379:6379 -v /data/sccache.rdb:/data/dump.rdb redis
 
       - name: Complete Setup SCCACHE
         run: |
