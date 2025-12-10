@@ -606,25 +606,24 @@ jobs:
 
           make -j$(nproc --all) \
                LLVM=1 \
-               LLVM_IAS=1 \
                ARCH=arm64 \
                CROSS_COMPILE="aarch64-linux-gnu-" \
                CC="sccache clang" \
                O=$GITHUB_WORKSPACE/android-kernel/out \
-               LD="ld.lld" \
-               HOSTLD=ld.lld \
+               LLVM_IAS=1 \
+               DTC_EXT=dtc \
                gki_defconfig
 
           time make -j$(nproc --all) \
                LLVM=1 \
-               LLVM_IAS=1 \
                ARCH=arm64 \
                CROSS_COMPILE="aarch64-linux-gnu-" \
                CC="$(pwd)/cc-wrapper" \
                LD="$(pwd)/ld-wrapper" \
                O=$GITHUB_WORKSPACE/android-kernel/out \
-               LD="ld.lld" \
-               HOSTLD=ld.lld \
+               LLVM_IAS=1 \
+               DTC_EXT=dtc \
+               DTC_FLAGS="-Wno-all" \
                Image
 
       - name: Upload CCACHE Logs to artifact
