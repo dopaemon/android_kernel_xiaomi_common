@@ -432,6 +432,10 @@ HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
+ifeq ($(KERNEL_USE_SCCACHE),1)
+KERNEL_USE_CCACHE := 0
+endif
+
 ifeq ($(KERNEL_USE_CCACHE),1)
 $(info *** CCACHE ENABLED: Using ccache for kernel build ***)
 CCACHE := $(shell which ccache)
@@ -442,15 +446,7 @@ $(info *** SCCACHE ENABLED: Using sccache for kernel build ***)
 SCCACHE := $(shell which sccache)
 endif
 
-ifeq ($(KERNEL_USE_CCACHE),1)
-ifneq ($(LLVM),)
-HOSTCC	= $(CCACHE) clang
-HOSTCXX	= $(CCACHE) clang++
-else
-HOSTCC	= $(CCACHE) gcc
-HOSTCXX	= $(CCACHE) g++
-endif
-else ifeq ($(KERNEL_USE_SCCACHE),1)
+ifeq ($(KERNEL_USE_SCCACHE),1)
 ifneq ($(LLVM),)
 HOSTCC  = $(SCCACHE) clang
 HOSTCXX = $(SCCACHE) clang++
@@ -458,6 +454,16 @@ else
 HOSTCC  = $(SCCACHE) gcc
 HOSTCXX = $(SCCACHE) g++
 endif
+
+else ifeq ($(KERNEL_USE_CCACHE),1)
+ifneq ($(LLVM),)
+HOSTCC  = $(CCACHE) clang
+HOSTCXX = $(CCACHE) clang++
+else
+HOSTCC  = $(CCACHE) gcc
+HOSTCXX = $(CCACHE) g++
+endif
+
 else
 ifneq ($(LLVM),)
 HOSTCC  = clang
@@ -480,49 +486,29 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
-ifeq ($(KERNEL_USE_CCACHE),1)
-ifneq ($(LLVM),)
-CC		= $(CCACHE) clang
-LD		= ld.lld
-AR		= llvm-ar
-NM		= llvm-nm
-OBJCOPY		= llvm-objcopy
-OBJDUMP		= llvm-objdump
-READELF		= llvm-readelf
-STRIP		= llvm-strip
-else
-CC		= $(CCACHE) $(CROSS_COMPILE)gcc
-LD		= $(CROSS_COMPILE)ld
-AR		= $(CROSS_COMPILE)ar
-NM		= $(CROSS_COMPILE)nm
-OBJCOPY		= $(CROSS_COMPILE)objcopy
-OBJDUMP		= $(CROSS_COMPILE)objdump
-READELF		= $(CROSS_COMPILE)readelf
-STRIP		= $(CROSS_COMPILE)strip
-endif
-else ifeq ($(KERNEL_USE_SCCACHE),1)
+ifeq ($(KERNEL_USE_SCCACHE),1)
 ifneq ($(LLVM),)
 CC              = $(SCCACHE) clang
-LD              = ld.lld
-AR              = llvm-ar
-NM              = llvm-nm
-OBJCOPY         = llvm-objcopy
-OBJDUMP         = llvm-objdump
-READELF         = llvm-readelf
-STRIP           = llvm-strip
 else
 CC              = $(SCCACHE) $(CROSS_COMPILE)gcc
-LD              = $(CROSS_COMPILE)ld
-AR              = $(CROSS_COMPILE)ar
-NM              = $(CROSS_COMPILE)nm
-OBJCOPY         = $(CROSS_COMPILE)objcopy
-OBJDUMP         = $(CROSS_COMPILE)objdump
-READELF         = $(CROSS_COMPILE)readelf
-STRIP           = $(CROSS_COMPILE)strip
 endif
+
+else ifeq ($(KERNEL_USE_CCACHE),1)
+ifneq ($(LLVM),)
+CC              = $(CCACHE) clang
+else
+CC              = $(CCACHE) $(CROSS_COMPILE)gcc
+endif
+
 else
 ifneq ($(LLVM),)
 CC              = clang
+else
+CC              = $(CROSS_COMPILE)gcc
+endif
+endif
+
+ifneq ($(LLVM),)
 LD              = ld.lld
 AR              = llvm-ar
 NM              = llvm-nm
@@ -531,7 +517,6 @@ OBJDUMP         = llvm-objdump
 READELF         = llvm-readelf
 STRIP           = llvm-strip
 else
-CC              = $(CROSS_COMPILE)gcc
 LD              = $(CROSS_COMPILE)ld
 AR              = $(CROSS_COMPILE)ar
 NM              = $(CROSS_COMPILE)nm
@@ -540,7 +525,7 @@ OBJDUMP         = $(CROSS_COMPILE)objdump
 READELF         = $(CROSS_COMPILE)readelf
 STRIP           = $(CROSS_COMPILE)strip
 endif
-endif
+
 PAHOLE		= pahole
 RESOLVE_BTFIDS	= $(objtree)/tools/bpf/resolve_btfids/resolve_btfids
 LEX		= flex
