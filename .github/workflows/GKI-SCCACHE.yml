@@ -194,6 +194,14 @@ jobs:
           echo "===== Initial Total Disk Space in GB ====="
           df -BG
 
+      - name: Clean-up
+        uses: rokibhasansagar/slimhub_actions@main
+
+      - name: Check Disk Space After Cleanup
+        run: |
+          echo "===== Total Disk Space After Cleanup in GB ====="
+          df -BG
+
       - name: Build Environment
         run: |
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
@@ -341,7 +349,7 @@ jobs:
       - name: Complete Setup SCCACHE
         run: |
           export SCCACHE_REDIS="redis://127.0.0.1:6379"
-          export SCCACHE_CACHE_SIZE="30G"
+          export SCCACHE_CACHE_SIZE="5G"
           export SCCACHE_IDLE_TIMEOUT=0
           sccache --start-server
           sccache --show-stats
