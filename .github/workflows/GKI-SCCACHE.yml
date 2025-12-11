@@ -330,15 +330,25 @@ jobs:
           echo "SCCACHE_DIR=$SCCACHE_DIR" >> $GITHUB_ENV
           echo "SCCACHE_BASEDIR=${GITHUB_WORKSPACE}" >> $GITHUB_ENV
 
-      - name: Get SCCACHE Redis
+      - name: Get Cache SCCACHE
+        if: github.event.inputs.USING_CCACHE == 'Enable'
+        id: cache-sccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: sccache-${{ github.event.inputs.KERNEL_BRANCH }}
+          restore-keys: |
+            sccache-
+
+      - name: Get Redis
         if: github.event.inputs.USING_CCACHE == 'Enable'
         id: cache-redis
         uses: actions/cache@v4
         with:
           path: /data
-          key: sccache-redis-${{ matrix.device }}-${{ github.event.inputs.KERNEL_BRANCH }}
+          key: redis-${{ github.event.inputs.KERNEL_BRANCH }}-
           restore-keys: |
-            sccache-redis-${{ matrix.device }}-
+            redis-${{ github.event.inputs.KERNEL_BRANCH }}-
 
       - name: Setup Docker First Time
         if: steps.cache-redis.outputs.cache-hit != 'true'
@@ -367,7 +377,7 @@ jobs:
           sccache --start-server
           sccache --show-stats
           echo 'SCCACHE_REDIS="redis://127.0.0.1:6379"' >> $GITHUB_ENV
-          echo 'SCCACHE_CACHE_SIZE="30G"' >> $GITHUB_ENV
+          echo 'SCCACHE_CACHE_SIZE="5G"' >> $GITHUB_ENV
           echo 'SCCACHE_IDLE_TIMEOUT=0' >> $GITHUB_ENV
 
       - name: Fakestats - Faketime
