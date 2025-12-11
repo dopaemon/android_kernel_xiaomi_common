@@ -319,7 +319,7 @@ jobs:
         id: cache-redis
         uses: actions/cache@v4
         with:
-          path: /data/
+          path: /data
           key: sccache-redis-${{ matrix.device }}-${{ github.event.inputs.KERNEL_BRANCH }}
           restore-keys: |
             sccache-redis-${{ matrix.device }}-
@@ -452,6 +452,7 @@ jobs:
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
 
           sudo mkdir -p /data/
+          sudo rm -rf /data/*
           sudo docker exec redis redis-cli SAVE
           sudo docker cp redis:/data/dump.rdb /data/sccache.rdb
           sudo chmod 7777 /data/sccache.rdb
@@ -562,6 +563,7 @@ jobs:
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
 
           sudo mkdir -p /data/
+          sudo rm -rf /data/*
           sudo docker exec redis redis-cli SAVE
           sudo docker cp redis:/data/dump.rdb /data/sccache.rdb
           sudo chmod 7777 /data/sccache.rdb
