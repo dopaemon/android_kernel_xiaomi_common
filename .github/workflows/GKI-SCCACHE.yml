@@ -316,16 +316,6 @@ jobs:
           echo "SCCACHE_DIR=$SCCACHE_DIR" >> $GITHUB_ENV
           echo "SCCACHE_BASEDIR=${GITHUB_WORKSPACE}" >> $GITHUB_ENV
 
-      - name: Get Cache SCCACHE
-        if: github.event.inputs.USING_CCACHE == 'Enable'
-        id: cache-sccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: sccache-${{ matrix.device }}-${{ github.event.inputs.KERNEL_BRANCH }}
-          restore-keys: |
-            sccache-${{ matrix.device }}-
-
       - name: Get SCCACHE Redis
         if: github.event.inputs.USING_CCACHE == 'Enable'
         id: cache-sccache-redis
@@ -339,12 +329,21 @@ jobs:
       - name: Setup Docker First Time
         if: steps.cache-sccache-redis.outputs.cache-hit != 'true'
         run: |
-          sudo docker run --name=redis -d -p 6379:6379 redis
+          sudo docker run \
+                      --name=redis \
+                      -d \
+                      -p 6379:6379 \
+                      redis
 
-      - name: Setup Docker
+      - name: Setup Docker When Cache
         if: steps.cache-sccache-redis.outputs.cache-hit == 'true'
         run: |
-          sudo docker run --name=redis -d -p 6379:6379 -v /data/sccache.rdb:/data/dump.rdb redis
+          sudo docker run \
+                      --name=redis \
+                      -d \
+                      -p 6379:6379 \
+                      -v /data/sccache.rdb:/data/dump.rdb \
+                      redis
 
       - name: Complete Setup SCCACHE
         run: |
