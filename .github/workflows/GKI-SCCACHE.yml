@@ -240,8 +240,6 @@ jobs:
           cd ${{ github.workspace }}/android-kernel/prebuilts
           git clone -b build-tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/android-kernel/prebuilts/build-tools
           git clone -b build-tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/android-kernel/prebuilts/kernel-build-tools
-          sudo mkdir -p /data
-          sudo chmod 7777 /data
 
       - name: Get SM8450 Trees
         run: |
@@ -318,7 +316,7 @@ jobs:
 
       - name: Get SCCACHE Redis
         if: github.event.inputs.USING_CCACHE == 'Enable'
-        id: cache-sccache-redis
+        id: cache-redis
         uses: actions/cache@v4
         with:
           path: /data/
@@ -327,7 +325,7 @@ jobs:
             sccache-redis-${{ matrix.device }}-
 
       - name: Setup Docker First Time
-        if: steps.cache-sccache-redis.outputs.cache-hit != 'true'
+        if: steps.cache-redis.outputs.cache-hit != 'true'
         run: |
           sudo docker run \
                       --name=redis \
@@ -336,7 +334,7 @@ jobs:
                       redis
 
       - name: Setup Docker When Cache
-        if: steps.cache-sccache-redis.outputs.cache-hit == 'true'
+        if: steps.cache-redis.outputs.cache-hit == 'true'
         run: |
           sudo docker run \
                       --name=redis \
@@ -453,8 +451,11 @@ jobs:
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
 
+          sudo mkdir -p /data/
           sudo docker exec redis redis-cli SAVE
           sudo docker cp redis:/data/dump.rdb /data/sccache.rdb
+          sudo chmod 7777 /data/sccache.rdb
+          sudo chmod 7777 /data
 
           cd $GITHUB_WORKSPACE/android-kernel
           cd ./common/
@@ -560,8 +561,11 @@ jobs:
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
 
+          sudo mkdir -p /data/
           sudo docker exec redis redis-cli SAVE
           sudo docker cp redis:/data/dump.rdb /data/sccache.rdb
+          sudo chmod 7777 /data/sccache.rdb
+          sudo chmod 7777 /data
 
           if [ "$TARGET" != "Both" ]; then
              ZIP_NAME="DoraCore-${DEVICE}-NonKSU-5.10-A12-${BUILD_DATE}.zip"
