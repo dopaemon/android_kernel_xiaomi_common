@@ -335,7 +335,7 @@ jobs:
         id: cache-sccache
         uses: actions/cache@v4
         with:
-          path: ${{ env.CCACHE_DIR }}
+          path: ${{ github.workspace }}/sccache
           key: sccache-${{ github.event.inputs.KERNEL_BRANCH }}
           restore-keys: |
             sccache-
