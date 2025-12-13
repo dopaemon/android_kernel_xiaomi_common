@@ -693,21 +693,21 @@ int utf8byte(struct utf8cursor *u8c)
 		if (utf8agetab[LEAF_GEN(leaf)] > u8c->data->maxage) {
 			ccc = STOPPER;
 		} else if (ccc == DECOMPOSE) {
-			u8c->len -= utf8clen(u8c->s);
-			u8c->p = u8c->s + utf8clen(u8c->s);
-			u8c->s = LEAF_STR(leaf);
-			/* Empty decomposition implies CCC 0. */
-			if (*u8c->s == '\0') {
-				if (u8c->ccc == STOPPER)
-					continue;
+			/* Keep empty decomposition visible (STOPPER). */
+			if (*LEAF_STR(leaf) == '\0') {
 				ccc = STOPPER;
-				goto ccc_mismatch;
+			} else {
+				/* Move only for non-empty decomposition. */
+				u8c->len -= utf8clen(u8c->s);
+				u8c->p = u8c->s + utf8clen(u8c->s);
+				u8c->s = LEAF_STR(leaf);
+				
+				/* Look up the first character in the decomposition. */
+				leaf = utf8lookup(u8c->data, u8c->hangul, u8c->s);
+				if (!leaf)
+					return -1;
+				ccc = LEAF_CCC(leaf);
 			}
-
-			leaf = utf8lookup(u8c->data, u8c->hangul, u8c->s);
-			if (!leaf)
-				return -1;
-			ccc = LEAF_CCC(leaf);
 		}
 
 		/*
