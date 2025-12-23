@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -772,11 +772,17 @@ static irqreturn_t geni_i2c_irq(int irq, void *dev)
 	geni_i2c_irq_handle_watermark(gi2c, m_stat);
 
 irqret:
-	if (!dma && is_clear_watermark)
+	if (!dma && is_clear_watermark) {
 		writel_relaxed(0, (gi2c->base + SE_GENI_TX_WATERMARK_REG));
+		/* Ensure TX watermark write completes before continuing */
+		wmb();
+	}
 
-	if (m_stat)
+	if (m_stat) {
 		writel_relaxed(m_stat, gi2c->base + SE_GENI_M_IRQ_CLEAR);
+		/* Ensure IRQ clear write completes before continuing */
+		wmb();
+	}
 
 	if (dma) {
 		handle_dma_xfer(dm_tx_st, dm_rx_st, gi2c);
