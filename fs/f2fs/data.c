@@ -1453,8 +1453,10 @@ int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *from)
 map_blocks:
 	err = f2fs_map_blocks(inode, &map, 1, flag);
 	if (map.m_len > 0 && err == -ENOSPC) {
-		if (!direct_io)
-			set_inode_flag(inode, FI_NO_PREALLOC);
+		/*
+		 * If we have allocated some blocks, we should not set
+		 * FI_NO_PREALLOC, because it can be allocated again.
+		 */
 		err = 0;
 	}
 	return err;
