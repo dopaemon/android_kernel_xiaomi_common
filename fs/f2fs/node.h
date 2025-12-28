@@ -18,18 +18,18 @@
 /* size of free nid batch when shrinking */
 #define SHRINK_NID_BATCH_SIZE	8
 
-#define DEF_RA_NID_PAGES	0	/* # of nid pages to be readaheaded */
+#define DEF_RA_NID_PAGES	4	/* # of nid pages to be readaheaded */
 
 /* maximum readahead size for node during getting data blocks */
 #define MAX_RA_NODE		128
 
 /* control the memory footprint threshold (10MB per 1GB ram) */
-#define DEF_RAM_THRESHOLD	1
+#define DEF_RAM_THRESHOLD	6
 
 /* control dirty nats ratio threshold (default: 10% over max nid count) */
 #define DEF_DIRTY_NAT_RATIO_THRESHOLD		10
 /* control total # of nats */
-#define DEF_NAT_CACHE_THRESHOLD			100000
+#define DEF_NAT_CACHE_THRESHOLD			1000000
 
 /* vector size for gang look-up from nat cache that consists of radix tree */
 #define NATVEC_SIZE	64

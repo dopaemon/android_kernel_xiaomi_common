@@ -67,7 +67,8 @@ bool f2fs_available_free_memory(struct f2fs_sb_info *sbi, int type)
 	} else if (type == NAT_ENTRIES) {
 		mem_size = (nm_i->nat_cnt[TOTAL_NAT] *
 				sizeof(struct nat_entry)) >> PAGE_SHIFT;
-		res = mem_size < ((avail_ram * nm_i->ram_thresh / 100) >> 2);
+		/* Allow up to 50% of threshold for NAT cache (was 25%) */
+		res = mem_size < ((avail_ram * nm_i->ram_thresh / 100) >> 1);
 		if (excess_cached_nats(sbi))
 			res = false;
 	} else if (type == DIRTY_DENTS) {
@@ -216,7 +217,8 @@ static struct nat_entry *__lookup_nat_cache(struct f2fs_nm_info *nm_i, nid_t n)
 	/* for recent accessed nat entry, move it to tail of lru list */
 	if (ne && !get_nat_flag(ne, IS_DIRTY)) {
 		spin_lock(&nm_i->nat_list_lock);
-		if (!list_empty(&ne->list))
+		/* Optimization: Don't move if already at tail */
+		if (!list_empty(&ne->list) && !list_is_last(&ne->list, &nm_i->nat_entries))
 			list_move_tail(&ne->list, &nm_i->nat_entries);
 		spin_unlock(&nm_i->nat_list_lock);
 	}
