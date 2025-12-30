@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __KGSL_H
 #define __KGSL_H
@@ -270,7 +270,7 @@ struct kgsl_memdesc {
 	uint64_t gpuaddr;
 	phys_addr_t physaddr;
 	uint64_t size;
-	unsigned int priv;
+	atomic_t priv;
 	struct sg_table *sgt;
 	const struct kgsl_memdesc_ops *ops;
 	uint64_t flags;
