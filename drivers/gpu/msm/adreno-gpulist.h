@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define ANY_ID (~0)
@@ -2187,6 +2187,7 @@ static const struct adreno_gen7_core adreno_gpu_core_gen7_6_0 = {
 		.gmem_size = 3 * SZ_1M,
 		.bus_width = 32,
 		.snapshot_size = SZ_4M,
+		.num_ddr_channels = 4,
 	},
 	.gmu_fw_version = GMU_VERSION(4, 1, 9),
 	.sqefw_name = "a740v3_sqe.fw",
