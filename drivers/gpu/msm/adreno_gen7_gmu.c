@@ -86,6 +86,11 @@ static u32 gen7_6_0_rscc_tcsm_drv0_status_reglist[] = {
 	GEN7_6_0_RSCC_TCS9_DRV0_STATUS,
 };
 
+int adreno_gmu_ab_support(struct adreno_device *adreno_dev)
+{
+	return adreno_is_gen7_6_0(adreno_dev);
+}
+
 static ssize_t log_stream_enable_store(struct kobject *kobj,
 	struct kobj_attribute *attr, const char *buf, size_t count)
 {
@@ -1852,7 +1857,8 @@ static int gen7_gmu_first_boot(struct adreno_device *adreno_dev)
 	if (ret)
 		goto err;
 
-	if (gen7_hfi_send_get_value(adreno_dev, HFI_VALUE_GMU_AB_VOTE, 0) == 1 &&
+	if (adreno_gmu_ab_support(adreno_dev) &&
+		gen7_hfi_send_get_value(adreno_dev, HFI_VALUE_GMU_AB_VOTE, 0) == 1 &&
 		!WARN_ONCE(!adreno_dev->gpucore->num_ddr_channels,
 			"Number of DDR channel is not specified in gpu core")) {
 		adreno_dev->gmu_ab = true;

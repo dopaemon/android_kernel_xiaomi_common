@@ -435,7 +435,8 @@ static int gen7_hwsched_gmu_first_boot(struct adreno_device *adreno_dev)
 
 	adreno_hwsched_register_hw_fence(adreno_dev);
 
-	if (gen7_hwsched_hfi_get_value(adreno_dev, HFI_VALUE_GMU_AB_VOTE) == 1 &&
+	if (adreno_gmu_ab_support(adreno_dev) &&
+		gen7_hwsched_hfi_get_value(adreno_dev, HFI_VALUE_GMU_AB_VOTE) == 1 &&
 		!WARN_ONCE(!adreno_dev->gpucore->num_ddr_channels,
 			"Number of DDR channel is not specified in gpu core")) {
 		adreno_dev->gmu_ab = true;

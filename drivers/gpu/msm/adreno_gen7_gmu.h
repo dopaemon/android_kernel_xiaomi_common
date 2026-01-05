@@ -502,4 +502,11 @@ int gen7_gmu_register_gdsc_notifier(struct adreno_device *adreno_dev);
  */
 u32 gen7_bus_ab_quantize(struct adreno_device *adreno_dev, u32 ab);
 
+/**
+ * adreno_gmu_ab_support() - Return true for targets where AB voting
+ * is supported through GMU
+ * @adreno_dev: A pointer to the adreno_device
+ */
+int adreno_gmu_ab_support(struct adreno_device *adreno_dev);
+
 #endif
