@@ -536,6 +536,7 @@
 
 &battery_charger {
 	mi,support-soc-update;
+	qcom,shutdown-voltage = <3350>;
 };
 
 &ufshc_mem {
