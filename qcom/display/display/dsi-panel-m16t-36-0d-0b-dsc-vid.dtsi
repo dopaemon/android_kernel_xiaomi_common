@@ -170,19 +170,21 @@ qcom,mdss-dsi-display-timings {
 				39 00 00 00 00 00 06 F0 55 AA 52 00 00
 			];
 			mi,mdss-dsi-flat-mode-off-command-state = "dsi_hs_mode";
+			mi,mdss-dsi-aod-enter-command = [
+				39 00 00 00 00 00 02 39 00
+			];
+			mi,mdss-dsi-aod-enter-command-state = "dsi_hs_mode";
 			mi,mdss-dsi-aod-exit-command = [
 				05 00 00 00 21 00 01 38
 			];
 			mi,mdss-dsi-aod-exit-command-state = "dsi_hs_mode";
 			mi,mdss-dsi-doze-hbm-command = [
 				15 00 00 00 00 00 02 6D 01
-				05 00 00 00 00 00 01 39
-				39 00 00 00 00 00 03 51 00 f5
+				39 00 00 00 00 00 03 51 00 F5
 			];
 			mi,mdss-dsi-doze-hbm-command-state = "dsi_hs_mode";
 			mi,mdss-dsi-doze-lbm-command = [
 				15 00 00 00 00 00 02 6D 00
-				05 00 00 00 00 00 01 39
 				39 00 00 00 00 00 03 51 00 14
 			];
 			mi,mdss-dsi-doze-lbm-command-state = "dsi_hs_mode";
@@ -199,6 +201,7 @@ qcom,mdss-dsi-display-timings {
 				39 00 00 00 00 00 02 38 00
 			];
 			qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
+			qcom,mdss-dsi-nolp-command-update = <0x51 0 2>;
 			mi,mdss-dsi-fps-120-gamma-command = [
 				39 00 00 10 00 00 02 6C 02
 			];

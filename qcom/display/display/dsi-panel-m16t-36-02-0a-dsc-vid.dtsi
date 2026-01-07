@@ -166,10 +166,11 @@
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-nolp-command = [
-					39 00 00 40 00 00 03 51 00 00
+					39 00 00 40 00 00 07 51 00 00 00 00 00 00
+					39 00 00 00 00 00 02 38 00
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
-				qcom,mdss-dsi-nolp-command-update = <0x51 0 2>;
+				qcom,mdss-dsi-nolp-command-update = <0x51 0 6>;
 
 				/* DSC CONFIG*/
 				qcom,compression-mode = "dsc";
@@ -244,7 +245,6 @@
 
 			mi,mdss-dsi-aod-exit-command = [
 				39 00 00 40 00 00 02 38 00
-				39 00 00 00 00 00 07 51 00 00 00 00 00 00
 			];
 			mi,mdss-dsi-aod-exit-command-state = "dsi_hs_mode";
 
