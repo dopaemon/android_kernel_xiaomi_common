@@ -107,6 +107,15 @@ enum mhi_bw_scale_req_status {
 			       ##__VA_ARGS__); \
 } while (0)
 
+#define MHI_IRQ_ERR(fmt, ...) do {	\
+	struct mhi_private *mhi_priv = \
+		dev_get_drvdata(&mhi_cntrl->mhi_dev->dev); \
+	dev_err(mhi_cntrl->cntrl_dev, "[E][%s] " fmt, __func__, ##__VA_ARGS__); \
+	if (mhi_priv && mhi_priv->log_lvl <= MHI_MSG_LVL_ERROR) \
+		ipc_log_string(mhi_priv->log_buf, "[E][%s] " fmt, __func__, \
+			       ##__VA_ARGS__); \
+} while (0)
+
 #define MHI_CRITICAL(fmt, ...) do { \
 	struct mhi_private *mhi_priv = \
 		dev_get_drvdata(&mhi_cntrl->mhi_dev->dev); \
