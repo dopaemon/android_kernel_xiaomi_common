@@ -12,7 +12,7 @@
 		config {
 			pins = "gpio19";
 			drive-strength = <2>;   /* 2 mA */
-			bias-pull-up;         /* PULL DOWN */
+			bias-pull-up;         /* PULL UP */
 
 		};
 	};

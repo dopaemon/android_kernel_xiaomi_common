@@ -9,7 +9,7 @@
 		config {
 			pins = "gpio122";
 			drive-strength = <2>;   /* 2 mA */
-			bias-pull-up;         /* PULL DOWN */
+			bias-pull-up;         /* PULL UP */
 		};
 	};
 
@@ -22,7 +22,7 @@
 		config {
 			pins = "gpio125";
 			drive-strength = <2>;   /* 2 mA */
-			bias-pull-up;         /* PULL DOWN */
+			bias-pull-up;         /* PULL UP */
 		};
 	};
 };
