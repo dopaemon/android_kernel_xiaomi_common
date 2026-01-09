@@ -70,7 +70,7 @@
 	    	interrupt-parent = <&tlmm>;
 		interrupts = <125 0>;
 	    	pinctrl-names = "default";
-	    	inctrl-0 = <&ln8000_int2_default>;
+	    	pinctrl-0 = <&ln8000_int2_default>;
 		ln8000_charger,bat-ovp-threshold = <4710>;
 		ln8000_charger,bat-ovp-alarm-threshold = <4675>;
 	    	ln8000_charger,bus-ovp-threshold = <12800>;
