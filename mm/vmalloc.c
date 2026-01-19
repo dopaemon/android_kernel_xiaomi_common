@@ -1634,6 +1634,7 @@ retry:
 	addr = __alloc_vmap_area(&free_vmap_area_root, &free_vmap_area_list,
 		size, align, vstart, vend);
 	spin_unlock(&free_vmap_area_lock);
+	cond_resched();
 
 	trace_alloc_vmap_area(addr, size, align, vstart, vend, addr == vend);
 
@@ -3081,7 +3082,6 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 							pages + nr_allocated);
 
 			nr_allocated += nr;
-			cond_resched();
 
 			/*
 			 * If zero or pages were obtained partly,
@@ -3129,7 +3129,6 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 		for (i = 0; i < (1U << order); i++)
 			pages[nr_allocated + i] = page + i;
 
-		cond_resched();
 		nr_allocated += 1U << order;
 	}
 
