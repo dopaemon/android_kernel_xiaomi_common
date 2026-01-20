@@ -2206,6 +2206,7 @@ static const struct adreno_gen7_core adreno_gpu_core_gen7_6_0 = {
 	.gen7_snapshot_block_list = &gen7_6_0_snapshot_block_list,
 	.qos_value = gen7_6_0_gbif_client_qos_values,
 	.ctxt_record_size = (4192 * SZ_1K),
+	.acv_perfmode_vote = BIT(1),
 };
 
 static const struct adreno_gpu_core *adreno_gpulist[] = {

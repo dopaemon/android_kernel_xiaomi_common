@@ -3,6 +3,7 @@
  * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
+#include <dt-bindings/interconnect/qcom,icc.h>
 #include <linux/component.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
@@ -3335,7 +3336,15 @@ static int adreno_interconnect_bus_set(struct adreno_device *adreno_dev,
 static int adreno_gpu_bus_set(struct kgsl_device *device, int level, u32 ab)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	const struct adreno_power_ops *ops = ADRENO_POWER_OPS(adreno_dev);
+
+	if (!adreno_dev->gmu_ab) {
+		if (level == pwr->pwrlevels[0].bus_max)
+			icc_set_tag(pwr->icc_path, QCOM_ICC_TAG_ALWAYS | QCOM_ICC_TAG_PERF_MODE);
+		else
+			icc_set_tag(pwr->icc_path, QCOM_ICC_TAG_ALWAYS);
+	}
 
 	if (ops->gpu_bus_set)
 		return ops->gpu_bus_set(adreno_dev, level, ab);
