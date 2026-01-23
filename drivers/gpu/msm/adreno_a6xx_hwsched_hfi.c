@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/iommu.h>
@@ -1396,7 +1396,7 @@ int a6xx_hwsched_counter_inline_enable(struct adreno_device *adreno_dev,
 	struct a6xx_hwsched_hfi *hfi = to_a6xx_hwsched_hfi(adreno_dev);
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_perfcount_register *reg = &group->regs[counter];
-	u32 val, *cmds, count = 0;
+	u32 *cmds, count = 0;
 	int ret;
 
 	ret = register_global_ctxt(adreno_dev);
@@ -1417,13 +1417,17 @@ int a6xx_hwsched_counter_inline_enable(struct adreno_device *adreno_dev,
 	cmds[count++] = cp_type4_packet(reg->select, 1);
 	cmds[count++] = countable;
 
-	ret = submit_global_ctxt_cmd(adreno_dev, hfi->perfctr_scratch->gpuaddr, count << 2);
-	if (ret)
-		goto err;
-
 	/* Wait till the register is programmed with the countable */
-	ret = kgsl_regmap_read_poll_timeout(&device->regmap, reg->select, val,
-				val == countable, 100, ADRENO_IDLE_TIMEOUT);
+	cmds[count++] = cp_type7_packet(CP_WAIT_REG_MEM, 6);
+	cmds[count++] = 3;
+	cmds[count++] = reg->select;
+	cmds[count++] = 0;
+	cmds[count++] = countable;
+	cmds[count++] = GENMASK(7, 0);
+	cmds[count++] = 0;
+
+	ret = submit_global_ctxt_cmd(adreno_dev, hfi->perfctr_scratch->gpuaddr, count << 2);
+
 	if (!ret) {
 		reg->value = 0;
 		return ret;
@@ -1455,17 +1459,24 @@ static int hfi_f2h_main(void *arg)
 {
 	struct adreno_device *adreno_dev = arg;
 	struct a6xx_hwsched_hfi *hfi = to_a6xx_hwsched_hfi(adreno_dev);
+	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
 
 	while (!kthread_should_stop()) {
 		wait_event_interruptible(hfi->f2h_wq, kthread_should_stop() ||
-			(!(is_queue_empty(adreno_dev, HFI_MSG_ID) &&
-			is_queue_empty(adreno_dev, HFI_DBG_ID)) &&
-			(hfi->irq_mask & HFI_IRQ_MSGQ_MASK)));
+			/* If msgq irq is enabled and msgq has messages to process */
+			(((hfi->irq_mask & HFI_IRQ_MSGQ_MASK) &&
+			!is_queue_empty(adreno_dev, HFI_MSG_ID)) ||
+			/* Trace buffer has messages to process */
+			!gmu_core_is_trace_empty(gmu->trace.md->hostptr) ||
+			/* Dbgq has messages to process */
+			!is_queue_empty(adreno_dev, HFI_DBG_ID)));
 
 		if (kthread_should_stop())
 			break;
 
 		a6xx_hwsched_process_msgq(adreno_dev);
+		gmu_core_process_trace_data(KGSL_DEVICE(adreno_dev),
+					&gmu->pdev->dev, &gmu->trace);
 		a6xx_hwsched_process_dbgq(adreno_dev, true);
 	}
 

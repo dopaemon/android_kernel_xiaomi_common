@@ -133,7 +133,7 @@
 	typeof(base) __base = (base); \
 	typeof(pmds) __pmds = (pmds); \
 	(__iova < __base) ? ERR_PTR(-EINVAL) : \
-	__pmds + ((__iova - __base) >> AV8L_FAST_PAGE_SHIFT); \
+	__pmds + ((__iova - ALIGN_DOWN(__base, SZ_2M)) >> AV8L_FAST_PAGE_SHIFT); \
 })
 
 static inline dma_addr_t av8l_dma_addr(void *addr)
@@ -154,7 +154,7 @@ static void __av8l_clean_range(struct device *dev, void *start, void *end)
 		while (start < end) {
 			page_end = round_down((unsigned long)start + PAGE_SIZE,
 					      PAGE_SIZE);
-			region_end = min_t(void *, end, page_end);
+			region_end = min_t(void *, end, (void *)page_end);
 			size = region_end - start;
 			dma_sync_single_for_device(dev, av8l_dma_addr(start),
 						   size, DMA_TO_DEVICE);
