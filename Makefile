@@ -2126,3 +2126,6 @@ FORCE:
 # Declare the contents of the PHONY variable as phony.  We keep that
 # information in a variable so we can use it in if_changed and friends.
 .PHONY: $(PHONY)
+
+KBUILD_CFLAGS += -march=armv9-a+crypto+nosve+dotprod+fp16+bf16+i8mm+lse+rcpc+ssbs
+KBUILD_AFLAGS += -march=armv9-a+crypto+nosve+dotprod+fp16+bf16+i8mm+lse+rcpc+ssbs
