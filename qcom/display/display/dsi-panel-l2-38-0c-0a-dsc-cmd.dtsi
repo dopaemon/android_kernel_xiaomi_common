@@ -281,6 +281,7 @@
 					39 00 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				mi,mdss-dsi-doze-hbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -309,7 +310,7 @@
 					39 00 00 60 00 00 02 BB 31
 					39 00 00 60 00 00 02 F7 0F
 					39 00 00 60 00 00 02 53 24
-					39 00 00 20 00 00 03 51 07 FE
+					39 00 00 00 00 00 03 51 07 FE
 				];
 				mi,mdss-dsi-doze-lbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -710,6 +711,7 @@
 					39 00 00 00 22 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				mi,mdss-dsi-doze-hbm-command = [
 					39 00 00 20 00 00 03 51 00 E5
@@ -718,7 +720,7 @@
 					39 00 00 60 00 00 02 BB 31
 					39 00 00 60 00 00 02 F7 0F
 					39 00 00 60 00 00 02 53 24
-					39 00 00 20 00 00 03 51 07 FE
+					39 00 00 00 00 00 03 51 07 FE
 				];
 				mi,mdss-dsi-doze-lbm-command = [
 					39 00 00 20 00 00 03 51 00 10
@@ -1070,6 +1072,7 @@
 					39 00 00 20 00 00 03 F0 A5 A5	 /* 2 sync */
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				mi,mdss-dsi-doze-hbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -1098,7 +1101,7 @@
 					39 00 00 60 00 00 02 BB 31
 					39 00 00 60 00 00 02 F7 0F
 					39 00 00 60 00 00 02 53 24
-					39 00 00 20 00 00 03 51 07 FE
+					39 00 00 00 00 00 03 51 07 FE
 				];
 				mi,mdss-dsi-doze-lbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -1486,6 +1489,7 @@
 					39 00 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				mi,mdss-dsi-doze-hbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -1514,7 +1518,7 @@
 					39 00 00 60 00 00 02 BB 31
 					39 00 00 60 00 00 02 F7 0F
 					39 00 00 60 00 00 02 53 24
-					39 00 00 20 00 00 03 51 07 FE
+					39 00 00 00 00 00 03 51 07 FE
 				];
 				mi,mdss-dsi-doze-lbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -1939,6 +1943,7 @@
 					39 00 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				mi,mdss-dsi-doze-hbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -1967,7 +1972,7 @@
 					39 00 00 60 00 00 02 BB 31
 					39 00 00 60 00 00 02 F7 0F
 					39 00 00 60 00 00 02 53 24
-					39 00 00 20 00 00 03 51 07 FE
+					39 00 00 00 00 00 03 51 07 FE
 				];
 				mi,mdss-dsi-doze-lbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -2391,6 +2396,7 @@
 					39 00 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				mi,mdss-dsi-doze-hbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -2419,7 +2425,7 @@
 					39 00 00 60 00 00 02 BB 31
 					39 00 00 60 00 00 02 F7 0F
 					39 00 00 60 00 00 02 53 24
-					39 00 00 20 00 00 03 51 07 FE
+					39 00 00 00 00 00 03 51 07 FE
 				];
 				mi,mdss-dsi-doze-lbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -2875,6 +2881,7 @@
 					39 00 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				mi,mdss-dsi-doze-hbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -2903,7 +2910,7 @@
 					39 00 00 60 00 00 02 BB 31
 					39 00 00 60 00 00 02 F7 0F
 					39 00 00 60 00 00 02 53 24
-					39 00 00 20 00 00 03 51 07 FE
+					39 00 00 00 00 00 03 51 07 FE
 				];
 				mi,mdss-dsi-doze-lbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -3335,6 +3342,7 @@
 					39 00 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-nolp-command-update = <0x51 2 2>;
 
 				mi,mdss-dsi-doze-hbm-command = [
 					/* 120Hz Setting(force increasing off) */
@@ -3363,7 +3371,7 @@
 					39 00 00 60 00 00 02 BB 31
 					39 00 00 60 00 00 02 F7 0F
 					39 00 00 60 00 00 02 53 24
-					39 00 00 20 00 00 03 51 07 FE
+					39 00 00 00 00 00 03 51 07 FE
 				];
 				mi,mdss-dsi-doze-lbm-command = [
 					/* 120Hz Setting(force increasing off) */
