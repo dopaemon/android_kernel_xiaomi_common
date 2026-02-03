@@ -324,10 +324,6 @@
 	qcom,symmetry-en;
 };
 
-&cam_csiphy2{
-	compatible = "qcom,csiphy-v2.1.3-xiaomi-l2s", "qcom,csiphy";
-};
-
 &soc {
 	led_flash_wide: qcom,camera-flash@1 {
 		cell-index = <1>;
