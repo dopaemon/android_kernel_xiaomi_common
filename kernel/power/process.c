@@ -38,6 +38,7 @@ static int try_to_freeze_tasks(bool user_only)
 	ktime_t start, end, elapsed;
 	unsigned int elapsed_msecs;
 	bool wakeup = false;
+	bool todo_logging_on = false;
 	int sleep_usecs = USEC_PER_MSEC / 2; // Start with 0.5ms
 
 	pr_info("Freezing %s\n", what);
