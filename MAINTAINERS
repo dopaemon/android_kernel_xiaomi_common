@@ -19417,6 +19417,13 @@ S:	Maintained
 F:	include/linux/zbud.h
 F:	mm/zbud.c
 
+ZBLOCK COMPRESSED SLAB MEMORY ALLOCATOR
+M:     Vitaly Wool <vitaly.wool@konsulko.se>
+L:     linux-mm@kvack.org
+S:     Maintained
+F:     Documentation/mm/zblock.rst
+F:     mm/zblock.[ch]
+
 ZD1211RW WIRELESS DRIVER
 M:	Daniel Drake <dsd@gentoo.org>
 M:	Ulrich Kunitz <kune@deine-taler.de>
