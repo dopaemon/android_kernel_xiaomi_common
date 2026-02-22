@@ -63,6 +63,64 @@ static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 static void zram_meta_free(struct zram *zram, u64 disksize);
 static bool zram_meta_alloc(struct zram *zram, u64 disksize);
 
+static unsigned long zram_get_total_pages(struct zram *zram)
+{
+	unsigned long pages = zs_get_total_pages(zram->mem_pool);
+
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+	pages += zblock_get_total_pages(zram->block_mem_pool);
+#endif
+	return pages;
+}
+
+static unsigned long zram_malloc(struct zram *zram, unsigned int size, gfp_t gfp)
+{
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+	unsigned long handle = 0;
+
+	if (size != PAGE_SIZE) {
+		if (!zblock_alloc(zram->block_mem_pool, size,
+				  gfp & ~(__GFP_MOVABLE | __GFP_HIGHMEM),
+				  &handle))
+			return handle;
+		return 0;
+	}
+#endif
+	return zs_malloc(zram->mem_pool, size, gfp);
+}
+
+static void zram_free_handle(struct zram *zram, unsigned long handle, unsigned int size)
+{
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+	if (size != PAGE_SIZE) {
+		zblock_free(zram->block_mem_pool, handle);
+		return;
+	}
+#endif
+	zs_free(zram->mem_pool, handle);
+}
+
+static void *zram_map_handle(struct zram *zram, unsigned long handle,
+			     enum zs_mapmode mm, unsigned int size)
+{
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+	if (size != PAGE_SIZE)
+		return zblock_map(zram->block_mem_pool, handle);
+#endif
+	return zs_map_object(zram->mem_pool, handle, mm);
+}
+
+static void zram_unmap_handle(struct zram *zram, unsigned long handle, unsigned int size)
+{
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+	if (size != PAGE_SIZE) {
+		zblock_unmap(zram->block_mem_pool, handle);
+		return;
+	}
+#endif
+	zs_unmap_object(zram->mem_pool, handle);
+}
+
 
 static int zram_slot_trylock(struct zram *zram, u32 index)
 {
@@ -312,7 +370,7 @@ static ssize_t mem_used_max_store(struct device *dev,
 	down_read(&zram->init_lock);
 	if (init_done(zram)) {
 		atomic_long_set(&zram->stats.max_used_pages,
-				zs_get_total_pages(zram->mem_pool));
+				zram_get_total_pages(zram));
 	}
 	up_read(&zram->init_lock);
 
@@ -1115,7 +1173,7 @@ static ssize_t mm_stat_show(struct device *dev,
 
 	down_read(&zram->init_lock);
 	if (init_done(zram)) {
-		mem_used = zs_get_total_pages(zram->mem_pool);
+		mem_used = zram_get_total_pages(zram);
 		zs_pool_stats(zram->mem_pool, &pool_stats);
 	}
 
@@ -1192,6 +1250,9 @@ static void zram_meta_free(struct zram *zram, u64 disksize)
 		zram_free_page(zram, index);
 
 	zs_destroy_pool(zram->mem_pool);
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+	zblock_destroy_pool(zram->block_mem_pool);
+#endif
 	vfree(zram->table);
 }
 
@@ -1210,8 +1271,21 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 		return false;
 	}
 
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+	zram->block_mem_pool = zblock_create_pool(GFP_KERNEL);
+	if (!zram->block_mem_pool) {
+		zs_destroy_pool(zram->mem_pool);
+		vfree(zram->table);
+		return false;
+	}
+#endif
+
 	if (!huge_class_size)
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+		huge_class_size = zblock_get_max_alloc_size();
+#else
 		huge_class_size = zs_huge_class_size(zram->mem_pool);
+#endif
 	return true;
 }
 
@@ -1255,7 +1329,7 @@ static void zram_free_page(struct zram *zram, size_t index)
 	if (!handle)
 		return;
 
-	zs_free(zram->mem_pool, handle);
+	zram_free_handle(zram, handle, zram_get_obj_size(zram, index));
 
 	atomic64_sub(zram_get_obj_size(zram, index),
 			&zram->stats.compr_data_size);
@@ -1308,7 +1382,7 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 	if (size != PAGE_SIZE)
 		zstrm = zcomp_stream_get(zram->comp);
 
-	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
+	src = zram_map_handle(zram, handle, ZS_MM_RO, size);
 	if (size == PAGE_SIZE) {
 		dst = kmap_atomic(page);
 		memcpy(dst, src, PAGE_SIZE);
@@ -1320,7 +1394,7 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 		kunmap_atomic(dst);
 		zcomp_stream_put(zram->comp);
 	}
-	zs_unmap_object(zram->mem_pool, handle);
+	zram_unmap_handle(zram, handle, size);
 	zram_slot_unlock(zram, index);
 
 	/* Should NEVER happen. Return bio error if it does. */
@@ -1395,7 +1469,8 @@ compress_again:
 	if (unlikely(ret)) {
 		zcomp_stream_put(zram->comp);
 		pr_err("Compression failed! err=%d\n", ret);
-		zs_free(zram->mem_pool, handle);
+		if (handle)
+			zram_free_handle(zram, handle, comp_len);
 		return ret;
 	}
 
@@ -1415,33 +1490,33 @@ compress_again:
 	 * from the slow path and handle has already been allocated.
 	 */
 	if (!handle)
-		handle = zs_malloc(zram->mem_pool, comp_len,
-				__GFP_KSWAPD_RECLAIM |
-				__GFP_NOWARN |
-				__GFP_HIGHMEM |
-				__GFP_MOVABLE |
-				__GFP_CMA);
+		handle = zram_malloc(zram, comp_len,
+				     __GFP_KSWAPD_RECLAIM |
+				     __GFP_NOWARN |
+				     __GFP_HIGHMEM |
+				     __GFP_MOVABLE |
+				     __GFP_CMA);
 	if (!handle) {
 		zcomp_stream_put(zram->comp);
 		atomic64_inc(&zram->stats.writestall);
-		handle = zs_malloc(zram->mem_pool, comp_len,
-				GFP_NOIO | __GFP_HIGHMEM |
-				__GFP_MOVABLE | __GFP_CMA);
+		handle = zram_malloc(zram, comp_len,
+				     GFP_NOIO | __GFP_HIGHMEM |
+				     __GFP_MOVABLE | __GFP_CMA);
 		if (handle)
 			goto compress_again;
 		return -ENOMEM;
 	}
 
-	alloced_pages = zs_get_total_pages(zram->mem_pool);
+	alloced_pages = zram_get_total_pages(zram);
 	update_used_max(zram, alloced_pages);
 
 	if (zram->limit_pages && alloced_pages > zram->limit_pages) {
 		zcomp_stream_put(zram->comp);
-		zs_free(zram->mem_pool, handle);
+		zram_free_handle(zram, handle, comp_len);
 		return -ENOMEM;
 	}
 
-	dst = zs_map_object(zram->mem_pool, handle, ZS_MM_WO);
+	dst = zram_map_handle(zram, handle, ZS_MM_WO, comp_len);
 
 	src = zstrm->buffer;
 	if (comp_len == PAGE_SIZE)
@@ -1451,7 +1526,7 @@ compress_again:
 		kunmap_atomic(src);
 
 	zcomp_stream_put(zram->comp);
-	zs_unmap_object(zram->mem_pool, handle);
+	zram_unmap_handle(zram, handle, comp_len);
 	atomic64_add(comp_len, &zram->stats.compr_data_size);
 out:
 	/*

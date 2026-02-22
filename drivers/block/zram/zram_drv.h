@@ -17,6 +17,7 @@
 
 #include <linux/rwsem.h>
 #include <linux/zsmalloc.h>
+#include <linux/zblock.h>
 #include <linux/crypto.h>
 
 #include "zcomp.h"
@@ -92,6 +93,9 @@ struct zram_stats {
 struct zram {
 	struct zram_table_entry *table;
 	struct zs_pool *mem_pool;
+#ifdef CONFIG_ZRAM_USE_ZBLOCK
+	struct zblock_pool *block_mem_pool;
+#endif
 	struct zcomp *comp;
 	struct gendisk *disk;
 	/* Prevent concurrent execution of device init */

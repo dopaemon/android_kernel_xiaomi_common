@@ -23,6 +23,7 @@
 #include <linux/preempt.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/zblock.h>
 #include <linux/zpool.h>
 #include "zblock.h"
 
@@ -122,7 +123,7 @@ static struct zblock_block *alloc_block(struct zblock_pool *pool,
  * Return: pointer to the new zblock pool or NULL if the metadata allocation
  * failed.
  */
-static struct zblock_pool *zblock_create_pool(gfp_t gfp)
+struct zblock_pool *zblock_create_pool(gfp_t gfp)
 {
 	struct zblock_pool *pool;
 	struct block_list *block_list;
@@ -148,7 +149,7 @@ static struct zblock_pool *zblock_create_pool(gfp_t gfp)
  * @pool:	the zblock pool to be destroyed
  *
  */
-static void zblock_destroy_pool(struct zblock_pool *pool)
+void zblock_destroy_pool(struct zblock_pool *pool)
 {
 	kfree(pool);
 }
@@ -165,7 +166,7 @@ static void zblock_destroy_pool(struct zblock_pool *pool)
  * gfp arguments are invalid or -ENOMEM if the pool was unable to allocate
  * a new slot.
  */
-static int zblock_alloc(struct zblock_pool *pool, size_t size, gfp_t gfp,
+int zblock_alloc(struct zblock_pool *pool, size_t size, gfp_t gfp,
 			unsigned long *handle)
 {
 	int block_type = -1;
@@ -221,7 +222,7 @@ static int zblock_alloc(struct zblock_pool *pool, size_t size, gfp_t gfp,
  * @handle:	handle associated with the allocation returned by zblock_alloc()
  *
  */
-static void zblock_free(struct zblock_pool *pool, unsigned long handle)
+void zblock_free(struct zblock_pool *pool, unsigned long handle)
 {
 	unsigned int slot, block_type;
 	struct zblock_block *block;
@@ -252,7 +253,7 @@ static void zblock_free(struct zblock_pool *pool, unsigned long handle)
  *
  * Returns: a pointer to the mapped allocation
  */
-static void *zblock_map(struct zblock_pool *pool, unsigned long handle)
+void *zblock_map(struct zblock_pool *pool, unsigned long handle)
 {
 	unsigned int block_type, slot;
 	struct zblock_block *block;
@@ -270,7 +271,7 @@ static void *zblock_map(struct zblock_pool *pool, unsigned long handle)
  * @pool:	pool in which the allocation resides
  * @handle:	handle associated with the allocation to be unmapped
  */
-static void zblock_unmap(struct zblock_pool *pool, unsigned long handle)
+void zblock_unmap(struct zblock_pool *pool, unsigned long handle)
 {
 }
 
@@ -280,7 +281,7 @@ static void zblock_unmap(struct zblock_pool *pool, unsigned long handle)
  *
  * Returns: size in bytes of the given pool.
  */
-static u64 zblock_get_total_pages(struct zblock_pool *pool)
+u64 zblock_get_total_pages(struct zblock_pool *pool)
 {
 	u64 total_size;
 	int i;
@@ -290,6 +291,11 @@ static u64 zblock_get_total_pages(struct zblock_pool *pool)
 		total_size += pool->block_lists[i].block_count << block_desc[i].order;
 
 	return total_size;
+}
+
+size_t zblock_get_max_alloc_size(void)
+{
+	return block_desc[ARRAY_SIZE(block_desc) - 1].slot_size;
 }
 
 /*****************
@@ -395,6 +401,7 @@ static int __init init_zblock(void)
 {
 	int ret = create_rbtree();
 
+	pr_info("ZBLOCK INIT\n");
 	if (ret)
 		return ret;
 
