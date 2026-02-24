@@ -299,7 +299,7 @@ extern bool is_main_chg_chan_valid(struct xm_battmngr_iio *battmngr_iio,
 extern bool is_batt_fg_chan_valid(struct xm_battmngr_iio *battmngr_iio,
 				  enum batt_fg_iio_channels chan);
 extern bool is_pd_chan_valid(struct xm_battmngr_iio *battmngr_iio,
-			     enum batt_fg_iio_channels chan);
+			     enum pd_iio_channels chan);
 extern int xm_battmngr_iio_init(struct xm_battmngr_iio *battmngr_iio);
 
 #endif /* __XM_BATTMNGR_IIO_H */
