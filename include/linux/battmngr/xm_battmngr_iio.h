@@ -142,7 +142,7 @@ static const char *const cp_sec_iio_chan[] = {
 	[CHARGE_PUMP_LN_ALARM_STATUS] = "ln_alarm_status_slave",
 	[CHARGE_PUMP_LN_FAULT_STATUS] = "ln_fault_status_slave",
 	[CHARGE_PUMP_LN_VBUS_ERROR_STATUS] = "ln_vbus_error_status_slave",
-	[CHARGE_PUMP_LN_REG_STATUS] = "ln_reg_status",
+	[CHARGE_PUMP_LN_REG_STATUS] = "ln_reg_status_slave",
 };
 
 enum main_chg_iio_channels {
