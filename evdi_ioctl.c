@@ -516,7 +516,9 @@ static __always_inline bool evdi_swap_dequeue_for_file(struct evdi_device *evdi,
 						       int *out_poll_id)
 {
 	struct evdi_file_priv *priv;
-	int start, i;
+	struct drm_file *owner;
+	int start, i, poll_id, d;
+	u64 seq, payload;
 
 	if (unlikely(!evdi || !file || !out || !out_poll_id))
 		return false;
@@ -527,10 +529,7 @@ static __always_inline bool evdi_swap_dequeue_for_file(struct evdi_device *evdi,
 
 	start = (int)(priv->swap_rr % LINDROID_MAX_CONNECTORS);
 	for (i = 0; i < LINDROID_MAX_CONNECTORS; i++) {
-		const int d = (start + i) % LINDROID_MAX_CONNECTORS;
-		u64 seq, payload;
-		int poll_id;
-		struct drm_file *owner;
+		d = (start + i) % LINDROID_MAX_CONNECTORS;
 
 		if (!evdi_swap_mailbox_read_stable(evdi, d, &seq, &payload, &poll_id, &owner))
 			continue;
@@ -578,26 +577,15 @@ int evdi_ioctl_poll(struct drm_device *dev, void *data, struct drm_file *file)
 	}
 
 	event = evdi_event_dequeue(evdi);
-	if (likely(event)) {
-		cmd->event = event->type;
-		cmd->poll_id = event->poll_id;
-		payload_size = evdi_event_serialize_payload(event,
-			payload_buf, sizeof(payload_buf));
-		if (payload_size && cmd->data) {
-			if (evdi_copy_to_user_allow_partial(cmd->data,
-				payload_buf, payload_size)) {
-				evdi_event_free(event);
-				return -EFAULT;
-			}
-		}
-		evdi_event_free(event);
-		return 0;
+	if (event) {
+		goto deliver;
 	}
 
 	ret = evdi_event_wait(evdi, file);
 	if (ret)
 		return ret;
 
+	/* Check mailbox again after wake */
 	if (evdi_swap_dequeue_for_file(evdi, file, &sw, &poll_id)) {
 		cmd->event = swap_to;
 		cmd->poll_id = poll_id;
@@ -613,16 +601,19 @@ int evdi_ioctl_poll(struct drm_device *dev, void *data, struct drm_file *file)
 	if (!event)
 		return -EAGAIN;
 
+deliver:
 	cmd->event = event->type;
 	cmd->poll_id = event->poll_id;
 
-	payload_size = evdi_event_serialize_payload(event, payload_buf,
-		sizeof(payload_buf));
+	payload_size = evdi_event_serialize_payload(event,
+			payload_buf, sizeof(payload_buf));
+
 	if (payload_size && cmd->data) {
 		if (evdi_copy_to_user_allow_partial(cmd->data,
-			payload_buf, payload_size)) {
-			evdi_event_free(event);
-			return -EFAULT;
+						    payload_buf,
+						    payload_size)) {
+		evdi_event_free(event);
+		return -EFAULT;
 		}
 	}
 
@@ -991,35 +982,6 @@ int evdi_ioctl_destroy_buff_callback(struct drm_device *dev, void *data, struct 
 	return 0;
 }
 
-int evdi_ioctl_swap_callback(struct drm_device *dev, void *data, struct drm_file *file)
-{
-	struct evdi_device *evdi = dev->dev_private;
-
-	struct drm_evdi_swap_callback *cb = data;
-	int d;
-
-	if (unlikely(!evdi || !cb))
-		return -EINVAL;
-
-	for (d = 0; d < LINDROID_MAX_CONNECTORS; d++) {
-		if (!atomic_read(&evdi->swap_pending[d]))
-			continue;
-		if (atomic_read(&evdi->swap_pending_pollid[d]) != cb->poll_id)
-			continue;
-
-		atomic_set(&evdi->swap_pending_pollid[d], 0);
-		atomic_set(&evdi->swap_pending[d], 0);
-		wake_up_interruptible(&evdi->swap_ack_waitq);
-		break;
-	}
-
-	EVDI_PERF_INC64(&evdi_perf.ioctl_calls[5]);
-
-	evdi_wakeup_pollers(evdi);
-
-	return 0;
-}
-
 int evdi_ioctl_create_buff_callback(struct drm_device *dev, void *data, struct drm_file *file)
 {
 	struct evdi_device *evdi = dev->dev_private;
@@ -1078,36 +1040,32 @@ static int evdi_queue_int_event(struct evdi_device *evdi,
 int evdi_queue_swap_event(struct evdi_device *evdi,
 	int id, int display_id, struct drm_file *owner)
 {
-	struct evdi_swap_mailbox *mb;
 	struct drm_file *client;
+	struct evdi_swap_mailbox *mb;
 	u64 payload;
 	int poll_id;
 
 	if (unlikely(!evdi))
 		return -EINVAL;
+
 	if (unlikely(display_id < 0 || display_id >= LINDROID_MAX_CONNECTORS))
 		return -EINVAL;
+
 	if (unlikely(atomic_read(&evdi->events.stopping)))
 		return -ENODEV;
 
-	/* Do not overwrite an un-ACKed swap */
-	if (atomic_cmpxchg(&evdi->swap_pending[display_id], 0, 1) != 0)
-		return -EBUSY;
-
 	client = READ_ONCE(evdi->drm_client);
+
 	if (client)
 		owner = client;
 
-	if (unlikely(!owner)) {
-		atomic_set(&evdi->swap_pending[display_id], 0);
+	if (unlikely(!owner))
 		return -ENODEV;
-	}
 
 	mb = &evdi->swap_mailbox[display_id];
 	payload = evdi_swap_pack(id, display_id);
-	poll_id = atomic_inc_return(&evdi->events.next_poll_id);
 
-	atomic_set(&evdi->swap_pending_pollid[display_id], poll_id);
+	poll_id = atomic_inc_return(&evdi->events.next_poll_id);
 
 	atomic64_inc(&mb->seq); // odd
 	WRITE_ONCE(mb->owner, owner);
@@ -1117,7 +1075,12 @@ int evdi_queue_swap_event(struct evdi_device *evdi,
 	atomic64_inc(&mb->seq); // even
 
 	EVDI_PERF_INC64(&evdi_perf.swap_updates);
+
+	// Swap events do not use the standard event queue! Do not use evdi_wakeup_pollers
+	// here or set wake pending!
+	evdi_smp_wmb();
 	wake_up_interruptible(&evdi->events.wait_queue);
+
 	return 0;
 }
 
@@ -1142,4 +1105,33 @@ int evdi_queue_create_event(struct evdi_device *evdi,
 {
 	int poll_id = atomic_inc_return(&evdi->events.next_poll_id);
 	return evdi_queue_create_event_with_id(evdi, params, owner, poll_id);
+}
+
+int evdi_ioctl_vsync(struct drm_device *dev,
+                     void *data,
+                     struct drm_file *file)
+{
+	struct evdi_device *evdi = dev->dev_private;
+	struct drm_evdi_vsync *vs = data;
+	struct drm_crtc *crtc;
+	int slot;
+
+	EVDI_PERF_INC64(&evdi_perf.ioctl_calls[2]);
+
+	if (unlikely(atomic_read(&evdi->events.stopping)))
+		return -ENODEV;
+
+	slot = vs->display_id;
+
+	if (slot < 0 || slot >= LINDROID_MAX_CONNECTORS)
+		return -EINVAL;
+
+	crtc = &evdi->pipe[slot].crtc;
+
+	if (drm_crtc_vblank_get(crtc) == 0) {
+		drm_crtc_handle_vblank(crtc);
+		drm_crtc_vblank_put(crtc);
+	}
+
+	return 0;
 }

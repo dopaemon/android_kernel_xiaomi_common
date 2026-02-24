@@ -29,6 +29,7 @@ static __always_inline bool evdi_swap_pending_for_file(struct evdi_device *evdi,
 						       struct drm_file *file)
 {
 	struct evdi_file_priv *priv;
+	u64 seq;
 	int i;
 
 	if (unlikely(!evdi || !file))
@@ -39,8 +40,6 @@ static __always_inline bool evdi_swap_pending_for_file(struct evdi_device *evdi,
 		return false;
 
 	for (i = 0; i < LINDROID_MAX_CONNECTORS; i++) {
-		u64 seq;
-
 		if (READ_ONCE(evdi->swap_mailbox[i].owner) != file)
 			continue;
 		seq = (u64)atomic64_read(&evdi->swap_mailbox[i].seq);
@@ -225,7 +224,7 @@ int evdi_event_init(struct evdi_device *evdi)
 void evdi_event_cleanup(struct evdi_device *evdi)
 {
 	struct evdi_event *event, *next;
-	int i;
+	int d;
 
 	if (unlikely(!evdi))
 		return;
@@ -235,13 +234,13 @@ void evdi_event_cleanup(struct evdi_device *evdi)
 
 	evdi_smp_wmb();
 
-	for (i = 0; i < LINDROID_MAX_CONNECTORS; i++) {
-		atomic64_inc(&evdi->swap_mailbox[i].seq);
-		WRITE_ONCE(evdi->swap_mailbox[i].owner, NULL);
-		atomic_set(&evdi->swap_mailbox[i].poll_id, 0);
-		atomic64_set(&evdi->swap_mailbox[i].payload, 0);
+	for (d = 0; d < LINDROID_MAX_CONNECTORS; d++) {
+		atomic64_inc(&evdi->swap_mailbox[d].seq);
+		WRITE_ONCE(evdi->swap_mailbox[d].owner, NULL);
+		atomic_set(&evdi->swap_mailbox[d].poll_id, 0);
+		atomic64_set(&evdi->swap_mailbox[d].payload, 0);
 		evdi_smp_wmb();
-		atomic64_inc(&evdi->swap_mailbox[i].seq);
+		atomic64_inc(&evdi->swap_mailbox[d].seq);
 	}
 
 	if (evdi->percpu_inflight) {

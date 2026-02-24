@@ -314,10 +314,6 @@ struct evdi_device {
 
 	struct evdi_swap_mailbox swap_mailbox[LINDROID_MAX_CONNECTORS];
 
-	wait_queue_head_t swap_ack_waitq;
-	atomic_t swap_pending[LINDROID_MAX_CONNECTORS];
-	atomic_t swap_pending_pollid[LINDROID_MAX_CONNECTORS];
-
 	struct mutex config_mutex;
 
 	struct platform_device *pdev;
@@ -373,7 +369,6 @@ int evdi_ioctl_connect(struct drm_device *dev, void *data, struct drm_file *file
 int evdi_ioctl_poll(struct drm_device *dev, void *data, struct drm_file *file);
 int evdi_ioctl_get_buff_callback(struct drm_device *dev, void *data, struct drm_file *file);
 int evdi_ioctl_destroy_buff_callback(struct drm_device *dev, void *data, struct drm_file *file);
-int evdi_ioctl_swap_callback(struct drm_device *dev, void *data, struct drm_file *file);
 int evdi_ioctl_create_buff_callback(struct drm_device *dev, void *data, struct drm_file *file);
 int evdi_ioctl_gbm_create_buff(struct drm_device *dev, void *data, struct drm_file *file);
 void evdi_inflight_discard_owner(struct evdi_device *evdi, struct drm_file *owner);
@@ -382,6 +377,7 @@ int evdi_ioctl_gbm_get_buff(struct drm_device *dev, void *data, struct drm_file 
 int evdi_ioctl_gbm_del_buff(struct drm_device *dev, void *data, struct drm_file *file);
 int evdi_queue_swap_event(struct evdi_device *evdi, int id, int display_id, struct drm_file *owner);
 int evdi_queue_destroy_event(struct evdi_device *evdi, int id, struct drm_file *owner);
+int evdi_ioctl_vsync(struct drm_device *dev, void *data, struct drm_file *file);
 
 /* evdi_event.c */
 int evdi_event_init(struct evdi_device *evdi);
@@ -412,7 +408,7 @@ uint32_t evdi_gem_object_handle_lookup(struct drm_file *filp, struct drm_gem_obj
 struct sg_table *evdi_prime_get_sg_table(struct drm_gem_object *obj);
 struct drm_gem_object *evdi_gem_prime_import(struct drm_device *dev,
 					     struct dma_buf *dma_buf);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 int evdi_prime_handle_to_fd(struct drm_device *dev,
     struct drm_file *file_priv,
     uint32_t handle,

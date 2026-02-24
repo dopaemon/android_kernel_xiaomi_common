@@ -54,12 +54,12 @@ static const struct drm_ioctl_desc evdi_ioctls[] = {
 			 EVDI_IOCTL_FLAGS),
 	DRM_IOCTL_DEF_DRV(EVDI_DESTROY_BUFF_CALLBACK, evdi_ioctl_destroy_buff_callback,
 			 EVDI_IOCTL_FLAGS),
-	DRM_IOCTL_DEF_DRV(EVDI_SWAP_CALLBACK, evdi_ioctl_swap_callback,
-			 EVDI_IOCTL_FLAGS),
 	DRM_IOCTL_DEF_DRV(EVDI_GBM_CREATE_BUFF_CALLBACK, evdi_ioctl_create_buff_callback,
 			 EVDI_IOCTL_FLAGS),
 	DRM_IOCTL_DEF_DRV(EVDI_GBM_DEL_BUFF, evdi_ioctl_gbm_del_buff,
 			 EVDI_IOCTL_FLAGS),
+	DRM_IOCTL_DEF_DRV(EVDI_VSYNC, evdi_ioctl_vsync,
+			DRM_RENDER_ALLOW),
 };
 
 static struct drm_driver evdi_driver = {
@@ -75,7 +75,7 @@ static struct drm_driver evdi_driver = {
 	.gem_create_object = NULL,
 #endif
 	.gem_prime_import = evdi_gem_prime_import,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 	.prime_handle_to_fd = evdi_prime_handle_to_fd,
 	.prime_fd_to_handle = evdi_prime_fd_to_handle,
 #endif
@@ -188,12 +188,6 @@ int evdi_device_init(struct evdi_device *evdi, struct platform_device *pdev)
 
 	mutex_init(&evdi->config_mutex);
 
-	init_waitqueue_head(&evdi->swap_ack_waitq);
-	for (i = 0; i < LINDROID_MAX_CONNECTORS; i++) {
-		atomic_set(&evdi->swap_pending[i], 0);
-		atomic_set(&evdi->swap_pending_pollid[i], 0);
-	}
-	
 #ifdef EVDI_HAVE_XARRAY
 	xa_init_flags(&evdi->file_xa, XA_FLAGS_ALLOC);
 	xa_init_flags(&evdi->inflight_xa, XA_FLAGS_ALLOC);

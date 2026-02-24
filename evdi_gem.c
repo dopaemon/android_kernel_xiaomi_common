@@ -361,7 +361,7 @@ struct drm_gem_object *evdi_gem_prime_import(struct drm_device *dev,
 	return &obj->base;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 
 static int evdi_export_id_as_fd(int id, uint32_t flags, int *out_fd)
 {
