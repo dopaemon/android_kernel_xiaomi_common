@@ -132,7 +132,7 @@ bool is_batt_fg_chan_valid(struct xm_battmngr_iio *battmngr_iio,
 EXPORT_SYMBOL(is_batt_fg_chan_valid);
 
 bool is_pd_chan_valid(struct xm_battmngr_iio *battmngr_iio,
-		      enum batt_fg_iio_channels chan)
+		      enum pd_iio_channels chan)
 {
 	int rc;
 
