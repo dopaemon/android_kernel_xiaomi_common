@@ -364,7 +364,7 @@ int user_min_free_kbytes = -1;
 
 atomic_long_t kswapd_waiters = ATOMIC_LONG_INIT(0);
 static int watermark_boost_factor __read_mostly;
-static int watermark_scale_factor = 10;
+static int watermark_scale_factor = 25;
 
 /* virt_zone is the "real" zone pages in virtual zones are taken from */
 int virt_zone;
