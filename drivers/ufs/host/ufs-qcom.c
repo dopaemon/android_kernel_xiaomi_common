@@ -2523,8 +2523,8 @@ static int ufs_qcom_apply_dev_quirks(struct ufs_hba *hba)
 	int err = 0;
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
-	/* Set the default auto-hiberate idle timer value to 5ms */
-	hba->ahit = FIELD_PREP(UFSHCI_AHIBERN8_TIMER_MASK, 5) |
+	/* Set the default auto-hiberate idle timer value to 1ms */
+	hba->ahit = FIELD_PREP(UFSHCI_AHIBERN8_TIMER_MASK, 1) |
 		    FIELD_PREP(UFSHCI_AHIBERN8_SCALE_MASK, 3);
 	/* Set the clock gating delay to performance mode */
 	hba->clk_gating.delay_ms = UFS_QCOM_CLK_GATING_DELAY_MS_PERF;
