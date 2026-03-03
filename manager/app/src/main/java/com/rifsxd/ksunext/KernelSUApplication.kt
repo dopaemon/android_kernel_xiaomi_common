@@ -34,17 +34,6 @@ class KernelSUApplication : Application(), ViewModelStoreOwner {
         Shell.setDefaultBuilder(createRootShellBuilder(true))
         Shell.enableVerboseLogging = BuildConfig.DEBUG
 
-        val moduleViewModel = ViewModelProvider(this)[ModuleViewModel::class.java]
-        val superUserViewModel = ViewModelProvider(this)[SuperUserViewModel::class.java]
-        CoroutineScope(Dispatchers.Main).launch {
-            if (superUserViewModel.appList.isEmpty()) {
-                superUserViewModel.fetchAppList()
-            }
-            if (moduleViewModel.moduleList.isEmpty()) {
-                moduleViewModel.fetchModuleList()
-            }
-        }
-
         val context = this
         val iconSize = resources.getDimensionPixelSize(android.R.dimen.app_icon_size)
         Coil.setImageLoader(

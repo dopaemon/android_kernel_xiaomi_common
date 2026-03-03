@@ -32,11 +32,19 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.viewModels
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
+import androidx.lifecycle.lifecycleScope
+import kotlin.math.abs
+import kotlinx.coroutines.launch
 import com.ramcosta.composedestinations.DestinationsNavHost
 import com.ramcosta.composedestinations.animations.NavHostAnimatedDestinationStyle
 import com.ramcosta.composedestinations.generated.NavGraphs
@@ -54,12 +62,8 @@ import com.rifsxd.ksunext.ui.screen.BottomBarDestination
 import com.rifsxd.ksunext.ui.screen.FlashIt
 import com.rifsxd.ksunext.ui.theme.KernelSUTheme
 import com.rifsxd.ksunext.ui.util.*
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.unit.Velocity
-import kotlin.math.abs
+import com.rifsxd.ksunext.ui.viewmodel.ModuleViewModel
+import com.rifsxd.ksunext.ui.viewmodel.SuperUserViewModel
 
 data class ScrollState(
     val isScrollingDown: MutableState<Boolean>,
@@ -151,6 +155,9 @@ class MainActivity : ComponentActivity() {
     var amoledModeState = mutableStateOf(false)
     private val handler = Handler(Looper.getMainLooper())
 
+    val moduleViewModel: ModuleViewModel by viewModels()
+    val superUserViewModel: SuperUserViewModel by viewModels()
+
     override fun attachBaseContext(newBase: Context?) {
         super.attachBaseContext(newBase?.let { LocaleHelper.applyLanguage(it) })
     }
@@ -158,6 +165,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
+
+        lifecycleScope.launch {
+            if (superUserViewModel.appList.isEmpty()) {
+                superUserViewModel.fetchAppList()
+            }
+            if (moduleViewModel.moduleList.isEmpty()) {
+                moduleViewModel.fetchModuleList()
+            }
+        }
 
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -196,7 +212,7 @@ class MainActivity : ComponentActivity() {
                 val homeDestination = BottomBarDestination.entries.firstOrNull()
                 val startRoute = homeDestination?.direction?.route
 
-                    if (homeDestination != null && startRoute != null) {
+                if (homeDestination != null && startRoute != null) {
                     BackHandler(enabled = currentRoute != startRoute && currentRoute in bottomBarRoutes) {
                         navigator.navigate(homeDestination.direction) {
                             popUpTo(NavGraphs.root) {
