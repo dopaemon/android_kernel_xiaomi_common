@@ -243,4 +243,9 @@
     <string name="spoofed">Spoofed</string>
     <string name="select_build_type">Select build type</string>
     <string name="home_module_update_available">Update!</string>
+    <string name="non_free_repo">Non-Free Repository</string>
+    <string name="non_free_repo_summary">Include modules with non-free licenses.</string>
+    <string name="no_repositories_configured">No repositories configured. Add one below.</string>
+    <string name="add_repository">Add Repository</string>
+    <string name="reset_to_default">Reset to Default</string>
 </resources>

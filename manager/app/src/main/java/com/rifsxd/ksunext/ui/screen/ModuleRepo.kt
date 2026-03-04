@@ -9,13 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.SettingsSuggest
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -75,6 +69,7 @@ data class ModuleRepo(
     val visibility: Int = 1,
     val latestVersion: String = "",
     val downloadUrl: String = "",
+    val stars: Int = -1,
     val isLoading: Boolean = true
 )
 
@@ -224,7 +219,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
             }
 
             moduleState = ModuleRepoState.Success(
-                visibleModules.map { it.copy(latestVersion = "", downloadUrl = "", isLoading = true) }
+                visibleModules.map { it.copy(latestVersion = "", downloadUrl = "", stars = -1, isLoading = true) }
             )
 
             kotlinx.coroutines.coroutineScope {
@@ -235,6 +230,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                             val updated = baseModule.copy(
                                 latestVersion = releaseInfo?.version ?: "null",
                                 downloadUrl = releaseInfo?.zipUrl ?: "",
+                                stars = releaseInfo?.stars ?: -1,
                                 isLoading = false
                             )
                             val current = moduleState
@@ -245,7 +241,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                                 moduleState = ModuleRepoState.Success(mutable)
                             }
                         } catch (e: Exception) {
-                            val updated = baseModule.copy(latestVersion = "null", downloadUrl = "", isLoading = false)
+                            val updated = baseModule.copy(latestVersion = "null", downloadUrl = "", stars = -1, isLoading = false)
                             val current = moduleState
                             if (current is ModuleRepoState.Success) {
                                 val mutable = current.modules.toMutableList()
@@ -266,7 +262,6 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
         scope.launch { loadModules() }
     }
 
-    // ── Repo Manager Dialog ──────────────────────────────────────────────────
     if (showRepoManagerDialog) {
         AlertDialog(
             onDismissRequest = { showRepoManagerDialog = false },
@@ -283,12 +278,12 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Non-Free Repository",
+                                text = stringResource(R.string.non_free_repo),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "Include modules with non-free licenses",
+                                text = stringResource(R.string.non_free_repo_summary),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -306,7 +301,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
 
                     if (jsonUrls.isEmpty()) {
                         Text(
-                            text = "No repositories configured. Add one below.",
+                            text = stringResource(R.string.no_repositories_configured),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
@@ -364,7 +359,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Add Repository")
+                        Text(stringResource(R.string.add_repository))
                     }
 
                     TextButton(
@@ -374,7 +369,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Reset to Default")
+                        Text(stringResource(R.string.reset_to_default))
                     }
                 }
             },
@@ -386,7 +381,6 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
         )
     }
 
-    // ── Add / Edit URL Dialog ────────────────────────────────────────────────
     if (showAddEditDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -724,15 +718,57 @@ private fun ModuleRepoCard(
                     .fillMaxWidth()
                     .padding(22.dp, 18.dp, 22.dp, 12.dp)
             ) {
-                if (module.license.isNotEmpty()) {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        LabelItem(
-                            text = module.license,
-                            style = LabelItemDefaults.style.copy(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                val hasLicense = module.license.isNotEmpty()
+                val hasStars = !module.isLoading && module.stars >= 0
+
+                if (hasLicense || hasStars) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (hasLicense) {
+                            LabelItem(
+                                icon = {
+                                    Icon(
+                                        tint = LabelItemDefaults.style.contentColor,
+                                        imageVector = Icons.Filled.LocalOffer,
+                                        contentDescription = null
+                                    )
+                                },
+                                text = {
+                                    Text(
+                                        text = module.license,
+                                        style = LabelItemDefaults.style.textStyle.copy(
+                                            color = LabelItemDefaults.style.contentColor,
+                                        )
+                                    )
+                                }
                             )
-                        )
+                        }
+                        if (hasStars) {
+                            val starsText = when {
+                                module.stars >= 1_000 -> "${"%.1f".format(module.stars / 1000.0)}k"
+                                else -> "${module.stars}"
+                            }
+                            LabelItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Star,
+                                        contentDescription = null
+                                    )
+                                },
+                                text = {
+                                    Text(
+                                        text = starsText,
+                                        style = LabelItemDefaults.style.textStyle
+                                    )
+                                },
+                                style = LabelItemDefaults.style.copy(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -852,6 +888,20 @@ private fun TopBar(
 private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfoModuleRepo? {
     return withContext(Dispatchers.IO) {
         try {
+            val stars = try {
+                val htmlConn = URL(repoUrl).openConnection() as java.net.HttpURLConnection
+                htmlConn.setRequestProperty("User-Agent", "KernelSU/${BuildConfig.VERSION_CODE}")
+                htmlConn.setRequestProperty("Accept", "text/html")
+                val html = BufferedReader(InputStreamReader(htmlConn.inputStream)).use { it.readText() }
+                htmlConn.disconnect()
+                val titleMatch = """id="repo-stars-counter-star"[^>]*title="([^"]+)"""".toRegex()
+                    .find(html)?.groupValues?.get(1)
+                titleMatch?.replace(",", "")?.trim()?.toIntOrNull() ?: -1
+            } catch (e: Exception) {
+                e.printStackTrace()
+                -1
+            }
+
             val latestUrl = "$repoUrl/releases/latest"
             val connection = URL(latestUrl).openConnection() as java.net.HttpURLConnection
             connection.instanceFollowRedirects = false
@@ -860,12 +910,15 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfoModuleRe
             val redirectUrl = connection.getHeaderField("Location")
             connection.disconnect()
 
-            if (redirectUrl == null) return@withContext null
+            if (redirectUrl == null) return@withContext ReleaseInfoModuleRepo(
+                version = "null",
+                zipUrl = "",
+                stars = stars
+            )
 
             val tagMatch = """/tag/([^/?\s]+)""".toRegex()
                 .find(redirectUrl)?.groupValues?.get(1)
-
-            if (tagMatch == null) return@withContext null
+                ?: return@withContext ReleaseInfoModuleRepo(version = "null", zipUrl = "", stars = stars)
 
             val releasePageUrl = "$repoUrl/releases/expanded_assets/$tagMatch"
             val pageConnection = URL(releasePageUrl).openConnection()
@@ -878,14 +931,11 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfoModuleRe
             val zipUrlMatch = """href="(/[^"]+/releases/download/[^"]+\.zip)"""".toRegex()
                 .find(pageHtml)?.groupValues?.get(1)
 
-            if (zipUrlMatch != null) {
-                return@withContext ReleaseInfoModuleRepo(
-                    version = tagMatch,
-                    zipUrl = "https://github.com$zipUrlMatch"
-                )
-            }
-
-            null
+            ReleaseInfoModuleRepo(
+                version = tagMatch,
+                zipUrl = if (zipUrlMatch != null) "https://github.com$zipUrlMatch" else "",
+                stars = stars
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -895,7 +945,8 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfoModuleRe
 
 data class ReleaseInfoModuleRepo(
     val version: String,
-    val zipUrl: String
+    val zipUrl: String,
+    val stars: Int = -1
 )
 
 @Preview

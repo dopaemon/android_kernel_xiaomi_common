@@ -10,8 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -69,6 +68,7 @@ data class MetaModule(
     val visibility: Int = 1,
     val latestVersion: String = "",
     val downloadUrl: String = "",
+    val stars: Int = -1,
     val isLoading: Boolean = true
 )
 
@@ -167,7 +167,7 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
             val visibleModules = baseList.filter { it.visibility == 1 }
 
             moduleState = MetaModuleState.Success(
-                visibleModules.map { it.copy(latestVersion = "", downloadUrl = "", isLoading = true) }
+                visibleModules.map { it.copy(latestVersion = "", downloadUrl = "", stars = -1, isLoading = true) }
             )
 
             kotlinx.coroutines.coroutineScope {
@@ -178,6 +178,7 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
                             val updated = baseModule.copy(
                                 latestVersion = releaseInfo?.version ?: "null",
                                 downloadUrl = releaseInfo?.zipUrl ?: "",
+                                stars = releaseInfo?.stars ?: -1,
                                 isLoading = false
                             )
 
@@ -189,7 +190,7 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
                                 moduleState = MetaModuleState.Success(mutable)
                             }
                         } catch (e: Exception) {
-                            val updated = baseModule.copy(latestVersion = "null", downloadUrl = "", isLoading = false)
+                            val updated = baseModule.copy(latestVersion = "null", downloadUrl = "", stars = -1, isLoading = false)
                             val current = moduleState
                             if (current is MetaModuleState.Success) {
                                 val mutable = current.modules.toMutableList()
@@ -418,30 +419,78 @@ private fun MetaModuleCard(
                     .fillMaxWidth()
                     .padding(22.dp, 18.dp, 22.dp, 12.dp)
             ) {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    if (module.license.isNotEmpty()) {
-                        LabelItem(
-                            text = module.license,
-                            style = LabelItemDefaults.style.copy(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
+                val hasLicense = module.license.isNotEmpty()
+                val hasStars = !module.isLoading && module.stars >= 0
 
-                    if (isInstalled) {
-                        LabelItem(
-                            text = stringResource(R.string.installed),
-                            style = LabelItemDefaults.style.copy(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                if (hasLicense || hasStars || isInstalled) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (hasLicense) {
+                            LabelItem(
+                                icon = {
+                                    Icon(
+                                        tint = LabelItemDefaults.style.contentColor,
+                                        imageVector = Icons.Filled.LocalOffer,
+                                        contentDescription = null
+                                    )
+                                },
+                                text = {
+                                    Text(
+                                        text = module.license,
+                                        style = LabelItemDefaults.style.textStyle.copy(
+                                            color = LabelItemDefaults.style.contentColor,
+                                        )
+                                    )
+                                }
                             )
-                        )
+                        }
+                        if (isInstalled) {
+                            LabelItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = null
+                                    )
+                                },
+                                text = {
+                                    Text(
+                                        text = stringResource(R.string.installed),
+                                        style = LabelItemDefaults.style.textStyle
+                                    )
+                                },
+                                style = LabelItemDefaults.style.copy(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        if (hasStars) {
+                            val starsText = when {
+                                module.stars >= 1_000 -> "${"%.1f".format(module.stars / 1000.0)}k"
+                                else -> "${module.stars}"
+                            }
+                            LabelItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Star,
+                                        contentDescription = null
+                                    )
+                                },
+                                text = {
+                                    Text(
+                                        text = starsText,
+                                        style = LabelItemDefaults.style.textStyle
+                                    )
+                                },
+                                style = LabelItemDefaults.style.copy(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            )
+                        }
                     }
-                }
-
-                if (module.license.isNotEmpty() || isInstalled) {
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 
@@ -553,40 +602,55 @@ private fun TopBar(
 private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfo? {
     return withContext(Dispatchers.IO) {
         try {
+            val stars = try {
+                val htmlConn = URL(repoUrl).openConnection() as java.net.HttpURLConnection
+                htmlConn.setRequestProperty("User-Agent", "KernelSU/${BuildConfig.VERSION_CODE}")
+                htmlConn.setRequestProperty("Accept", "text/html")
+                val html = BufferedReader(InputStreamReader(htmlConn.inputStream)).use { it.readText() }
+                htmlConn.disconnect()
+                val titleMatch = """id="repo-stars-counter-star"[^>]*title="([^"]+)"""".toRegex()
+                    .find(html)?.groupValues?.get(1)
+                titleMatch?.replace(",", "")?.trim()?.toIntOrNull() ?: -1
+            } catch (e: Exception) {
+                e.printStackTrace()
+                -1
+            }
+
+            // ── Latest release ZIP ───────────────────────────────────────────
             val latestUrl = "$repoUrl/releases/latest"
             val connection = URL(latestUrl).openConnection() as java.net.HttpURLConnection
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("User-Agent", "KernelSU/${BuildConfig.VERSION_CODE}")
-            
+
             val redirectUrl = connection.getHeaderField("Location")
             connection.disconnect()
-            
-            if (redirectUrl == null) return@withContext null
-            
+
+            if (redirectUrl == null) return@withContext ReleaseInfo(
+                version = "null",
+                zipUrl = "",
+                stars = stars
+            )
+
             val tagMatch = """/tag/([^/?\s]+)""".toRegex()
                 .find(redirectUrl)?.groupValues?.get(1)
-            
-            if (tagMatch == null) return@withContext null
-            
+                ?: return@withContext ReleaseInfo(version = "null", zipUrl = "", stars = stars)
+
             val releasePageUrl = "$repoUrl/releases/expanded_assets/$tagMatch"
             val pageConnection = URL(releasePageUrl).openConnection()
             pageConnection.setRequestProperty("User-Agent", "KernelSU/${BuildConfig.VERSION_CODE}")
-            
+
             val pageHtml = BufferedReader(InputStreamReader(pageConnection.getInputStream())).use {
                 it.readText()
             }
-        
+
             val zipUrlMatch = """href="(/[^"]+/releases/download/[^"]+\.zip)"""".toRegex()
                 .find(pageHtml)?.groupValues?.get(1)
-            
-            if (zipUrlMatch != null) {
-                return@withContext ReleaseInfo(
-                    version = tagMatch,
-                    zipUrl = "https://github.com$zipUrlMatch"
-                )
-            }
-            
-            null
+
+            ReleaseInfo(
+                version = tagMatch,
+                zipUrl = if (zipUrlMatch != null) "https://github.com$zipUrlMatch" else "",
+                stars = stars
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -596,7 +660,8 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfo? {
 
 data class ReleaseInfo(
     val version: String,
-    val zipUrl: String
+    val zipUrl: String,
+    val stars: Int = -1
 )
 
 @Preview
