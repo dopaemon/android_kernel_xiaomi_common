@@ -261,7 +261,7 @@ class MainActivity : ComponentActivity() {
                             NavigateLocation.SUPERUSER -> navigator.navigate(SuperUserScreenDestination)
                             NavigateLocation.MODULES -> navigator.navigate(ModuleScreenDestination)
                             NavigateLocation.SETTINGS -> navigator.navigate(SettingScreenDestination)
-                            null -> { /* no-op for exhaustiveness */ }
+                            else -> { /* no-op for exhaustiveness */ }
                         }
                         navigateLoc = null
                     }
