@@ -15,8 +15,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.SettingsSuggest
-import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -157,6 +158,9 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
     var moduleState by remember { mutableStateOf<ModuleRepoState>(ModuleRepoState.Loading) }
     var downloadingModuleName by remember { mutableStateOf<String?>(null) }
     var downloadedUri by remember { mutableStateOf<Uri?>(null) }
+    val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    var sortAToZ by remember { mutableStateOf(prefs.getBoolean("module_sort_a_to_z", true)) }
+    var sortZToA by remember { mutableStateOf(prefs.getBoolean("module_sort_z_to_a", false)) }
 
     DownloadListener(context) { uri ->
         downloadedUri = uri
@@ -467,13 +471,50 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                     }
                 },
                 dropdownContent = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            moduleState = ModuleRepoState.Loading
-                            loadModules()
+                    var showDropdown by remember { mutableStateOf(false) }
+                    IconButton(
+                        onClick = { showDropdown = true },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = stringResource(id = R.string.settings)
+                        )
+                        DropdownMenu(
+                            expanded = showDropdown,
+                            onDismissRequest = {
+                                showDropdown = false
+                            }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(stringResource(R.string.module_sort_a_to_z))
+                                },
+                                trailingIcon = {
+                                    Checkbox(checked = sortAToZ, onCheckedChange = null)
+                                },
+                                onClick = {
+                                    sortAToZ = !sortAToZ
+                                    sortZToA = false
+                                    prefs.edit().putBoolean("module_sort_a_to_z", sortAToZ).apply()
+                                    prefs.edit().putBoolean("module_sort_z_to_a", false).apply()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(stringResource(R.string.module_sort_z_to_a))
+                                },
+                                trailingIcon = {
+                                    Checkbox(checked = sortZToA, onCheckedChange = null)
+                                },
+                                onClick = {
+                                    sortZToA = !sortZToA
+                                    sortAToZ = false
+                                    prefs.edit().putBoolean("module_sort_z_to_a", sortZToA).apply()
+                                    prefs.edit().putBoolean("module_sort_a_to_z", false).apply()
+                                }
+                            )
                         }
-                    }) {
-                        Icon(Icons.Default.Sync, contentDescription = "Refresh")
                     }
                 },
                 scrollBehavior = scrollBehavior
@@ -504,58 +545,76 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                     }
                 }
 
-                val sortedModules = filteredModules.sortedBy { it.name.lowercase() }
+                val sortedModules = when {
+                    sortAToZ -> filteredModules.sortedBy { it.name.lowercase() }
+                    sortZToA -> filteredModules.sortedByDescending { it.name.lowercase() }
+                    else -> filteredModules
+                }
 
-                LazyColumn(
+                val isRefreshing = moduleState is ModuleRepoState.Loading
+
+                PullToRefreshBox(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(paddingValues)
-                        .let { modifier ->
-                            if (bottomBarScrollConnection != null) {
-                                modifier
-                                    .nestedScroll(bottomBarScrollConnection)
-                                    .nestedScroll(scrollBehavior.nestedScrollConnection)
-                            } else {
-                                modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-                            }
-                        },
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + navBarPadding),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(sortedModules) { module ->
-                        val isThisModuleDownloading = downloadingModuleName == module.name
-
-                        val isInstallEnabled = when {
-                            downloadingModuleName != null && !isThisModuleDownloading -> false
-                            else -> true
+                        .padding(paddingValues),
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        scope.launch {
+                            moduleState = ModuleRepoState.Loading
+                            loadModules()
                         }
-
-                        ModuleRepoCard(
-                            module = module,
-                            isInstallEnabled = isInstallEnabled,
-                            isDownloading = isThisModuleDownloading,
-                            onCardClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(module.repoUrl))
-                                context.startActivity(intent)
+                    }
+                ) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .let { modifier ->
+                                if (bottomBarScrollConnection != null) {
+                                    modifier
+                                        .nestedScroll(bottomBarScrollConnection)
+                                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                                } else {
+                                    modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                                }
                             },
-                            onDownload = { selectedModule ->
-                                downloadingModuleName = selectedModule.name
-                                scope.launch {
-                                    try {
-                                        val fileName = "${selectedModule.name.replace(" ", "_")}_${selectedModule.latestVersion.replace("/", "_")}.zip"
-                                        download(
-                                            context,
-                                            selectedModule.downloadUrl,
-                                            fileName,
-                                            "Downloading ${selectedModule.name}"
-                                        )
-                                    } catch (e: Exception) {
-                                        snackBarHost.showSnackbar("Error downloading module: ${e.message}")
-                                        downloadingModuleName = null
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + navBarPadding),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(sortedModules) { module ->
+                            val isThisModuleDownloading = downloadingModuleName == module.name
+
+                            val isInstallEnabled = when {
+                                downloadingModuleName != null && !isThisModuleDownloading -> false
+                                else -> true
+                            }
+
+                            ModuleRepoCard(
+                                module = module,
+                                isInstallEnabled = isInstallEnabled,
+                                isDownloading = isThisModuleDownloading,
+                                onCardClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(module.repoUrl))
+                                    context.startActivity(intent)
+                                },
+                                onDownload = { selectedModule ->
+                                    downloadingModuleName = selectedModule.name
+                                    scope.launch {
+                                        try {
+                                            val fileName = "${selectedModule.name.replace(" ", "_")}_${selectedModule.latestVersion.replace("/", "_")}.zip"
+                                            download(
+                                                context,
+                                                selectedModule.downloadUrl,
+                                                fileName,
+                                                "Downloading ${selectedModule.name}"
+                                            )
+                                        } catch (e: Exception) {
+                                            snackBarHost.showSnackbar("Error downloading module: ${e.message}")
+                                            downloadingModuleName = null
+                                        }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -760,7 +819,6 @@ private fun ModuleRepoCard(
 @Composable
 private fun TopBar(
     onBack: () -> Unit = {},
-    onRefresh: () -> Unit = {},
     onMetaModuleClick: () -> Unit = {},
     onManageRepos: () -> Unit = {},
     scrollBehavior: TopAppBarScrollBehavior? = null
@@ -784,9 +842,6 @@ private fun TopBar(
             }
             IconButton(onClick = onMetaModuleClick) {
                 Icon(Icons.Filled.SettingsSuggest, contentDescription = stringResource(id = R.string.module_repo_screen))
-            }
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Sync, contentDescription = "Refresh")
             }
         },
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),

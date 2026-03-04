@@ -620,10 +620,8 @@ private fun ModuleList(
             return
         }
 
-        val success = loadingDialog.withLoading {
-            withContext(Dispatchers.IO) {
-                uninstallModule(module.id)
-            }
+        val success = withContext(Dispatchers.IO) {
+            uninstallModule(module.id)
         }
 
         if (success) {
@@ -660,10 +658,8 @@ private fun ModuleList(
             return
         }
 
-        val success = loadingDialog.withLoading {
-            withContext(Dispatchers.IO) {
-                restoreModule(module.id)
-            }
+        val success = withContext(Dispatchers.IO) {
+            restoreModule(module.id)
         }
 
         if (success) {
@@ -733,10 +729,8 @@ private fun ModuleList(
                             },
                             onCheckChanged = {
                                 scope.launch {
-                                    val success = loadingDialog.withLoading {
-                                        withContext(Dispatchers.IO) {
-                                            toggleModule(module.id, !module.enabled)
-                                        }
+                                    val success = withContext(Dispatchers.IO) {
+                                        toggleModule(module.id, !module.enabled)
                                     }
                                     if (success) {
                                         viewModel.fetchModuleList()

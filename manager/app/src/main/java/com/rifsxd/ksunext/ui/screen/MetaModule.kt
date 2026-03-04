@@ -12,8 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -216,12 +216,6 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
         topBar = {
             TopBar(
                 onBack = dropUnlessResumed { navigator.popBackStack() },
-                onRefresh = {
-                    scope.launch {
-                        moduleState = MetaModuleState.Loading
-                        loadModules()
-                    }
-                },
                 scrollBehavior = scrollBehavior
             )
         },
@@ -246,61 +240,74 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
                 
                 // Sort modules alphabetically by name (A to Z)
                 val sortedModules = state.modules.sortedBy { it.name.lowercase() }
-                
-                LazyColumn(
+                val isRefreshing = moduleState is MetaModuleState.Loading
+
+                PullToRefreshBox(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(paddingValues)
-                        .let { modifier ->
-                            if (bottomBarScrollConnection != null) {
-                                modifier
-                                    .nestedScroll(bottomBarScrollConnection)
-                                    .nestedScroll(scrollBehavior.nestedScrollConnection)
-                            } else {
-                                modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-                            }
-                        },
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + navBarPadding),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(sortedModules) { module ->
-                        val isInstalled = installedIds.contains(module.id)
-                        val isThisModuleDownloading = downloadingModuleId == module.id
-                        
-                        val isInstallEnabled = when {
-                            downloadingModuleId != null && !isThisModuleDownloading -> false
-                            isInstalled -> true
-                            hasInstalledMetaModule -> false
-                            else -> true
+                        .padding(paddingValues),
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        scope.launch {
+                            moduleState = MetaModuleState.Loading
+                            loadModules()
                         }
-
-                        MetaModuleCard(
-                            module = module,
-                            isInstalled = isInstalled,
-                            isInstallEnabled = isInstallEnabled,
-                            isDownloading = isThisModuleDownloading,
-                            onCardClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(module.repoUrl))
-                                context.startActivity(intent)
+                    }
+                ) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .let { modifier ->
+                                if (bottomBarScrollConnection != null) {
+                                    modifier
+                                        .nestedScroll(bottomBarScrollConnection)
+                                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                                } else {
+                                    modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                                }
                             },
-                            onDownload = { selectedModule ->
-                                downloadingModuleId = selectedModule.id
-                                scope.launch {
-                                    try {
-                                        val fileName = "${selectedModule.name.replace(" ", "_")}_${selectedModule.latestVersion.replace("/", "_")}.zip"
-                                        download(
-                                            context,
-                                            selectedModule.downloadUrl,
-                                            fileName,
-                                            "Downloading ${selectedModule.name}"
-                                        )
-                                    } catch (e: Exception) {
-                                        snackBarHost.showSnackbar("Error downloading module: ${e.message}")
-                                        downloadingModuleId = null
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + navBarPadding),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(sortedModules) { module ->
+                            val isInstalled = installedIds.contains(module.id)
+                            val isThisModuleDownloading = downloadingModuleId == module.id
+                            
+                            val isInstallEnabled = when {
+                                downloadingModuleId != null && !isThisModuleDownloading -> false
+                                isInstalled -> true
+                                hasInstalledMetaModule -> false
+                                else -> true
+                            }
+
+                            MetaModuleCard(
+                                module = module,
+                                isInstalled = isInstalled,
+                                isInstallEnabled = isInstallEnabled,
+                                isDownloading = isThisModuleDownloading,
+                                onCardClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(module.repoUrl))
+                                    context.startActivity(intent)
+                                },
+                                onDownload = { selectedModule ->
+                                    downloadingModuleId = selectedModule.id
+                                    scope.launch {
+                                        try {
+                                            val fileName = "${selectedModule.name.replace(" ", "_")}_${selectedModule.latestVersion.replace("/", "_")}.zip"
+                                            download(
+                                                context,
+                                                selectedModule.downloadUrl,
+                                                fileName,
+                                                "Downloading ${selectedModule.name}"
+                                            )
+                                        } catch (e: Exception) {
+                                            snackBarHost.showSnackbar("Error downloading module: ${e.message}")
+                                            downloadingModuleId = null
+                                        }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -523,7 +530,6 @@ private fun MetaModuleCard(
 @Composable
 private fun TopBar(
     onBack: () -> Unit = {},
-    onRefresh: () -> Unit = {},
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     TopAppBar(
@@ -537,11 +543,6 @@ private fun TopBar(
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-            }
-        },
-        actions = {
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Sync, contentDescription = "Refresh")
             }
         },
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
