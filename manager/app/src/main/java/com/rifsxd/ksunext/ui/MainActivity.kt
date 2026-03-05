@@ -593,7 +593,7 @@ private fun BottomBar(
                                         if (isSelected) destination.iconSelected else destination.iconNotSelected,
                                         stringResource(destination.label),
                                         tint = if (isSelected) {
-                                            MaterialTheme.colorScheme.onSecondaryContainer
+                                            MaterialTheme.colorScheme.primary
                                         } else {
                                             MaterialTheme.colorScheme.onSurfaceVariant
                                         }

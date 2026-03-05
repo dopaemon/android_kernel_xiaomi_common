@@ -1095,32 +1095,12 @@ fun ModuleItem(
                                         )
                                     )
                                 }
-                                if (updateUrl.isNotEmpty() && !module.remove && !module.update) {
-                                    LabelItem(
-                                        text = stringResource(R.string.module_update_available),
-                                        style = LabelItemDefaults.style.copy(
-                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                        )
-                                    )
-                                }
-                                if (!module.remove) {
-                                    if (module.update) {
-                                        LabelItem(
-                                            text = stringResource(R.string.module_updated),
-                                            style = LabelItemDefaults.style.copy(
-                                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                            )
-                                        )
-                                    }
-                                }
                                 if (module.isMetaModule && !module.remove) {
                                     LabelItem(
                                         text = stringResource(R.string.meta_module),
                                         style = LabelItemDefaults.style.copy(
-                                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     )
                                 }
@@ -1128,8 +1108,8 @@ fun ModuleItem(
                                     LabelItem(
                                         text = stringResource(R.string.zygisk),
                                         style = LabelItemDefaults.style.copy(
-                                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     )
                                 }
@@ -1149,6 +1129,26 @@ fun ModuleItem(
                                             style = LabelItemDefaults.style.copy(
                                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                        )
+                                    }
+                                }
+                                if (updateUrl.isNotEmpty() && !module.remove && !module.update) {
+                                    LabelItem(
+                                        text = stringResource(R.string.module_update_available),
+                                        style = LabelItemDefaults.style.copy(
+                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    )
+                                }
+                                if (!module.remove) {
+                                    if (module.update) {
+                                        LabelItem(
+                                            text = stringResource(R.string.module_updated),
+                                            style = LabelItemDefaults.style.copy(
+                                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                                             )
                                         )
                                     }

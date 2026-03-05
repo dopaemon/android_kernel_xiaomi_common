@@ -684,11 +684,10 @@ private fun StatusCard(
     onClickInstall: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    var tapCount by remember { mutableStateOf(0) }
 
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = run {
-            if (ksuVersion != null) MaterialTheme.colorScheme.primaryContainer
+            if (ksuVersion != null) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.errorContainer
         })
     ) {
@@ -696,20 +695,7 @@ private fun StatusCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    tapCount++
-                    if (tapCount == 5) {
-                        Toast.makeText(context, "What are you doing? 🤔", Toast.LENGTH_SHORT).show()
-                    } else if (tapCount == 10) {
-                        Toast.makeText(context, "Never gonna give you up! 💜", Toast.LENGTH_SHORT).show()
-                        val url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        if (ksuVersion != null) {
-                            context.startActivity(intent)
-                        } else {
-                            onClickInstall()
-                        }
-                    } else if (ksuVersion == null) {
+                    if (ksuVersion == null) {
                         onClickInstall()
                     }
                 }
@@ -722,8 +708,8 @@ private fun StatusCard(
                     } else kernelVersion.getKernelType()
 
                     Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = stringResource(R.string.home_working)
+                        imageVector = Icons.Filled.Mood,
+                        contentDescription = null
                     )
                     Column(
                         modifier = Modifier.padding(start = 20.dp),
@@ -740,27 +726,38 @@ private fun StatusCard(
                                         icon = if (Natives.isSafeMode) {
                                             {
                                                 Icon(
-                                                    tint = labelStyle.contentColor,
                                                     imageVector = Icons.Filled.Security,
+                                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                                     contentDescription = null
                                                 )
                                             }
                                         } else {
-                                            null
+                                            {
+                                                Icon(
+                                                    imageVector = Icons.Filled.VerifiedUser,
+                                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    contentDescription = null
+                                                )
+                                            }
                                         },
                                         text = {
                                             Text(
                                                 text = workingMode,
-                                                style = labelStyle.textStyle.copy(color = labelStyle.contentColor),
+                                                style = labelStyle.textStyle.copy(
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                )
                                             )
-                                        }
+                                        },
+                                        style = LabelItemDefaults.style.copy(
+                                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                        )
                                     )
                                     if (isSuCompatDisabled()) {
                                         LabelItem(
                                             icon = {
                                                 Icon(
-                                                    tint = labelStyle.contentColor,
                                                     imageVector = Icons.Filled.Warning,
+                                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
                                                     contentDescription = null
                                                 )
                                             },
@@ -768,10 +765,13 @@ private fun StatusCard(
                                                 Text(
                                                     text = stringResource(R.string.sucompat_disabled),
                                                     style = labelStyle.textStyle.copy(
-                                                        color = labelStyle.contentColor,
+                                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
                                                     )
                                                 )
-                                            }
+                                            },
+                                            style = LabelItemDefaults.style.copy(
+                                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                                            )
                                         )
                                     }
                                 }
@@ -797,7 +797,7 @@ private fun StatusCard(
                 }
 
                 kernelVersion.isGKI() -> {
-                    Icon(Icons.Filled.NewReleases, stringResource(R.string.home_not_installed))
+                    Icon(Icons.Filled.AutoFixHigh, null)
                     Column(Modifier.padding(start = 20.dp)) {
                         Text(
                             text = stringResource(R.string.home_not_installed),
@@ -812,7 +812,7 @@ private fun StatusCard(
                 }
 
                 else -> {
-                    Icon(Icons.Filled.Cancel, stringResource(R.string.home_failure))
+                    Icon(Icons.Filled.MoodBad, null)
                     Column(Modifier.padding(start = 20.dp)) {
                         Text(
                             text = stringResource(R.string.home_failure),

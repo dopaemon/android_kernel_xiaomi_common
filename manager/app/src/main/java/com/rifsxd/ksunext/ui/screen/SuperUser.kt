@@ -240,8 +240,8 @@ private fun AppItem(
                             LabelItem(
                                 text = "DEFAULT",
                                 style = LabelItemDefaults.style.copy(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                                 )
                             )
                         }

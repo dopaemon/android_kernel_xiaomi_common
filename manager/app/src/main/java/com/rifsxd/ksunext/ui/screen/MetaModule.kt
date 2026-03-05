@@ -451,18 +451,20 @@ private fun MetaModuleCard(
                                 icon = {
                                     Icon(
                                         imageVector = Icons.Filled.Check,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                         contentDescription = null
                                     )
                                 },
                                 text = {
                                     Text(
                                         text = stringResource(R.string.installed),
-                                        style = LabelItemDefaults.style.textStyle
+                                        style = LabelItemDefaults.style.textStyle.copy(
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        )
                                     )
                                 },
                                 style = LabelItemDefaults.style.copy(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
                                 )
                             )
                         }
@@ -475,18 +477,20 @@ private fun MetaModuleCard(
                                 icon = {
                                     Icon(
                                         imageVector = Icons.Filled.Star,
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
                                         contentDescription = null
                                     )
                                 },
                                 text = {
                                     Text(
                                         text = starsText,
-                                        style = LabelItemDefaults.style.textStyle
+                                        style = LabelItemDefaults.style.textStyle.copy(
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        )
                                     )
                                 },
                                 style = LabelItemDefaults.style.copy(
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
                                 )
                             )
                         }

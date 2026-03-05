@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dergoogler.mmrl.ui.component.LabelItem
+import com.dergoogler.mmrl.ui.component.LabelItemDefaults
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.TemplateEditorScreenDestination
@@ -206,13 +207,39 @@ private fun TemplateItem(
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    LabelItem(text = "UID: ${template.uid}")
-                    LabelItem(text = "GID: ${template.gid}")
-                    LabelItem(text = template.context)
+                    LabelItem(
+                        text = "UID: ${template.uid}"
+                    )
+                    LabelItem(
+                        text = "GID: ${template.gid}",
+                        style = LabelItemDefaults.style.copy(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    )
+                    LabelItem(
+                        text = template.context,
+                        style = LabelItemDefaults.style.copy(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    )
                     if (template.local) {
-                        LabelItem(text = "local")
+                        LabelItem(
+                            text = "local",
+                            style = LabelItemDefaults.style.copy(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer 
+                            )
+                        )
                     } else {
-                        LabelItem(text = "remote")
+                        LabelItem(
+                            text = "remote",
+                            style = LabelItemDefaults.style.copy(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        )
                     }
                 }
             }

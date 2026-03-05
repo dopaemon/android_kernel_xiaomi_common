@@ -754,18 +754,20 @@ private fun ModuleRepoCard(
                                 icon = {
                                     Icon(
                                         imageVector = Icons.Filled.Star,
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
                                         contentDescription = null
                                     )
                                 },
                                 text = {
                                     Text(
                                         text = starsText,
-                                        style = LabelItemDefaults.style.textStyle
+                                        style = LabelItemDefaults.style.textStyle.copy(
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        )
                                     )
                                 },
                                 style = LabelItemDefaults.style.copy(
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
                                 )
                             )
                         }
