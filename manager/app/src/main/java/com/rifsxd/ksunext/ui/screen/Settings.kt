@@ -186,75 +186,75 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                         }
 
                         if (suCompatStatus == "supported") {
-                            var isSuDisabled by rememberSaveable {
-                                mutableStateOf(!Natives.isSuEnabled())
+                            var isSuEnabled by rememberSaveable {
+                                mutableStateOf(Natives.isSuEnabled())
                             }
 
                             SwitchItem(
                                 icon = Icons.Filled.RemoveModerator,
-                                title = stringResource(R.string.settings_disable_su),
-                                summary = stringResource(R.string.settings_disable_su_summary),
-                                checked = isSuDisabled,
+                                title = stringResource(R.string.settings_enable_su),
+                                summary = stringResource(R.string.settings_enable_su_summary),
+                                checked = isSuEnabled,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp)),
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                             ) { checked ->
-                                val shouldEnable = !checked
+                                val shouldEnable = checked
                                 val prefsLocal = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
                                 if (Natives.setSuEnabled(shouldEnable)) {
                                     execKsud("feature save", true)
                                     prefsLocal.edit { putInt("su_compat_mode", if (shouldEnable) 0 else 2) }
-                                    isSuDisabled = !shouldEnable
+                                    isSuEnabled = shouldEnable
                                 }
                             }
                         }
 
                         if (kernelUmountStatus == "supported") {
-                            var isKernelUmountDisabled by rememberSaveable {
-                                mutableStateOf(!Natives.isKernelUmountEnabled())
+                            var isKernelUmountEnabled by rememberSaveable {
+                                mutableStateOf(Natives.isKernelUmountEnabled())
                             }
                             SwitchItem(
                                 icon = Icons.Filled.RemoveCircle,
-                                title = stringResource(id = R.string.settings_disable_kernel_umount),
-                                summary = stringResource(id = R.string.settings_disable_kernel_umount_summary),
-                                checked = isKernelUmountDisabled,
+                                title = stringResource(id = R.string.settings_enable_kernel_umount),
+                                summary = stringResource(id = R.string.settings_enable_kernel_umount_summary),
+                                checked = isKernelUmountEnabled,
                                 modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp)),
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                             ) { checked ->
-                                val shouldEnable = !checked
+                                val shouldEnable = checked
                                 val prefsLocal = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
                                 if (Natives.setKernelUmountEnabled(shouldEnable)) {
                                     execKsud("feature save", true)
                                     prefsLocal.edit { putInt("kernel_umount_mode", if (shouldEnable) 0 else 2) }
-                                    isKernelUmountDisabled = !shouldEnable
+                                    isKernelUmountEnabled = shouldEnable
                                 }
                             }
                         }
 
                         if (avcSpoofStatus == "supported") {
-                            var isAvcSpoofDisabled by rememberSaveable {
-                                mutableStateOf(!Natives.isAvcSpoofEnabled())
+                            var isAvcSpoofEnabled by rememberSaveable {
+                                mutableStateOf(Natives.isAvcSpoofEnabled())
                             }
 
                             SwitchItem(
                                 icon = Icons.Filled.Shield,
-                                title = stringResource(id = R.string.settings_disable_avc_spoof),
-                                summary = stringResource(id = R.string.settings_disable_avc_spoof_summary),
-                                checked = isAvcSpoofDisabled,
+                                title = stringResource(id = R.string.settings_enable_avc_spoof),
+                                summary = stringResource(id = R.string.settings_enable_avc_spoof_summary),
+                                checked = isAvcSpoofEnabled,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp)),
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                             ) { checked ->
-                                val shouldEnable = !checked
+                                val shouldEnable = checked
                                 val prefsLocal = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
                                 if (Natives.setAvcSpoofEnabled(shouldEnable)) {
                                     execKsud("feature save", true)
                                     prefsLocal.edit { putInt("avc_spoof_mode", if (shouldEnable) 0 else 2) }
-                                    isAvcSpoofDisabled = !shouldEnable
+                                    isAvcSpoofEnabled = shouldEnable
                                 }
                             }
                         }
