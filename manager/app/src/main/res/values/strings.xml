@@ -248,4 +248,6 @@
     <string name="no_repositories_configured">No repositories configured. Add one below.</string>
     <string name="add_repository">Add Repository</string>
     <string name="reset_to_default">Reset to Default</string>
+    <string name="supported">Supported</string>
+    <string name="home_susfs_version">SuSFS version</string>
 </resources>

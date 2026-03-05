@@ -37,6 +37,10 @@ private fun getKsuDaemonPath(): String {
     return ksuApp.applicationInfo.nativeLibraryDir + File.separator + "libksud.so"
 }
 
+private val suSFSDaemonPath by lazy {
+    "${ksuApp.applicationInfo.nativeLibraryDir}${File.separator}libsusfsd.so"
+}
+
 data class FlashResult(val code: Int, val err: String, val showReboot: Boolean) {
     constructor(result: Shell.Result, showReboot: Boolean) : this(result.code, result.err.joinToString("\n"), showReboot)
     constructor(result: Shell.Result) : this(result, result.isSuccess)
@@ -710,6 +714,22 @@ fun restartActivity(context: Context) {
     if (context is Activity) {
         context.finish()
     }
+}
+
+fun getSuSFS(): String {
+    return ShellUtils.fastCmd("$suSFSDaemonPath support")
+}
+
+fun getSuSFSVersion(): String {
+    return ShellUtils.fastCmd("$suSFSDaemonPath version")
+}
+
+fun getSuSFSVariant(): String {
+    return ShellUtils.fastCmd("$suSFSDaemonPath variant")
+}
+
+fun getSuSFSFeatures(): String {
+    return ShellUtils.fastCmd("$suSFSDaemonPath features")
 }
 
 fun setAppProfileTemplate(id: String, template: String): Boolean {
