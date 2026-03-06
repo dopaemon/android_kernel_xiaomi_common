@@ -250,4 +250,5 @@
     <string name="reset_to_default">Reset to Default</string>
     <string name="supported">Supported</string>
     <string name="home_susfs_version">SuSFS version</string>
+    <string name="manage_repositories">Manage Repositories</string>
 </resources>

@@ -265,7 +265,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
     if (showRepoManagerDialog) {
         AlertDialog(
             onDismissRequest = { showRepoManagerDialog = false },
-            title = { Text("Manage Repositories") },
+            title = { Text(stringResource(R.string.manage_repositories)) },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // Non-free repo toggle
