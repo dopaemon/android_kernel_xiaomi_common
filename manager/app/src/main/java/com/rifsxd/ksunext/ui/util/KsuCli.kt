@@ -598,6 +598,47 @@ fun moduleBackup(): Boolean {
 
     val cpResult = ShellUtils.fastCmdResult("cp $tarPath $internalBackupPath")
     if (!cpResult) return false
+    // copy via SuFile streams instead of shell cp
+    try {
+        SuFile(tarPath).newInputStream().use { input ->
+            SuFile(internalBackupPath).newOutputStream().use { out ->
+                input.copyTo(out)
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return false
+    }
+
+    SuFile(tarPath).delete()
+
+    return true
+}
+
+fun moduleBackupToExternal(destPath: String): Boolean {
+    if (SuFile("/data/adb/modules").listFiles()?.isEmpty() ?: true) return false
+
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+
+    val tarName = "modules_backup_$timestamp.tar"
+    val tarPath = "/data/local/tmp/$tarName"
+
+    val tarCmd = "$BUSYBOX tar -cpf $tarPath -C /data/adb/modules $(ls /data/adb/modules)"
+    val tarResult = ShellUtils.fastCmdResult(tarCmd)
+    if (!tarResult) return false
+
+    // copy to external destination path using SuFile streams
+    try {
+        SuFile(tarPath).newInputStream().use { input ->
+            SuFile(destPath).newOutputStream().use { out ->
+                input.copyTo(out)
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        SuFile(tarPath).delete()
+        return false
+    }
 
     SuFile(tarPath).delete()
 
@@ -629,8 +670,45 @@ fun allowlistBackup(): Boolean {
 
     if (!SuFile(internalBackupDir).mkdirs()) return false
 
-    val cpResult = ShellUtils.fastCmdResult("cp $tarPath $internalBackupPath")
-    if (!cpResult) return false
+    try {
+        SuFile(tarPath).newInputStream().use { input ->
+            SuFile(internalBackupPath).newOutputStream().use { out ->
+                input.copyTo(out)
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return false
+    }
+
+    SuFile(tarPath).delete()
+
+    return true
+}
+
+fun allowlistBackupToExternal(destPath: String): Boolean {
+    if (!SuFile("/data/adb/ksu/.allowlist").exists()) return false
+
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+
+    val tarName = "allowlist_backup_$timestamp.tar"
+    val tarPath = "/data/local/tmp/$tarName"
+
+    val tarCmd = "$BUSYBOX tar -cpf $tarPath -C /data/adb/ksu .allowlist"
+    val tarResult = ShellUtils.fastCmdResult(tarCmd)
+    if (!tarResult) return false
+
+    try {
+        SuFile(tarPath).newInputStream().use { input ->
+            SuFile(destPath).newOutputStream().use { out ->
+                input.copyTo(out)
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        SuFile(tarPath).delete()
+        return false
+    }
 
     SuFile(tarPath).delete()
 
@@ -646,6 +724,68 @@ fun allowlistRestore(): Boolean {
     // Extract the tar to /data/adb/ksu (restores .allowlist folder with permissions)
     val extractCmd = "$BUSYBOX tar -xpf $tarPath -C /data/adb/ksu"
     return ShellUtils.fastCmdResult(extractCmd)
+}
+
+fun moduleRestoreFromExternalPath(srcPath: String): Boolean {
+    if (srcPath.isEmpty()) return false
+    // If the srcPath is not under /data, copy it to a root-accessible tmp location first
+    val extractSrc = if (srcPath.startsWith("/data/")) {
+        srcPath
+    } else {
+        val tmpName = File(srcPath).name
+        val tmpPath = "/data/local/tmp/$tmpName"
+        try {
+            SuFile.open(srcPath).newInputStream().use { input ->
+                SuFile(tmpPath).newOutputStream().use { out ->
+                    input.copyTo(out)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+        tmpPath
+    }
+
+    val extractCmd = "$BUSYBOX tar -xpf '$extractSrc' -C /data/adb/modules_update"
+    val res = ShellUtils.fastCmdResult(extractCmd)
+
+    // if we copied to tmp, remove it
+    if (!extractSrc.startsWith("/data/")) {
+        try { SuFile(extractSrc).delete() } catch (_: Throwable) {}
+    }
+
+    return res
+}
+
+fun allowlistRestoreFromExternalPath(srcPath: String): Boolean {
+    if (srcPath.isEmpty()) return false
+    val extractSrc = if (srcPath.startsWith("/data/")) {
+        srcPath
+    } else {
+        val tmpName = File(srcPath).name
+        val tmpPath = "/data/local/tmp/$tmpName"
+        try {
+            SuFile.open(srcPath).newInputStream().use { input ->
+                SuFile(tmpPath).newOutputStream().use { out ->
+                    input.copyTo(out)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+        tmpPath
+    }
+
+    val extractCmd = "$BUSYBOX tar -xpf '$extractSrc' -C /data/adb/ksu"
+    val res = ShellUtils.fastCmdResult(extractCmd)
+
+    if (!extractSrc.startsWith("/data/")) {
+        try { SuFile(extractSrc).delete() } catch (_: Throwable) {}
+    }
+
+    return res
 }
 
 fun moduleMigration(): Boolean {

@@ -11,6 +11,15 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import android.app.Activity.RESULT_OK
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import android.os.Environment
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -30,8 +39,6 @@ import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
 import com.rifsxd.ksunext.Natives
 import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.ksuApp
-import com.rifsxd.ksunext.ui.component.ConfirmResult
-import com.rifsxd.ksunext.ui.component.rememberConfirmDialog
 import com.rifsxd.ksunext.ui.component.rememberLoadingDialog
 import com.rifsxd.ksunext.ui.util.*
 import kotlinx.coroutines.launch
@@ -65,8 +72,90 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { paddingValues ->
         val loadingDialog = rememberLoadingDialog()
-        val restoreDialog = rememberConfirmDialog()
-        val backupDialog = rememberConfirmDialog()
+
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+
+        // remember last requested filename for create-document launched backups
+        val lastRequestedBackupName = rememberSaveable { mutableStateOf("") }
+
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+
+        var showRebootDialog by remember { mutableStateOf(false) }
+        // track which restore type user selected
+        val lastRestoreType = rememberSaveable { mutableStateOf("module") }
+        // track which backup type user selected
+        val lastBackupType = rememberSaveable { mutableStateOf("module") }
+
+        // CreateDocument launcher for backups (use file manager Intent like ModuleScreen)
+        val createBackupLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode != RESULT_OK) return@rememberLauncherForActivityResult
+            val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+            scope.launch {
+                loadingDialog.withLoading {
+                    // create a temporary file under Downloads and ask ksu to copy there
+                    val tmpPath = File(downloadsDir, lastRequestedBackupName.value).absolutePath
+                    val ok = if (lastBackupType.value == "allowlist") {
+                        allowlistBackupToExternal(tmpPath)
+                    } else {
+                        moduleBackupToExternal(tmpPath)
+                    }
+                    if (ok) {
+                        // copy tmpPath -> user Uri
+                        try {
+                            FileInputStream(tmpPath).use { input ->
+                                context.contentResolver.openOutputStream(uri)?.use { out ->
+                                    input.copyTo(out)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        // delete temporary file
+                        File(tmpPath).delete()
+                    }
+                }
+            }
+        }
+
+        // OpenDocument launcher for restores (use file manager Intent like ModuleScreen)
+        val openRestoreLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode != RESULT_OK) return@rememberLauncherForActivityResult
+            val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+            scope.launch {
+                loadingDialog.withLoading {
+                    // copy the selected uri to Downloads and ask ksu to restore from there
+                    val name = uri.getFileName(context)
+                    val tmpFile = File(downloadsDir, name)
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            FileOutputStream(tmpFile).use { out ->
+                                input.copyTo(out)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    // choose correct restore function based on selected type
+                    val resOk = if (lastRestoreType.value == "allowlist") {
+                        allowlistRestoreFromExternalPath(tmpFile.absolutePath)
+                    } else {
+                        moduleRestoreFromExternalPath(tmpFile.absolutePath)
+                    }
+                    // if module restore succeeded, show reboot dialog
+                    if (resOk && lastRestoreType.value == "module") {
+                        showRebootDialog = true
+                    }
+                    tmpFile.delete()
+                }
+            }
+        }
+
+        
 
         Column(
             modifier = Modifier
@@ -93,10 +182,6 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
                 .verticalScroll(rememberScrollState())
         ) {
 
-            val context = LocalContext.current
-            val scope = rememberCoroutineScope()
-
-            var showRebootDialog by remember { mutableStateOf(false) }
 
             if (showRebootDialog) {
                 AlertDialog(
@@ -138,14 +223,19 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
                     fontWeight = FontWeight.SemiBold,
                 ) },
                 modifier = Modifier.clickable {
-                    scope.launch {
-                        val result = backupDialog.awaitConfirm(title = moduleBackup, content = backupMessage)
-                        if (result == ConfirmResult.Confirmed) {
-                            loadingDialog.withLoading {
-                                moduleBackup()
+                        scope.launch {
+                            // prepare filename and launch file manager create document
+                            val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
+                            val suggested = "modules_backup_$timestamp.tar"
+                            lastRequestedBackupName.value = suggested
+                            lastBackupType.value = "module"
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/x-tar"
+                                putExtra(Intent.EXTRA_TITLE, suggested)
                             }
+                            createBackupLauncher.launch(intent)
                         }
-                    }
                 }
             )
 
@@ -196,13 +286,12 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
                 modifier = Modifier.clickable(
                     onClick = {
                         scope.launch {
-                            val result = restoreDialog.awaitConfirm(title = moduleRestore, content = restoreMessage)
-                            if (result == ConfirmResult.Confirmed) {
-                                loadingDialog.withLoading {
-                                    moduleRestore()
-                                    showRebootDialog = true
-                                }
+                            lastRestoreType.value = "module"
+                            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/x-tar"
                             }
+                            openRestoreLauncher.launch(intent)
                         }
                     }
                 )
@@ -225,14 +314,18 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
                     fontWeight = FontWeight.SemiBold,
                 ) },
                 modifier = Modifier.clickable {
-                    scope.launch {
-                        val result = backupDialog.awaitConfirm(title = allowlistBackup, content = allowlistbackupMessage)
-                        if (result == ConfirmResult.Confirmed) {
-                            loadingDialog.withLoading {
-                                allowlistBackup()
+                        scope.launch {
+                            val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
+                            val suggested = "allowlist_backup_$timestamp.tar"
+                            lastRequestedBackupName.value = suggested
+                            lastBackupType.value = "allowlist"
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/x-tar"
+                                putExtra(Intent.EXTRA_TITLE, suggested)
                             }
+                            createBackupLauncher.launch(intent)
                         }
-                    }
                 }
             )
 
@@ -251,14 +344,14 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
                     fontWeight = FontWeight.SemiBold,
                 ) },
                 modifier = Modifier.clickable {
-                    scope.launch {
-                        val result = restoreDialog.awaitConfirm(title = allowlistRestore, content = allowlistrestoreMessage)
-                        if (result == ConfirmResult.Confirmed) {
-                            loadingDialog.withLoading {
-                                allowlistRestore()
+                        scope.launch {
+                            lastRestoreType.value = "allowlist"
+                            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/x-tar"
                             }
+                            openRestoreLauncher.launch(intent)
                         }
-                    }
                 }
             )
         }
