@@ -125,7 +125,7 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
         return withContext(Dispatchers.IO) {
             try {
                 val conn = URL(jsonUrl).openConnection() as java.net.HttpURLConnection
-                conn.setRequestProperty("User-Agent", "KernelSU/${BuildConfig.VERSION_CODE}")
+                conn.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
                 val text = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
                 conn.disconnect()
 
@@ -608,7 +608,7 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfo? {
         try {
             val stars = try {
                 val htmlConn = URL(repoUrl).openConnection() as java.net.HttpURLConnection
-                htmlConn.setRequestProperty("User-Agent", "KernelSU/${BuildConfig.VERSION_CODE}")
+                htmlConn.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
                 htmlConn.setRequestProperty("Accept", "text/html")
                 val html = BufferedReader(InputStreamReader(htmlConn.inputStream)).use { it.readText() }
                 htmlConn.disconnect()
@@ -624,7 +624,7 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfo? {
             val latestUrl = "$repoUrl/releases/latest"
             val connection = URL(latestUrl).openConnection() as java.net.HttpURLConnection
             connection.instanceFollowRedirects = false
-            connection.setRequestProperty("User-Agent", "KernelSU/${BuildConfig.VERSION_CODE}")
+            connection.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
 
             val redirectUrl = connection.getHeaderField("Location")
             connection.disconnect()
@@ -641,7 +641,7 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfo? {
 
             val releasePageUrl = "$repoUrl/releases/expanded_assets/$tagMatch"
             val pageConnection = URL(releasePageUrl).openConnection()
-            pageConnection.setRequestProperty("User-Agent", "KernelSU/${BuildConfig.VERSION_CODE}")
+            pageConnection.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
 
             val pageHtml = BufferedReader(InputStreamReader(pageConnection.getInputStream())).use {
                 it.readText()
