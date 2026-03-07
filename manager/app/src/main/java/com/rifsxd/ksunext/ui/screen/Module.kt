@@ -1217,7 +1217,7 @@ fun ModuleItem(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             Switch(
-                                enabled = !module.update,
+                                enabled = !module.update && !module.remove,
                                 checked = module.enabled,
                                 onCheckedChange = onCheckChanged,
                                 interactionSource = if (!module.hasWebUi) interactionSource else null
