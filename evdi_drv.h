@@ -261,6 +261,7 @@ struct evdi_display {
 	uint32_t width;
 	uint32_t height;
 	uint32_t refresh_rate;
+	uint32_t generation;
 };
 
 struct evdi_file_priv {
@@ -375,7 +376,8 @@ void evdi_inflight_discard_owner(struct evdi_device *evdi, struct drm_file *owne
 int evdi_ioctl_request_update(struct drm_device *dev, void *data, struct drm_file *file);
 int evdi_ioctl_gbm_get_buff(struct drm_device *dev, void *data, struct drm_file *file);
 int evdi_ioctl_gbm_del_buff(struct drm_device *dev, void *data, struct drm_file *file);
-int evdi_queue_swap_event(struct evdi_device *evdi, int id, int display_id, struct drm_file *owner);
+int evdi_queue_swap_event(struct evdi_device *evdi, int id, int display_id, u32 generation,
+			struct drm_file *owner);
 int evdi_queue_destroy_event(struct evdi_device *evdi, int id, struct drm_file *owner);
 int evdi_ioctl_vsync(struct drm_device *dev, void *data, struct drm_file *file);
 
@@ -397,6 +399,7 @@ struct evdi_inflight_req;
 struct evdi_inflight_req *evdi_inflight_req_alloc(struct evdi_device *evdi);
 void *evdi_small_payload_alloc(gfp_t gfp);
 void evdi_small_payload_free(void *ptr);
+void evdi_swap_mailbox_invalidate_display(struct evdi_device *evdi, int display_id);
 
 /* evdi_gem.c */
 struct evdi_gem_object *evdi_gem_alloc_object(struct drm_device *dev, size_t size);
@@ -444,6 +447,8 @@ struct evdi_framebuffer {
 	bool active;
 	int gralloc_buf_id;
 	struct drm_file *owner;
+	int bound_display_id;
+	u32 bound_generation;
 };
 
 /* evdi_connector.c */

@@ -396,10 +396,23 @@ static inline void evdi_flush_work(struct evdi_device *evdi)
 	wake_up_interruptible(&evdi->events.wait_queue);
 }
 
+static inline void evdi_display_bump_generation(struct evdi_display *st)
+{
+	st->generation++;
+	if (unlikely(st->generation == 0))
+		st->generation = 1;
+}
+
 int evdi_ioctl_connect(struct drm_device *dev, void *data, struct drm_file *file)
 {
 	struct evdi_device *evdi = dev->dev_private;
 	struct drm_evdi_connect *cmd = data;
+	struct drm_file *stale_owner = NULL;
+	struct evdi_display *st;
+	bool geometry_changed = false;
+	bool need_mailbox_invalidate = false;
+	bool client_changed = false;
+	int i, any = 0;
 
 	EVDI_PERF_INC64(&evdi_perf.ioctl_calls[0]);
 
@@ -407,16 +420,20 @@ int evdi_ioctl_connect(struct drm_device *dev, void *data, struct drm_file *file
 		if (cmd->display_id >= LINDROID_MAX_CONNECTORS)
 			return -EINVAL;
 		evdi_flush_work(evdi);
+		stale_owner = READ_ONCE(evdi->drm_client);
+
 		mutex_lock(&evdi->config_mutex);
-		evdi->displays[cmd->display_id].connected = false;
+		st = &evdi->displays[cmd->display_id];
+		st->connected = false;
+		evdi_display_bump_generation(st);
 		mutex_unlock(&evdi->config_mutex);
-		{
-			int i, any = 0;
-			for (i = 0; i < LINDROID_MAX_CONNECTORS; i++)
-				any |= evdi->displays[i].connected;
-			if (!any)
-				WRITE_ONCE(evdi->drm_client, NULL);
-		}
+
+		evdi_swap_mailbox_invalidate_display(evdi, cmd->display_id);
+
+		for (i = 0; i < LINDROID_MAX_CONNECTORS; i++)
+			any |= evdi->displays[i].connected;
+		if (!any)
+			WRITE_ONCE(evdi->drm_client, NULL);
 		evdi_smp_wmb();
 
 		evdi_info("Device %d disconnected", evdi->dev_index);
@@ -430,6 +447,8 @@ int evdi_ioctl_connect(struct drm_device *dev, void *data, struct drm_file *file
 
 	if (evdi->drm_client && evdi->drm_client != file) {
 		evdi_warn("Device %d forcefully disconnecting previous client", evdi->dev_index);
+		need_mailbox_invalidate = true;
+		client_changed = true;
 		atomic_set(&evdi->events.stopping, 1);
 		evdi_smp_wmb();
 		wake_up_interruptible(&evdi->events.wait_queue);
@@ -438,12 +457,35 @@ int evdi_ioctl_connect(struct drm_device *dev, void *data, struct drm_file *file
 	if (cmd->display_id >= LINDROID_MAX_CONNECTORS)
 		return -EINVAL;
 
+	stale_owner = READ_ONCE(evdi->drm_client);
+	if (!stale_owner)
+		stale_owner = file;
+
 	mutex_lock(&evdi->config_mutex);
-	evdi->displays[cmd->display_id].connected = true;
-	evdi->displays[cmd->display_id].width = cmd->width;
-	evdi->displays[cmd->display_id].height = cmd->height;
-	evdi->displays[cmd->display_id].refresh_rate = cmd->refresh_rate;
+	st = &evdi->displays[cmd->display_id];
+	geometry_changed = (st->width != cmd->width) ||
+				(st->height != cmd->height);
+
+	if (client_changed || geometry_changed)
+		evdi_display_bump_generation(st);
+
+	st->connected = true;
+	st->width = cmd->width;
+	st->height = cmd->height;
+	st->refresh_rate = cmd->refresh_rate;
+
+	if (client_changed || geometry_changed)
+		need_mailbox_invalidate = true;
+
 	mutex_unlock(&evdi->config_mutex);
+
+	if (need_mailbox_invalidate) {
+		evdi_swap_mailbox_invalidate_display(evdi, cmd->display_id);
+		if (stale_owner && stale_owner != file) {
+			evdi_event_cleanup_file(evdi, stale_owner);
+			evdi_inflight_discard_owner(evdi, stale_owner);
+		}
+	}
 
 	evdi_smp_wmb();
 	WRITE_ONCE(evdi->drm_client, file);
@@ -1037,11 +1079,12 @@ static int evdi_queue_int_event(struct evdi_device *evdi,
 	return 0;
 }
 
-int evdi_queue_swap_event(struct evdi_device *evdi,
-	int id, int display_id, struct drm_file *owner)
+int evdi_queue_swap_event(struct evdi_device *evdi, int id, int display_id,
+			  u32 generation, struct drm_file *owner)
 {
 	struct drm_file *client;
 	struct evdi_swap_mailbox *mb;
+	u32 current_generation;
 	u64 payload;
 	int poll_id;
 
@@ -1053,6 +1096,13 @@ int evdi_queue_swap_event(struct evdi_device *evdi,
 
 	if (unlikely(atomic_read(&evdi->events.stopping)))
 		return -ENODEV;
+
+	if (unlikely(!READ_ONCE(evdi->displays[display_id].connected)))
+		return -ENODEV;
+
+	current_generation = READ_ONCE(evdi->displays[display_id].generation);
+	if (unlikely(current_generation != generation))
+		return -ESTALE;
 
 	client = READ_ONCE(evdi->drm_client);
 

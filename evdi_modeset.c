@@ -54,6 +54,10 @@ static void evdi_pipe_update(struct drm_simple_display_pipe *pipe,
 	struct drm_pending_vblank_event *event = NULL;
 	struct evdi_framebuffer *efb;
 	unsigned long flags;
+	u32 generation;
+	u32 bound_generation;
+	bool connected;
+	int bound_display_id;
 	int slot;
 
 	slot = evdi_connector_slot(evdi, pipe->connector);
@@ -75,10 +79,32 @@ static void evdi_pipe_update(struct drm_simple_display_pipe *pipe,
 	if (!state || !fb || unlikely(!READ_ONCE(evdi->drm_client)))
 		return;
 
+	mutex_lock(&evdi->config_mutex);
+	connected = evdi->displays[slot].connected;
+	generation = evdi->displays[slot].generation;
+	mutex_unlock(&evdi->config_mutex);
+
+	if (!connected)
+		return;
+
 	efb = to_evdi_fb(fb);
 
-	if (efb && efb->owner && efb->gralloc_buf_id)
-		evdi_queue_swap_event(evdi, efb->gralloc_buf_id, slot, efb->owner);
+	if (!efb || !efb->owner || !efb->gralloc_buf_id)
+		return;
+
+	bound_display_id = READ_ONCE(efb->bound_display_id);
+	bound_generation = READ_ONCE(efb->bound_generation);
+
+	if (unlikely(bound_display_id < 0 || bound_generation == 0)) {
+		WRITE_ONCE(efb->bound_display_id, slot);
+		WRITE_ONCE(efb->bound_generation, generation);
+	} else if (bound_display_id != slot ||
+		   bound_generation != generation) {
+		return;
+	}
+
+	(void)evdi_queue_swap_event(evdi, efb->gralloc_buf_id, slot,
+				    generation, efb->owner);
 }
 
 #if !EVDI_HAVE_ATOMIC_HELPERS

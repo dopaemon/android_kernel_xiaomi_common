@@ -179,6 +179,8 @@ struct drm_framebuffer *evdi_fb_user_fb_create(struct drm_device *dev,
 	efb->owner = file;
 	efb->active = true;
 	efb->gralloc_buf_id = mode_cmd->handles[0];
+	efb->bound_display_id = -1;
+	efb->bound_generation = 0;
 
 	ret = evdi_fb_init_core(dev, efb, mode_cmd);
 	if (ret) {

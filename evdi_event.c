@@ -221,6 +221,26 @@ int evdi_event_init(struct evdi_device *evdi)
 	return 0;
 }
 
+void evdi_swap_mailbox_invalidate_display(struct evdi_device *evdi, int display_id)
+{
+	struct evdi_swap_mailbox *mb;
+
+	if (!evdi)
+		return;
+	if (display_id < 0 || display_id >= LINDROID_MAX_CONNECTORS)
+		return;
+
+	mb = &evdi->swap_mailbox[display_id];
+
+	/* Mark as unstable, clear owner/payload, then mark stable again */
+	atomic64_inc(&mb->seq);
+	WRITE_ONCE(mb->owner, NULL);
+	atomic_set(&mb->poll_id, 0);
+	atomic64_set(&mb->payload, 0);
+	evdi_smp_wmb();
+	atomic64_inc(&mb->seq);
+}
+
 void evdi_event_cleanup(struct evdi_device *evdi)
 {
 	struct evdi_event *event, *next;
@@ -235,12 +255,7 @@ void evdi_event_cleanup(struct evdi_device *evdi)
 	evdi_smp_wmb();
 
 	for (d = 0; d < LINDROID_MAX_CONNECTORS; d++) {
-		atomic64_inc(&evdi->swap_mailbox[d].seq);
-		WRITE_ONCE(evdi->swap_mailbox[d].owner, NULL);
-		atomic_set(&evdi->swap_mailbox[d].poll_id, 0);
-		atomic64_set(&evdi->swap_mailbox[d].payload, 0);
-		evdi_smp_wmb();
-		atomic64_inc(&evdi->swap_mailbox[d].seq);
+		evdi_swap_mailbox_invalidate_display(evdi, d);
 	}
 
 	if (evdi->percpu_inflight) {
@@ -630,13 +645,7 @@ void evdi_event_cleanup_file(struct evdi_device *evdi, struct drm_file *file)
 	for (d = 0; d < LINDROID_MAX_CONNECTORS; d++) {
 		if (READ_ONCE(evdi->swap_mailbox[d].owner) != file)
 			continue;
-
-		atomic64_inc(&evdi->swap_mailbox[d].seq);
-		WRITE_ONCE(evdi->swap_mailbox[d].owner, NULL);
-		atomic_set(&evdi->swap_mailbox[d].poll_id, 0);
-		atomic64_set(&evdi->swap_mailbox[d].payload, 0);
-		evdi_smp_wmb();
-		atomic64_inc(&evdi->swap_mailbox[d].seq);
+		evdi_swap_mailbox_invalidate_display(evdi, d);
 	}
 
 	if (atomic_read(&evdi->events.queue_size) == 0 &&
