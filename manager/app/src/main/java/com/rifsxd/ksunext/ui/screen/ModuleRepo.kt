@@ -375,7 +375,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
             },
             confirmButton = {
                 TextButton(onClick = { showRepoManagerDialog = false }) {
-                    Text("Done")
+                    Text(stringResource(R.string.close))
                 }
             }
         )
