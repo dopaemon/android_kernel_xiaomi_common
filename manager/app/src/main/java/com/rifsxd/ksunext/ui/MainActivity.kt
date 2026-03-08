@@ -443,22 +443,29 @@ private fun BottomBar(
     val isManager = Natives.isManager
     val fullFeatured = isManager && !Natives.requireNewKernel() && rootAvailable()
 
-    // Get current selected index with visible destinations
     val visibleDestinations = remember(fullFeatured) {
         BottomBarDestination.entries.filter { fullFeatured || !it.rootRequired }
     }
-    // Use the current back stack entry's route as the single source of truth
+
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
-    val selectedIndex = visibleDestinations.indexOfFirst {
-        it.direction.route == currentRoute
+
+    val isOnBackStack = visibleDestinations.map { destination ->
+        navController.isRouteOnBackStackAsState(destination.direction).value
     }
-    
-    // Update last valid selection when on a navbar destination
+
+    // Prefer an exact current-route match; fall back to whichever tab is on the back stack.
+    val selectedIndex = run {
+        val exactMatch = visibleDestinations.indexOfFirst { it.direction.route == currentRoute }
+        if (exactMatch != -1) exactMatch
+        else isOnBackStack.indexOfLast { it } // last tab whose route is somewhere on the stack
+    }
+
+    // Persist the selection so the indicator doesn't jump while the navbar is animating out/in.
     if (selectedIndex != -1) {
         lastValidSelection.value = selectedIndex
     }
-    
+
     // Use current selection if on navbar, otherwise use last valid selection
     val effectiveSelectedIndex = if (selectedIndex != -1) selectedIndex else lastValidSelection.value
     
@@ -579,12 +586,11 @@ private fun BottomBar(
                                             // Always recreate the destination to avoid keeping saved state
                                             // which reduces memory usage by closing old destinations.
                                             navigator.navigate(destination.direction) {
-                                                popUpTo(destination.direction) {
-                                                    inclusive = true
-                                                    saveState = false
+                                                popUpTo(NavGraphs.root.startRoute) {
+                                                    saveState = true
                                                 }
                                                 launchSingleTop = true
-                                                restoreState = false
+                                                restoreState = true
                                             }
                                         },
                                     contentAlignment = Alignment.Center
