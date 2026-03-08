@@ -56,6 +56,7 @@ import com.dergoogler.mmrl.ui.component.LabelItemDefaults
 import com.dergoogler.mmrl.ui.component.text.TextRow
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ModuleScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.SettingScreenDestination
@@ -71,6 +72,7 @@ import com.rifsxd.ksunext.ui.util.restartActivity
 import com.rifsxd.ksunext.ui.util.module.LatestVersionInfo
 import com.rifsxd.ksunext.ui.viewmodel.ModuleViewModel
 import com.rifsxd.ksunext.ui.LocalScrollState 
+import com.rifsxd.ksunext.ui.screen.BottomBarDestination
 import com.rifsxd.ksunext.ui.trackScroll 
 import com.rifsxd.ksunext.ui.rememberScrollConnection
 import kotlinx.coroutines.Dispatchers
@@ -152,6 +154,9 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 navigator.navigate(InstallScreenDestination)
             }
 
+            val homeDestination = BottomBarDestination.entries.firstOrNull()
+            val startRoute = homeDestination?.direction?.route
+
             if (fullFeatured) {
                 Row(
                     modifier = Modifier
@@ -160,14 +165,31 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Box(modifier = Modifier.weight(1f)) {
-                        SuperuserCard(onClick = {
-                            navigator.navigate(SuperUserScreenDestination)
-                        })
+                        SuperuserCard(
+                            onClick = {
+                                navigator.navigate(SuperUserScreenDestination) {
+                                    popUpTo(NavGraphs.root.startRoute) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
                     }
+
                     Box(modifier = Modifier.weight(1f)) {
-                        ModuleCard(onClick = {
-                            navigator.navigate(ModuleScreenDestination)
-                        })
+                        ModuleCard(
+                            onClick = {
+                                navigator.navigate(ModuleScreenDestination) {
+                                    popUpTo(NavGraphs.root.startRoute) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
                     }
                 }
             }
