@@ -76,7 +76,9 @@ fun SettingScreen(navigator: DestinationsNavigator) {
     val isManager = Natives.isManager
     val ksuVersion = if (isManager) Natives.version else null
 
-    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 112.dp
+    val scrollState = LocalScrollState.current
+    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
 
     Scaffold(
         topBar = {
@@ -86,7 +88,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
         },
         snackbarHost = { SnackbarHost(snackBarHost, modifier = Modifier.padding(bottom = navBarPadding)) },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-    ) { paddingValues ->
+    ) { innerPadding ->
         // Bottom bar scroll tracking
         val bottomBarScrollState = LocalScrollState.current
         val bottomBarScrollConnection = if (bottomBarScrollState != null) {
@@ -104,7 +106,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
 
         Column(
             modifier = Modifier
-                .padding(paddingValues)
+                .padding(innerPadding)
                 .let { modifier ->
                     if (bottomBarScrollConnection != null) {
                         modifier
@@ -116,7 +118,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                 }
                 .verticalScroll(rememberScrollState())
                 .padding(top = 16.dp)
-                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 116.dp)
+                .padding(bottom = navBarPadding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -566,6 +568,8 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                     )
                 }
             }
+
+            Spacer(Modifier)
         }
     }
 }

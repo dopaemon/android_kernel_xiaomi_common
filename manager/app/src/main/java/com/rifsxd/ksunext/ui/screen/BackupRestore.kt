@@ -164,6 +164,10 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val snackBarHost = LocalSnackbarHost.current
 
+    val scrollState = LocalScrollState.current
+    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+
     Scaffold(
         topBar = {
             TopBar(
@@ -175,7 +179,7 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
             SnackbarHost(
                 hostState = snackBarHost,
                 modifier = Modifier.padding(
-                    bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 112.dp
+                    bottom = navBarPadding
                 )
             )
         },

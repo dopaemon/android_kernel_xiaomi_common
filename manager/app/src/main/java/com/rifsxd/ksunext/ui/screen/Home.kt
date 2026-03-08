@@ -97,6 +97,10 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     
     // Get scroll state for bottom bar tracking
     val bottomBarScrollState = LocalScrollState.current
+
+    val scrollState = LocalScrollState.current
+    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
     
     // Create scroll connection for bottom bar
     val bottomBarScrollConnection = if (bottomBarScrollState != null) {
@@ -136,7 +140,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 }
                 .verticalScroll(rememberScrollState())
                 .padding(top = 16.dp)
-                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 112.dp)
+                .padding(bottom = navBarPadding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

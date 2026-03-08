@@ -72,6 +72,10 @@ fun TemplateEditorScreen(
         )
     } else null
 
+    val scrollState = LocalScrollState.current
+    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+
     BackHandler {
         navigator.navigateBack(result = !readOnly)
     }
@@ -130,7 +134,7 @@ fun TemplateEditorScreen(
                     }
                 }
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 112.dp)
+                .padding(bottom = navBarPadding)
                 .pointerInteropFilter {
                     // disable click and ripple if readOnly
                     readOnly
