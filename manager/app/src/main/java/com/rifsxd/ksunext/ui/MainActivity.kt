@@ -296,85 +296,87 @@ class MainActivity : ComponentActivity() {
                                         val targetRoute = targetState.destination.route
                                         val initialRoute = initialState.destination.route
 
-                                        // Bottom-bar left/right sliding when both are bottom routes
                                         val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
                                         val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
 
-                                        if (targetIndex != -1 && initialIndex != -1) {
-                                            // Slide in from right when moving forward, left when moving backward
-                                            val offsetSign = if (targetIndex > initialIndex) 1 else -1
-                                            slideInHorizontally(initialOffsetX = { it * offsetSign }) + fadeIn(animationSpec = tween(260))
-                                        } else {
-                                            // If navigating from a non-bottom (detail) page to a bottom-nav page,
-                                            // slide in from the left so the bottom page feels like a main destination.
-                                            if (targetRoute in bottomBarRoutes && initialRoute !in bottomBarRoutes) {
-                                                slideInHorizontally(initialOffsetX = { -it / 4 }) + fadeIn()
-                                            } else if (targetRoute !in bottomBarRoutes) {
-                                                // Default detail page enter: slide in from the right
-                                                slideInHorizontally(initialOffsetX = { it })
-                                            } else {
-                                                // Otherwise (switching to/from non-bottom pages), use fade in
-                                                fadeIn(animationSpec = tween(340))
+                                        when {
+                                            // Bottom bar → bottom bar: slide based on index direction
+                                            targetIndex != -1 && initialIndex != -1 -> {
+                                                val offsetSign = if (targetIndex > initialIndex) 1 else -1
+                                                slideInHorizontally(initialOffsetX = { it * offsetSign }, animationSpec = tween(300))
                                             }
+                                            // Detail page → bottom bar: slide in from left
+                                            targetRoute in bottomBarRoutes && initialRoute !in bottomBarRoutes -> {
+                                                slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300))
+                                            }
+                                            // Bottom bar → detail page: slide in from right
+                                            else -> slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300))
                                         }
                                     }
 
-                                override val exitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-                                    val targetRoute = targetState.destination.route
-                                    val initialRoute = initialState.destination.route
+                                    override val exitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+                                        val targetRoute = targetState.destination.route
+                                        val initialRoute = initialState.destination.route
 
-                                    val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
-                                    val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+                                        val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
+                                        val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
 
-                                    // Bottom-bar horizontal slide between bottom pages
-                                    if (targetIndex != -1 && initialIndex != -1) {
-                                        val offsetSign = if (targetIndex > initialIndex) -1 else 1
-                                        slideOutHorizontally(targetOffsetX = { it * offsetSign }) + fadeOut(animationSpec = tween(260))
-                                    } else if (initialRoute in bottomBarRoutes && targetRoute !in bottomBarRoutes) {
-                                        // Navigating from bottom nav to detail -> slide out to left subtly
-                                        slideOutHorizontally(targetOffsetX = { -it / 4 }) + fadeOut()
-                                    } else {
-                                        // Default fade out
-                                        fadeOut(animationSpec = tween(340))
+                                        when {
+                                            // Bottom bar → bottom bar: slide out opposite direction
+                                            targetIndex != -1 && initialIndex != -1 -> {
+                                                val offsetSign = if (targetIndex > initialIndex) -1 else 1
+                                                slideOutHorizontally(targetOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                            }
+                                            // Bottom bar → detail page: slide out to left
+                                            initialRoute in bottomBarRoutes && targetRoute !in bottomBarRoutes -> {
+                                                slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300))
+                                            }
+                                            // Default
+                                            else -> slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300))
+                                        }
                                     }
-                                }
 
-                                override val popEnterTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-                                    val targetRoute = targetState.destination.route
-                                    val initialRoute = initialState.destination.route
+                                    override val popEnterTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+                                        val targetRoute = targetState.destination.route
+                                        val initialRoute = initialState.destination.route
 
-                                    val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
-                                    val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+                                        val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
+                                        val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
 
-                                    if (targetIndex != -1 && initialIndex != -1) {
-                                        // When popping between bottom pages, slide in from left/right depending on direction
-                                        val offsetSign = if (targetIndex > initialIndex) 1 else -1
-                                        slideInHorizontally(initialOffsetX = { it * offsetSign / 4 }) + fadeIn()
-                                    } else if (targetRoute in bottomBarRoutes) {
-                                        slideInHorizontally(initialOffsetX = { -it / 4 }) + fadeIn()
-                                    } else {
-                                        fadeIn(animationSpec = tween(340))
+                                        when {
+                                            // Bottom bar → bottom bar pop: mirror of exit
+                                            targetIndex != -1 && initialIndex != -1 -> {
+                                                val offsetSign = if (targetIndex > initialIndex) 1 else -1
+                                                slideInHorizontally(initialOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                            }
+                                            // Returning from detail → bottom bar: slide in from left
+                                            targetRoute in bottomBarRoutes -> {
+                                                slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300))
+                                            }
+                                            else -> slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300))
+                                        }
                                     }
-                                }
 
-                                override val popExitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-                                    val targetRoute = targetState.destination.route
-                                    val initialRoute = initialState.destination.route
+                                    override val popExitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+                                        val targetRoute = targetState.destination.route
+                                        val initialRoute = initialState.destination.route
 
-                                    val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
-                                    val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+                                        val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
+                                        val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
 
-                                    if (initialIndex != -1 && targetIndex != -1) {
-                                        // Popping between bottom pages -> slide out horizontally
-                                        val offsetSign = if (targetIndex > initialIndex) -1 else 1
-                                        slideOutHorizontally(targetOffsetX = { it * offsetSign / 4 }) + fadeOut()
-                                    } else if (initialRoute !in bottomBarRoutes) {
-                                        // Returning from a detail page -> scale out + fade
-                                        scaleOut(targetScale = 0.9f) + fadeOut()
-                                    } else {
-                                        fadeOut(animationSpec = tween(340))
+                                        when {
+                                            // Bottom bar → bottom bar pop
+                                            targetIndex != -1 && initialIndex != -1 -> {
+                                                val offsetSign = if (targetIndex > initialIndex) -1 else 1
+                                                slideOutHorizontally(targetOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                            }
+                                            // Detail page closing: slide out to right
+                                            initialRoute !in bottomBarRoutes -> {
+                                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
+                                            }
+                                            else -> slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
+                                        }
                                     }
-                                }
                                 }
                             )
                         }
