@@ -40,7 +40,6 @@
 #include <drm/drm_ioctl.h>
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
-#include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 #elif KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
 #include <drm/drm_drv.h>
@@ -48,6 +47,10 @@
 #include <drm/drm_gem.h>
 #else
 #include <drm/drmP.h>
+#endif
+
+#if KERNEL_VERSION(5, 1, 0) <= LINUX_VERSION_CODE
+#include <drm/drm_probe_helper.h>
 #endif
 
 #include <drm/drm_crtc.h>

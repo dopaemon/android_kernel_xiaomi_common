@@ -241,23 +241,11 @@ static struct evdi_inflight_req *evdi_inflight_take(struct evdi_device *evdi, in
 		return NULL;
 
 #ifdef EVDI_HAVE_XARRAY
-#ifdef EVDI_HAVE_ATOMIC_CMPXCHG_RELAXED
 	req = xa_load(&evdi->inflight_xa, id);
 	if (req) {
 		if (xa_cmpxchg(&evdi->inflight_xa, id, req, NULL, GFP_NOWAIT) != req)
 			req = NULL;
 	}
-#else
-	{
-		unsigned long flags;
-		xa_lock_irqsave(&evdi->inflight_xa, flags);
-		req = xa_load(&evdi->inflight_xa, id);
-		if (req)
-			xa_erase(&evdi->inflight_xa, id);
-
-		xa_unlock_irqrestore(&evdi->inflight_xa, flags);
-	}
-#endif
 #else
 	spin_lock(&evdi->inflight_lock);
 	req = idr_find(&evdi->inflight_idr, id);
@@ -285,22 +273,9 @@ void evdi_inflight_discard_owner(struct evdi_device *evdi, struct drm_file *owne
 			if (req->owner != owner)
 				continue;
 
-#ifdef EVDI_HAVE_ATOMIC_CMPXCHG_RELAXED
 			if (xa_cmpxchg(&evdi->inflight_xa,
 				       xas.xa_index, req, NULL, GFP_NOWAIT) != req)
 				continue;
-#else
-			if (xa_lock_irqsave(&evdi->inflight_xa, flags),
-			    xa_for_each(&evdi->inflight_xa, idx, entry),
-			    req == entry)
-			{
-				req = xa_erase(&evdi->inflight_xa, xas.xa_index);
-				xa_unlock_irqrestore(&evdi->inflight_xa, flags);
-			} else {
-				xa_unlock_irqrestore(&evdi->inflight_xa, flags);
-				continue;
-			}
-#endif
 			rcu_read_unlock();
 			complete_all(&req->done);
 			evdi_inflight_req_put(req);

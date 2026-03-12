@@ -146,7 +146,7 @@ int evdi_modeset_init(struct drm_device *dev)
 	int ret = 0;
 	int i;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 	ret = drm_mode_config_init(dev);
 	if (ret) {
 		evdi_err("Failed to initialize mode config: %d", ret);
