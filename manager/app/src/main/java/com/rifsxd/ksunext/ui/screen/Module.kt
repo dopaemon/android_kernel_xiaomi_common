@@ -689,14 +689,12 @@ private fun ModuleList(
             modifier = modifier
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = remember {
-                PaddingValues(
-                    start = 16.dp,
-                    top = 16.dp,
-                    end = 16.dp,
-                    bottom = 16.dp + navBarPadding
-                )
-            }
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = 16.dp,
+                end = 16.dp,
+                bottom = 16.dp + navBarPadding
+            )
         ) {
             when {
                 viewModel.moduleList.isEmpty() -> {
