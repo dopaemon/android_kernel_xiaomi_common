@@ -304,17 +304,21 @@ static int evdi_pin_pages(struct evdi_gem_object *obj)
 		return -EINVAL;
 
 	/* Fast path if pinned */
-	if (likely(atomic_read(&obj->pages_pin_count) > 0)) {
-		atomic_inc(&obj->pages_pin_count);
+	if (likely(atomic_inc_not_zero(&obj->pages_pin_count))) {
+		evdi_smp_rmb();
 		return 0;
 	}
 
 	/* Slow path */
 	mutex_lock(&obj->pages_lock);
-	if (atomic_inc_return(&obj->pages_pin_count) == 1) {
+	if (atomic_read(&obj->pages_pin_count) == 0) {
 		ret = evdi_gem_get_pages(obj, GFP_KERNEL);
-		if (ret)
-			atomic_dec(&obj->pages_pin_count);
+		if (!ret) {
+			evdi_smp_wmb();
+			atomic_set(&obj->pages_pin_count, 1);
+		}
+	} else {
+		atomic_inc(&obj->pages_pin_count);
 	}
 	mutex_unlock(&obj->pages_lock);
 
@@ -323,11 +327,12 @@ static int evdi_pin_pages(struct evdi_gem_object *obj)
 
 static void evdi_unpin_pages(struct evdi_gem_object *obj)
 {
-	int new_cnt = atomic_dec_return(&obj->pages_pin_count);
+	int new_cnt;
 
 	if (unlikely(!obj))
 		return;
 
+	new_cnt = atomic_dec_return(&obj->pages_pin_count);
 	if (unlikely(new_cnt == 0)) {
 		mutex_lock(&obj->pages_lock);
 		if (atomic_read(&obj->pages_pin_count) == 0)
