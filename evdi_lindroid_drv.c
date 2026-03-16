@@ -68,6 +68,9 @@ static struct drm_driver evdi_driver = {
 #if EVDI_HAVE_ATOMIC_HELPERS
 			  DRIVER_ATOMIC |
 #endif
+#ifdef DRIVER_PRIME
+			  DRIVER_PRIME |
+#endif
 			  DRIVER_GEM,
 
 	.dumb_create = evdi_dumb_create,
@@ -96,14 +99,6 @@ static struct drm_driver evdi_driver = {
 	.major = DRIVER_MAJOR,
 	.minor = DRIVER_MINOR,
 	.patchlevel = DRIVER_PATCHLEVEL,
-#ifdef DRIVER_PRIME
-	.driver_features = DRIVER_MODESET | DRIVER_GEM | DRIVER_PRIME
-#else
-	.driver_features = DRIVER_MODESET | DRIVER_GEM
-#endif
-#if EVDI_HAVE_ATOMIC_HELPERS
-		| DRIVER_ATOMIC
-#endif
 };
 
 static int evdi_driver_open(struct drm_device *dev, struct drm_file *file)
