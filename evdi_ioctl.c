@@ -130,41 +130,16 @@ static inline struct evdi_inflight_req *evdi_inflight_alloc(struct evdi_device *
 						     int *out_id)
 {
 	struct evdi_inflight_req *req;
-	struct evdi_percpu_inflight *percpu_req;
-	bool from_percpu = false;
-	int id, i;
+	int id;
 
-	percpu_req = get_cpu_ptr(evdi->percpu_inflight);
-	if (likely(percpu_req)) {
-		prefetchw(&percpu_req->req[0]);
-		prefetchw(&percpu_req->req[1]);
-		for (i = 0; i < 2; i++) {
-			if (atomic_cmpxchg(&percpu_req->in_use[i], 0, 1) == 0) {
-				req = &percpu_req->req[i];
-				from_percpu = true;
-				memset(req, 0, sizeof(*req));
-				kref_init(&req->refcount);
-				init_completion(&req->done);
-				atomic_set(&req->freed, 0);
-				atomic_set(&req->from_percpu, 1);
-				req->percpu_slot = (u8)i;
-				req->reply.get_buf.gralloc_buf.gralloc = NULL;
-				EVDI_PERF_INC64(&evdi_perf.inflight_percpu_hits);
-				break;
-			}
-		}
-	}
-	put_cpu_ptr(percpu_req);
-
-	// fallback to mempool
-	if (!from_percpu) {
-		req = evdi_inflight_req_alloc(evdi);
-		if (likely(req))
-			EVDI_PERF_INC64(&evdi_perf.inflight_percpu_misses);
-	}
-
+	req = evdi_inflight_req_alloc(evdi);
 	if (unlikely(!req))
 		return NULL;
+
+	if (atomic_read(&req->from_percpu))
+		EVDI_PERF_INC64(&evdi_perf.inflight_percpu_hits);
+	else
+		EVDI_PERF_INC64(&evdi_perf.inflight_percpu_misses);
 
 	req->type = type;
 	req->owner = owner;
