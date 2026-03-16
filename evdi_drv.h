@@ -310,6 +310,7 @@ struct evdi_device {
 		struct evdi_event_pool pool;
 		atomic_t wake_pending;
 		atomic_t queue_size;
+		atomic_t mailbox_wake_pending;
 		atomic_t next_poll_id;
 		atomic_t stopping;
 		atomic64_t events_queued;
@@ -587,6 +588,28 @@ static __always_inline void evdi_wakeup_pollers(struct evdi_device *evdi)
 	if (atomic_cmpxchg(&evdi->events.wake_pending, 0, 1) != 0)
 		return;
 #endif
+	evdi_smp_wmb();
+	if (likely(waitqueue_active(&evdi->events.wait_queue)))
+		wake_up_interruptible(&evdi->events.wait_queue);
+	EVDI_PERF_INC64(&evdi_perf.wakeup_count);
+}
+
+static __always_inline void evdi_wakeup_mailbox_pollers(struct evdi_device *evdi)
+{
+	if (unlikely(!evdi))
+		return;
+
+	if (unlikely(!waitqueue_active(&evdi->events.wait_queue)))
+		return;
+
+#ifdef EVDI_HAVE_ATOMIC_CMPXCHG_RELAXED
+	if (atomic_cmpxchg_relaxed(&evdi->events.mailbox_wake_pending, 0, 1) != 0)
+		return;
+#else
+	if (atomic_cmpxchg(&evdi->events.mailbox_wake_pending, 0, 1) != 0)
+		return;
+#endif
+
 	evdi_smp_wmb();
 	if (likely(waitqueue_active(&evdi->events.wait_queue)))
 		wake_up_interruptible(&evdi->events.wait_queue);

@@ -1076,10 +1076,8 @@ int evdi_queue_swap_event(struct evdi_device *evdi, int id, int display_id,
 
 	EVDI_PERF_INC64(&evdi_perf.swap_updates);
 
-	// Swap events do not use the standard event queue! Do not use evdi_wakeup_pollers
-	// here or set wake pending!
-	evdi_smp_wmb();
-	wake_up_interruptible(&evdi->events.wait_queue);
+	// Swap events do not use the standard event queue, so use a mailbox-specific helper
+	evdi_wakeup_mailbox_pollers(evdi);
 
 	return 0;
 }

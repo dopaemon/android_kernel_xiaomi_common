@@ -199,6 +199,7 @@ int evdi_event_init(struct evdi_device *evdi)
 	evdi->events.head = NULL;
 	evdi->events.tail = NULL;
 	atomic_set(&evdi->events.queue_size, 0);
+	atomic_set(&evdi->events.mailbox_wake_pending, 0);
 	atomic_set(&evdi->events.next_poll_id, 1);
 	atomic_set(&evdi->events.stopping, 0);
 
@@ -270,6 +271,7 @@ void evdi_event_cleanup(struct evdi_device *evdi)
 	WRITE_ONCE(evdi->events.head, NULL);
 	WRITE_ONCE(evdi->events.tail, NULL);
 	atomic_set(&evdi->events.queue_size, 0);
+	atomic_set(&evdi->events.mailbox_wake_pending, 0);
 	atomic_set(&evdi->events.wake_pending, 0);
 	spin_unlock(&evdi->events.lock);
 
@@ -735,11 +737,14 @@ int evdi_event_wait(struct evdi_device *evdi, struct drm_file *file)
 	for (;;) {
 		prepare_to_wait(&evdi->events.wait_queue, &wait, TASK_INTERRUPTIBLE);
 
-		if (atomic_read_acquire(&evdi->events.wake_pending)) {
+		if (atomic_read_acquire(&evdi->events.wake_pending) ||
+		    atomic_read_acquire(&evdi->events.mailbox_wake_pending)) {
 #ifdef EVDI_HAVE_ATOMIC_CMPXCHG_RELAXED
 			atomic_xchg_relaxed(&evdi->events.wake_pending, 0);
+			atomic_xchg_relaxed(&evdi->events.mailbox_wake_pending, 0);
 #else
 			atomic_set(&evdi->events.wake_pending, 0);
+			atomic_set(&evdi->events.mailbox_wake_pending, 0);
 #endif
 		}
 
