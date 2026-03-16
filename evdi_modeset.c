@@ -79,10 +79,8 @@ static void evdi_pipe_update(struct drm_simple_display_pipe *pipe,
 	if (!state || !fb || unlikely(!READ_ONCE(evdi->drm_client)))
 		return;
 
-	mutex_lock(&evdi->config_mutex);
-	connected = evdi->displays[slot].connected;
-	generation = evdi->displays[slot].generation;
-	mutex_unlock(&evdi->config_mutex);
+	connected = READ_ONCE(evdi->displays[slot].connected);
+	generation = READ_ONCE(evdi->displays[slot].generation);
 
 	if (!connected)
 		return;
