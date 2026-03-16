@@ -550,39 +550,59 @@ static inline struct evdi_event *evdi_event_pop_head_locked(struct evdi_device *
 	return e;
 }
 
-static inline void evdi_event_drain_lockfree(struct evdi_device *evdi)
+static inline void evdi_event_append_list_locked(struct evdi_device *evdi,
+						 struct evdi_event *first,
+						 struct evdi_event *last)
 {
-	struct llist_node *lst, *node;
-	struct evdi_event *first = NULL, *last = NULL;
-
-	lst = llist_del_all(&evdi->events.lockfree_head);
-	if (!lst)
-		return;
-
-	lst = llist_reverse_order(lst);
-	for (node = lst; node; node = node->next) {
-		struct evdi_event *e = llist_entry(node, struct evdi_event, llist);
-		e->next = NULL;
-		if (!first)
-			first = e;
-		else
-			last->next = e;
-
-		last = e;
-	}
-
 	if (!first)
 		return;
 
-	spin_lock(&evdi->events.lock);
-	if (!evdi->events.head) {
+	if (!READ_ONCE(evdi->events.head)) {
 		WRITE_ONCE(evdi->events.head, first);
 		WRITE_ONCE(evdi->events.tail, last);
 	} else {
 		WRITE_ONCE(evdi->events.tail->next, first);
 		WRITE_ONCE(evdi->events.tail, last);
 	}
-	spin_unlock(&evdi->events.lock);
+}
+
+static inline struct evdi_event *evdi_event_take_from_lockfree(struct evdi_device *evdi)
+{
+	struct llist_node *lst, *node;
+	struct evdi_event *event = NULL;
+	struct evdi_event *first = NULL, *last = NULL;
+
+	lst = llist_del_all(&evdi->events.lockfree_head);
+	if (!lst)
+		return NULL;
+
+	lst = llist_reverse_order(lst);
+	for (node = lst; node; node = node->next) {
+		struct evdi_event *e = llist_entry(node, struct evdi_event, llist);
+		e->next = NULL;
+		if (!event) {
+			event = e;
+			continue;
+		}
+
+		if (!first) {
+			first = e;
+			last = e;
+		} else {
+			last->next = e;
+			last = e;
+		}
+	}
+
+	if (!event)
+		return NULL;
+
+	if (first) {
+		spin_lock(&evdi->events.lock);
+		evdi_event_append_list_locked(evdi, first, last);
+		spin_unlock(&evdi->events.lock);
+	}
+	return event;
 }
 
 struct evdi_event *evdi_event_dequeue(struct evdi_device *evdi)
@@ -610,7 +630,9 @@ struct evdi_event *evdi_event_dequeue(struct evdi_device *evdi)
 			goto found_one;
 	}
 
-	evdi_event_drain_lockfree(evdi);
+	event = evdi_event_take_from_lockfree(evdi);
+	if (event)
+		goto found_one;
 	spin_lock(&evdi->events.lock);
 	event = evdi_event_pop_head_locked(evdi);
 	spin_unlock(&evdi->events.lock);
