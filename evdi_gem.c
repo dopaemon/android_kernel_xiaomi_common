@@ -366,8 +366,6 @@ struct drm_gem_object *evdi_gem_prime_import(struct drm_device *dev,
 	return &obj->base;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-
 static int evdi_export_id_as_fd(int id, uint32_t flags, int *out_fd)
 {
 	struct file *f;
@@ -412,6 +410,7 @@ static int evdi_read_id_from_fd(int fd_u32, int *out_id)
 	ssize_t rd;
 	int id;
 	struct file *memfd_file;
+	int ret = 0;
 
 	if (!out_id)
 		return -EINVAL;
@@ -420,14 +419,19 @@ static int evdi_read_id_from_fd(int fd_u32, int *out_id)
 
 	memfd_file = fget(fd_u32);
 	if (!memfd_file)
-		return -EINVAL;
+		return -EBADF;
 
 	rd = kernel_read(memfd_file, &id, sizeof(id), &pos);
 	if (rd != sizeof(id))
-		return -EINVAL;
-	evdi_debug("Got handle id: %d from fd: %d\n", id, fd_u32);
-	*out_id = id;
-	return 0;
+		ret = -EINVAL;
+	else
+		*out_id = id;
+
+	if (!ret)
+		evdi_debug("Got handle id: %d from fd: %d\n", id, fd_u32);
+
+	fput(memfd_file);
+	return ret;
 }
 
 int evdi_prime_handle_to_fd(struct drm_device *dev,
@@ -456,7 +460,6 @@ int evdi_prime_fd_to_handle(struct drm_device *dev,
 	*handle = (uint32_t)id;
 	return 0;
 }
-#endif /* KVER >= 5.11 */
 
 void evdi_gem_vunmap(struct evdi_gem_object *obj)
 {
