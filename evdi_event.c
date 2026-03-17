@@ -738,6 +738,24 @@ void evdi_event_cleanup_file(struct evdi_device *evdi, struct drm_file *file)
 			   lf_removed + sp_removed, lf_removed, sp_removed);
 }
 
+static __always_inline int evdi_event_wait_ready(struct evdi_device *evdi,
+						 struct drm_file *file)
+{
+	if (atomic_read(&evdi->events.queue_size) > 0)
+		return 0;
+
+	if (evdi_swap_file_pending(file))
+		return 0;
+
+	if (atomic_read(&evdi->events.stopping))
+		return -ENODEV;
+
+	if (signal_pending(current))
+		return -ERESTARTSYS;
+
+	return 1;
+}
+
 int evdi_event_wait(struct evdi_device *evdi, struct drm_file *file)
 {
 	DEFINE_WAIT(wait);
@@ -746,6 +764,9 @@ int evdi_event_wait(struct evdi_device *evdi, struct drm_file *file)
 	EVDI_PERF_INC64(&evdi_perf.poll_cycles);
 
 	for (;;) {
+		ret = evdi_event_wait_ready(evdi, file);
+		if (ret != 1)
+			break;
 		prepare_to_wait(&evdi->events.wait_queue, &wait, TASK_INTERRUPTIBLE);
 
 		if (atomic_read_acquire(&evdi->events.wake_pending) ||
@@ -760,25 +781,9 @@ int evdi_event_wait(struct evdi_device *evdi, struct drm_file *file)
 		}
 
 		evdi_smp_mb();
-		if (atomic_read(&evdi->events.queue_size) > 0) {
-			ret = 0;
+		ret = evdi_event_wait_ready(evdi, file);
+		if (ret != 1)
 			break;
-		}
-
-		if (evdi_swap_file_pending(file)) {
-			ret = 0;
-			break;
-		}
-
-		if (atomic_read(&evdi->events.stopping)) {
-			ret = -ENODEV;
-			break;
-		}
-
-		if (signal_pending(current)) {
-			ret = -ERESTARTSYS;
-			break;
-		}
 		schedule();
 	}
 	finish_wait(&evdi->events.wait_queue, &wait);
