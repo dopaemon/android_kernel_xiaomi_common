@@ -550,12 +550,20 @@ static inline void evdi_event_append_list_locked(struct evdi_device *evdi,
 static inline struct evdi_event *evdi_event_take_from_lockfree(struct evdi_device *evdi)
 {
 	struct llist_node *lst, *node;
+	struct evdi_event *e;
 	struct evdi_event *event = NULL;
 	struct evdi_event *first = NULL, *last = NULL;
 
 	lst = llist_del_all(&evdi->events.lockfree_head);
 	if (!lst)
 		return NULL;
+
+	// Single event fast path
+	if (unlikely(!lst->next)) {
+		e = llist_entry(lst, struct evdi_event, llist);
+		e->next = NULL;
+		return e;
+	}
 
 	lst = llist_reverse_order(lst);
 	for (node = lst; node; node = node->next) {
