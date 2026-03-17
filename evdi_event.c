@@ -25,33 +25,6 @@ struct evdi_perf_counters evdi_perf;
 
 static DEFINE_PER_CPU(int, evdi_inflight_last_slot);
 
-static __always_inline bool evdi_swap_pending_for_file(struct evdi_device *evdi,
-						       struct drm_file *file)
-{
-	struct evdi_file_priv *priv;
-	u64 seq;
-	int i;
-
-	if (unlikely(!evdi || !file))
-		return false;
-
-	priv = file->driver_priv;
-	if (unlikely(!priv))
-		return false;
-
-	for (i = 0; i < LINDROID_MAX_CONNECTORS; i++) {
-		if (READ_ONCE(evdi->swap_mailbox[i].owner) != file)
-			continue;
-		seq = (u64)atomic64_read(&evdi->swap_mailbox[i].seq);
-		if (seq & 1)
-			continue;
-		if (seq != priv->last_swap_seq[i])
-			return true;
-	}
-
-	return false;
-}
-
 static void *evdi_inflight_req_pool_alloc(gfp_t gfp_mask, void *pool_data)
 {
 	return kvzalloc(sizeof(struct evdi_inflight_req), gfp_mask);
@@ -224,6 +197,8 @@ int evdi_event_init(struct evdi_device *evdi)
 
 void evdi_swap_mailbox_invalidate_display(struct evdi_device *evdi, int display_id)
 {
+	struct drm_file *old_owner;
+	struct evdi_file_priv *priv;
 	struct evdi_swap_mailbox *mb;
 
 	if (!evdi)
@@ -233,6 +208,8 @@ void evdi_swap_mailbox_invalidate_display(struct evdi_device *evdi, int display_
 
 	mb = &evdi->swap_mailbox[display_id];
 
+	old_owner = READ_ONCE(mb->owner);
+
 	/* Mark as unstable, clear owner/payload, then mark stable again */
 	atomic64_inc(&mb->seq);
 	WRITE_ONCE(mb->owner, NULL);
@@ -240,6 +217,10 @@ void evdi_swap_mailbox_invalidate_display(struct evdi_device *evdi, int display_
 	atomic64_set(&mb->payload, 0);
 	evdi_smp_wmb();
 	atomic64_inc(&mb->seq);
+
+	priv = old_owner ? old_owner->driver_priv : NULL;
+	if (priv)
+		clear_bit(display_id, &priv->pending_swaps);
 }
 
 void evdi_event_cleanup(struct evdi_device *evdi)
@@ -657,6 +638,7 @@ void evdi_event_cleanup_file(struct evdi_device *evdi, struct drm_file *file)
 	struct evdi_event *new_head = NULL, *new_tail = NULL;
 	struct evdi_event **restore_events = NULL;
 	struct llist_node *llnode, *next_node = NULL;
+	struct evdi_file_priv *priv;
 	int lf_removed = 0;
 	int sp_removed = 0;
 	int restore_count = 0;
@@ -665,6 +647,13 @@ void evdi_event_cleanup_file(struct evdi_device *evdi, struct drm_file *file)
 
 	if (unlikely(!evdi || !file))
 		return;
+
+	priv = file->driver_priv;
+	if (priv) {
+		WRITE_ONCE(priv->pending_swaps, 0);
+		memset(priv->last_swap_seq, 0, sizeof(priv->last_swap_seq));
+		priv->swap_rr = 0;
+	}
 
 	for (d = 0; d < LINDROID_MAX_CONNECTORS; d++) {
 		if (READ_ONCE(evdi->swap_mailbox[d].owner) != file)
@@ -776,7 +765,7 @@ int evdi_event_wait(struct evdi_device *evdi, struct drm_file *file)
 			break;
 		}
 
-		if (evdi_swap_pending_for_file(evdi, file)) {
+		if (evdi_swap_file_pending(file)) {
 			ret = 0;
 			break;
 		}

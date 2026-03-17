@@ -23,6 +23,7 @@
 #include <linux/fs.h>
 #include <linux/wait.h>
 #include <linux/poll.h>
+#include <linux/bitops.h>
 #include <linux/jiffies.h>
 #include <linux/kref.h>
 #include <linux/spinlock.h>
@@ -282,6 +283,7 @@ struct evdi_file_priv {
 #endif
 	u64 last_swap_seq[LINDROID_MAX_CONNECTORS];
 	u8 swap_rr;
+	unsigned long pending_swaps;
 };
 
 struct evdi_device {
@@ -469,6 +471,16 @@ static __always_inline bool evdi_likely_connected(struct evdi_device *evdi, int 
 static __always_inline bool evdi_likely_not_stopping(struct evdi_device *evdi)
 {
 	return likely(!atomic_read(&evdi->events.stopping));
+}
+
+static __always_inline bool evdi_swap_file_pending(struct drm_file *file)
+{
+	struct evdi_file_priv *priv;
+
+	priv = file ? file->driver_priv : NULL;
+	if (unlikely(!priv))
+		return false;
+	return READ_ONCE(priv->pending_swaps) != 0;
 }
 
 /* Memory barriers */

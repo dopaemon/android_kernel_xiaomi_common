@@ -122,6 +122,7 @@ static int evdi_driver_open(struct drm_device *dev, struct drm_file *file)
 	idr_init(&priv->buffers);
 #endif
 	priv->swap_rr = 0;
+	priv->pending_swaps = 0;
 	file->driver_priv = priv;
 
 	return 0;
@@ -157,6 +158,9 @@ static void evdi_driver_postclose(struct drm_device *dev, struct drm_file *file)
 #else
 		idr_destroy(&priv->buffers);
 #endif
+		WRITE_ONCE(priv->pending_swaps, 0);
+		memset(priv->last_swap_seq, 0, sizeof(priv->last_swap_seq));
+		priv->swap_rr = 0;
 		mutex_unlock(&priv->lock);
 
 		kfree(priv);

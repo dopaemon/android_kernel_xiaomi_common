@@ -488,6 +488,17 @@ int evdi_ioctl_connect(struct drm_device *dev, void *data, struct drm_file *file
 	return 0;
 }
 
+static __always_inline u64 evdi_swap_mailbox_seq_current(struct evdi_device *evdi,
+							 int display_id)
+{
+	if (unlikely(!evdi))
+		return 0;
+	if (unlikely(display_id < 0 || display_id >= LINDROID_MAX_CONNECTORS))
+		return 0;
+
+	return (u64)atomic64_read(&evdi->swap_mailbox[display_id].seq);
+}
+
 static __always_inline bool evdi_swap_mailbox_read_stable(struct evdi_device *evdi,
 							 int display_id,
 							 u64 *seq,
@@ -542,10 +553,11 @@ static __always_inline bool evdi_swap_dequeue_for_file(struct evdi_device *evdi,
 						       struct evdi_swap *out,
 						       int *out_poll_id)
 {
+	unsigned long pending;
 	struct evdi_file_priv *priv;
 	struct drm_file *owner;
 	int start, i, poll_id, d;
-	u64 seq, payload;
+	u64 seq, payload, latest;
 
 	if (unlikely(!evdi || !file || !out || !out_poll_id))
 		return false;
@@ -554,17 +566,28 @@ static __always_inline bool evdi_swap_dequeue_for_file(struct evdi_device *evdi,
 	if (unlikely(!priv))
 		return false;
 
+	pending = READ_ONCE(priv->pending_swaps);
+	if (!pending)
+		return false;
+
 	start = (int)(priv->swap_rr % LINDROID_MAX_CONNECTORS);
 	for (i = 0; i < LINDROID_MAX_CONNECTORS; i++) {
 		d = (start + i) % LINDROID_MAX_CONNECTORS;
 
+		if (!test_bit(d, &pending))
+			continue;
 		if (!evdi_swap_mailbox_read_stable(evdi, d, &seq, &payload, &poll_id, &owner))
 			continue;
-
-		if (owner != file)
+		if (owner != file) {
+			clear_bit(d, &priv->pending_swaps);
 			continue;
-		if (seq == priv->last_swap_seq[d])
+		}
+		if (seq == priv->last_swap_seq[d]) {
+			latest = evdi_swap_mailbox_seq_current(evdi, d);
+			if (!(latest & 1) && latest == seq)
+				clear_bit(d, &priv->pending_swaps);
 			continue;
+		}
 
 		priv->last_swap_seq[d] = seq;
 		priv->swap_rr = (u8)((d + 1) % LINDROID_MAX_CONNECTORS);
@@ -572,6 +595,11 @@ static __always_inline bool evdi_swap_dequeue_for_file(struct evdi_device *evdi,
 		out->id = (int)(u32)(payload >> 32);
 		out->display_id = (int)(u32)payload;
 		*out_poll_id = poll_id;
+
+		latest = evdi_swap_mailbox_seq_current(evdi, d);
+		if (!(latest & 1) && latest == seq)
+			clear_bit(d, &priv->pending_swaps);
+
 		return true;
 	}
 
@@ -1041,6 +1069,7 @@ int evdi_queue_swap_event(struct evdi_device *evdi, int id, int display_id,
 {
 	struct drm_file *client;
 	struct evdi_swap_mailbox *mb;
+	struct evdi_file_priv *priv;
 	u32 current_generation;
 	u64 payload;
 	int poll_id;
@@ -1071,8 +1100,8 @@ int evdi_queue_swap_event(struct evdi_device *evdi, int id, int display_id,
 
 	mb = &evdi->swap_mailbox[display_id];
 	payload = evdi_swap_pack(id, display_id);
-
 	poll_id = atomic_inc_return(&evdi->events.next_poll_id);
+	priv = owner ? owner->driver_priv : NULL;
 
 	atomic64_inc(&mb->seq); // odd
 	WRITE_ONCE(mb->owner, owner);
@@ -1082,6 +1111,11 @@ int evdi_queue_swap_event(struct evdi_device *evdi, int id, int display_id,
 	atomic64_inc(&mb->seq); // even
 
 	EVDI_PERF_INC64(&evdi_perf.swap_updates);
+
+	if (priv) {
+		set_bit(display_id, &priv->pending_swaps);
+		smp_mb__after_atomic();
+	}
 
 	// Swap events do not use the standard event queue, so use a mailbox-specific helper
 	evdi_wakeup_mailbox_pollers(evdi);
