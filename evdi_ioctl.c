@@ -548,6 +548,49 @@ retry:
 	return true;
 }
 
+static __always_inline bool evdi_swap_try_dequeue_display(struct evdi_device *evdi,
+							  struct drm_file *file,
+							  struct evdi_file_priv *priv,
+							  int d,
+							  struct evdi_swap *out,
+							  int *out_poll_id)
+{
+	struct drm_file *owner;
+	int poll_id;
+	u64 seq, payload, latest;
+
+	if (!evdi_swap_mailbox_read_stable(evdi, d, &seq, &payload, &poll_id,
+					   &owner))
+		return false;
+
+	if (owner != file) {
+		clear_bit(d, &priv->pending_swaps);
+		return false;
+	}
+
+	if (seq == priv->last_swap_seq[d]) {
+		latest = evdi_swap_mailbox_seq_current(evdi, d);
+		if (!(latest & 1) && latest == seq)
+			clear_bit(d, &priv->pending_swaps);
+		return false;
+	}
+
+	priv->last_swap_seq[d] = seq;
+	priv->swap_rr = (u8)(d + 1);
+	if (priv->swap_rr >= LINDROID_MAX_CONNECTORS)
+		priv->swap_rr = 0;
+
+	out->id = (int)(u32)(payload >> 32);
+	out->display_id = (int)(u32)payload;
+	*out_poll_id = poll_id;
+
+	latest = evdi_swap_mailbox_seq_current(evdi, d);
+	if (!(latest & 1) && latest == seq)
+		clear_bit(d, &priv->pending_swaps);
+
+	return true;
+}
+
 static __always_inline bool evdi_swap_dequeue_for_file(struct evdi_device *evdi,
 						       struct drm_file *file,
 						       struct evdi_swap *out,
@@ -555,9 +598,7 @@ static __always_inline bool evdi_swap_dequeue_for_file(struct evdi_device *evdi,
 {
 	unsigned long pending;
 	struct evdi_file_priv *priv;
-	struct drm_file *owner;
-	int start, i, poll_id, d;
-	u64 seq, payload, latest;
+	int start, d;
 
 	if (unlikely(!evdi || !file || !out || !out_poll_id))
 		return false;
@@ -570,37 +611,24 @@ static __always_inline bool evdi_swap_dequeue_for_file(struct evdi_device *evdi,
 	if (!pending)
 		return false;
 
-	start = (int)(priv->swap_rr % LINDROID_MAX_CONNECTORS);
-	for (i = 0; i < LINDROID_MAX_CONNECTORS; i++) {
-		d = (start + i) % LINDROID_MAX_CONNECTORS;
+	start = (int)READ_ONCE(priv->swap_rr);
+	if (unlikely(start >= LINDROID_MAX_CONNECTORS))
+		start = 0;
 
+	for (d = start; d < LINDROID_MAX_CONNECTORS; d++) {
 		if (!test_bit(d, &pending))
 			continue;
-		if (!evdi_swap_mailbox_read_stable(evdi, d, &seq, &payload, &poll_id, &owner))
+		if (evdi_swap_try_dequeue_display(evdi, file, priv, d, out,
+						  out_poll_id))
+			return true;
+	}
+
+	for (d = 0; d < start; d++) {
+		if (!test_bit(d, &pending))
 			continue;
-		if (owner != file) {
-			clear_bit(d, &priv->pending_swaps);
-			continue;
-		}
-		if (seq == priv->last_swap_seq[d]) {
-			latest = evdi_swap_mailbox_seq_current(evdi, d);
-			if (!(latest & 1) && latest == seq)
-				clear_bit(d, &priv->pending_swaps);
-			continue;
-		}
-
-		priv->last_swap_seq[d] = seq;
-		priv->swap_rr = (u8)((d + 1) % LINDROID_MAX_CONNECTORS);
-
-		out->id = (int)(u32)(payload >> 32);
-		out->display_id = (int)(u32)payload;
-		*out_poll_id = poll_id;
-
-		latest = evdi_swap_mailbox_seq_current(evdi, d);
-		if (!(latest & 1) && latest == seq)
-			clear_bit(d, &priv->pending_swaps);
-
-		return true;
+		if (evdi_swap_try_dequeue_display(evdi, file, priv, d, out,
+						  out_poll_id))
+			return true;
 	}
 
 	return false;
