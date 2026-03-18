@@ -254,11 +254,7 @@ static struct evdi_inflight_req *evdi_inflight_take(struct evdi_device *evdi, in
 		return NULL;
 
 #ifdef EVDI_HAVE_XARRAY
-	req = xa_load(&evdi->inflight_xa, id);
-	if (req) {
-		if (xa_cmpxchg(&evdi->inflight_xa, id, req, NULL, GFP_NOWAIT) != req)
-			req = NULL;
-	}
+	req = xa_erase(&evdi->inflight_xa, id);
 #else
 	spin_lock(&evdi->inflight_lock);
 	req = idr_find(&evdi->inflight_idr, id);
