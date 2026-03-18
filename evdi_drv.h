@@ -174,22 +174,22 @@ struct evdi_event_pool {
 struct evdi_event {
 	enum poll_event_type type;
 	int poll_id;
-	struct rcu_head rcu;
-	u8 cache_idx;
-	u8 payload[EVDI_EVENT_PAYLOAD_MAX];
 	u32 payload_size;
+	u8 payload[EVDI_EVENT_PAYLOAD_MAX];
 	struct evdi_event *next;
-	bool from_pool;
-	struct drm_file *owner;
 	struct llist_node llist;
+	struct drm_file *owner;
+	struct rcu_head rcu;
 	struct evdi_device *evdi;
 	atomic_t freed;
+	u8 cache_idx;
+	bool from_pool;
 };
 
 struct evdi_inflight_req {
 	int type;
-	struct completion done;
 	struct drm_file *owner;
+	struct completion done;
 	struct kref refcount;
 	atomic_t from_percpu;
 	atomic_t freed;
