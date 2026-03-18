@@ -44,6 +44,21 @@ static void evdi_pipe_disable(struct drm_simple_display_pipe *pipe)
 	drm_crtc_vblank_off(&pipe->crtc);
 }
 
+static __always_inline int evdi_pipe_slot(const struct evdi_device *evdi,
+			const struct drm_simple_display_pipe *pipe)
+{
+	ptrdiff_t slot;
+
+	if (unlikely(!evdi || !pipe))
+		return -ENOENT;
+
+	slot = pipe - &evdi->pipe[0];
+	if (unlikely(slot < 0 || slot >= LINDROID_MAX_CONNECTORS))
+		return -ENOENT;
+
+	return (int)slot;
+}
+
 static void evdi_pipe_update(struct drm_simple_display_pipe *pipe,
                              struct drm_plane_state *old_state)
 {
@@ -60,7 +75,7 @@ static void evdi_pipe_update(struct drm_simple_display_pipe *pipe,
 	int bound_display_id;
 	int slot;
 
-	slot = evdi_connector_slot(evdi, pipe->connector);
+	slot = evdi_pipe_slot(evdi, pipe);
 
 	if (unlikely(slot < 0 || slot >= LINDROID_MAX_CONNECTORS))
 		return;
