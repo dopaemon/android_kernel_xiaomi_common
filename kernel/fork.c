@@ -208,18 +208,18 @@ static int free_vm_stack_cache(unsigned int cpu)
 	int num_to_free = 0;
 
 	for (i = 0; i < NR_CACHED_STACKS; i++) {
-	struct vm_struct *vm_stack = cached_vm_stacks[i];
+		struct vm_struct *vm_stack = cached_vm_stacks[i];
 
-	if (vm_stack) {
-		stacks_to_free[num_to_free++] = vm_stack;
-		cached_vm_stacks[i] = NULL;
-		freed++;
+		if (vm_stack) {
+			stacks_to_free[num_to_free++] = vm_stack;
+			cached_vm_stacks[i] = NULL;
+			freed++;
 		}
 	}
 
 	for (i = 0; i < num_to_free; i++) {
 		vfree(stacks_to_free[i]->addr);
-		}
+	}
 
 	return freed;
 }
