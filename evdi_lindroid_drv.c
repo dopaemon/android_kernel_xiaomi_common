@@ -401,10 +401,18 @@ static int __init evdi_init(void)
 		return ret;
 	}
 
+	ret = evdi_gem_cache_init();
+	if (ret) {
+		evdi_err("Failed to initialize GEM cache: %d", ret);
+		evdi_event_system_cleanup();
+		return ret;
+	}
+
 	ret = platform_driver_register(&evdi_platform_driver);
 	if (ret) {
 		evdi_err("Failed to register platform driver: %d", ret);
 		evdi_fb_cache_cleanup();
+		evdi_gem_cache_cleanup();
 		evdi_event_system_cleanup();
 		return ret;
 	}
@@ -414,6 +422,7 @@ static int __init evdi_init(void)
 		evdi_err("Failed to initialize sysfs: %d", ret);
 		platform_driver_unregister(&evdi_platform_driver);
 		evdi_fb_cache_cleanup();
+		evdi_gem_cache_cleanup();
 		evdi_event_system_cleanup();
 		return ret;
 	}
@@ -431,6 +440,8 @@ static void __exit evdi_exit(void)
 	platform_driver_unregister(&evdi_platform_driver);
 
 	evdi_fb_cache_cleanup();
+
+	evdi_gem_cache_cleanup();
 
 	evdi_event_system_cleanup();
 

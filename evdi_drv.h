@@ -413,6 +413,8 @@ int evdi_gem_create(struct drm_file *file, struct drm_device *dev, uint64_t size
 int evdi_dumb_create(struct drm_file *file, struct drm_device *dev, struct drm_mode_create_dumb *args);
 int evdi_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
 void evdi_gem_free_object(struct drm_gem_object *gem_obj);
+int evdi_gem_cache_init(void);
+void evdi_gem_cache_cleanup(void);
 uint32_t evdi_gem_object_handle_lookup(struct drm_file *filp, struct drm_gem_object *obj);
 struct sg_table *evdi_prime_get_sg_table(struct drm_gem_object *obj);
 struct drm_gem_object *evdi_gem_prime_import(struct drm_device *dev,
