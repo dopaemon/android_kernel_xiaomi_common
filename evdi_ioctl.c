@@ -328,6 +328,7 @@ void evdi_inflight_discard_owner(struct evdi_device *evdi, struct drm_file *owne
 #endif
 }
 
+#if !EVDI_HAVE_KMEM_USERCOPY
 static inline size_t evdi_event_serialize_payload(struct evdi_event *e,
 						  void *out_buf,
 						  size_t out_buf_size)
@@ -343,6 +344,7 @@ static inline size_t evdi_event_serialize_payload(struct evdi_event *e,
 
 	return copy_size;
 }
+#endif
 
 static int evdi_queue_create_event_with_id(struct evdi_device *evdi,
 	   struct drm_evdi_gbm_create_buff *params,
@@ -646,7 +648,9 @@ int evdi_ioctl_poll(struct drm_device *dev, void *data, struct drm_file *file)
 	size_t payload_size;
 	int ret, poll_id;
 
+#if !EVDI_HAVE_KMEM_USERCOPY
 	u8 payload_buf[EVDI_EVENT_PAYLOAD_MAX];
+#endif
 
 	EVDI_PERF_INC64(&evdi_perf.ioctl_calls[1]);
 
@@ -691,13 +695,24 @@ deliver:
 	cmd->event = event->type;
 	cmd->poll_id = event->poll_id;
 
+#if EVDI_HAVE_KMEM_USERCOPY
+	payload_size = min_t(size_t, READ_ONCE(event->payload_size),
+			     sizeof(event->payload));
+#else
 	payload_size = evdi_event_serialize_payload(event,
 			payload_buf, sizeof(payload_buf));
+#endif
 
 	if (payload_size && cmd->data) {
+#if EVDI_HAVE_KMEM_USERCOPY
+		if (evdi_copy_to_user_allow_partial(cmd->data,
+						    event->payload,
+						    payload_size)) {
+#else
 		if (evdi_copy_to_user_allow_partial(cmd->data,
 						    payload_buf,
 						    payload_size)) {
+#endif
 		evdi_event_free(event);
 		return -EFAULT;
 		}

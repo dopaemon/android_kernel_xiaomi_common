@@ -516,6 +516,12 @@ static __always_inline void evdi_smp_mb(void)
 #define EVDI_HAVE_CONNECTOR_INIT_WITH_DDC 0
 #endif
 
+#if KERNEL_VERSION(4, 16, 0) <= LINUX_VERSION_CODE
+#define EVDI_HAVE_KMEM_USERCOPY 1
+#else
+#define EVDI_HAVE_KMEM_USERCOPY 0
+#endif
+
 #define EVDI_MAX_INFLIGHT_REQUESTS 1000
 
 /* Debug and statistics */

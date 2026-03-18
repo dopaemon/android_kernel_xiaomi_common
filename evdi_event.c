@@ -71,18 +71,36 @@ int evdi_event_system_init(void)
 	char name[32];
 	int i;
 
+#if EVDI_HAVE_KMEM_USERCOPY
+	global_event_pool.cache = kmem_cache_create_usercopy("evdi_events",
+						   sizeof(struct evdi_event),
+						   0, SLAB_HWCACHE_ALIGN,
+						   offsetof(struct evdi_event, payload),
+						   sizeof(((struct evdi_event *)0)->payload),
+						   NULL);
+#else
 	global_event_pool.cache = kmem_cache_create("evdi_events",
 						   sizeof(struct evdi_event),
 						   0, SLAB_HWCACHE_ALIGN,
 						   NULL);
+#endif
 	if (!global_event_pool.cache)
 		return -ENOMEM;
 
 	for (i = 0; i < EVDI_EVENT_TYPE_MAX; i++) {
 		snprintf(name, sizeof(name), "evdi_events_%d", i);
 		global_event_pool.type_cache[i] =
+#if EVDI_HAVE_KMEM_USERCOPY
+			kmem_cache_create_usercopy(name,
+						   sizeof(struct evdi_event),
+						   0, SLAB_HWCACHE_ALIGN,
+						   offsetof(struct evdi_event, payload),
+						   sizeof(((struct evdi_event *)0)->payload),
+						   NULL);
+#else
 			kmem_cache_create(name, sizeof(struct evdi_event),
 					  0, SLAB_HWCACHE_ALIGN, NULL);
+#endif
 		if (!global_event_pool.type_cache[i]) {
 			evdi_event_destroy_caches();
 			return -ENOMEM;
