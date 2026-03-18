@@ -472,13 +472,6 @@ void evdi_event_free_immediate(struct evdi_event *event)
 	}
 }
 
-void evdi_event_free_rcu(struct rcu_head *head)
-{
-	struct evdi_event *event = container_of(head, struct evdi_event, rcu);
-
-	evdi_event_free_immediate(event);
-}
-
 void evdi_event_free(struct evdi_event *event)
 {
 	if (!event)
@@ -487,7 +480,7 @@ void evdi_event_free(struct evdi_event *event)
 	if (atomic_xchg(&event->freed, 1))
 		return;
 
-	call_rcu(&event->rcu, evdi_event_free_rcu);
+	evdi_event_free_immediate(event);
 }
 
 static inline bool evdi_event_queue_lockfree(struct evdi_device *evdi, struct evdi_event *event)
@@ -723,7 +716,7 @@ void evdi_event_cleanup_file(struct evdi_device *evdi, struct drm_file *file)
 		if (event->owner == file) {
 			lf_removed++;
 			atomic_dec(&evdi->events.queue_size);
-			call_rcu(&event->rcu, evdi_event_free_rcu);
+			evdi_event_free(event);
 		} else if (restore_events && restore_count < restore_capacity) {
 			restore_events[restore_count++] = event;
 		}
@@ -744,7 +737,7 @@ void evdi_event_cleanup_file(struct evdi_device *evdi, struct drm_file *file)
 		next = READ_ONCE(event->next);
 		if (event->owner == file) {
 			sp_removed++;
-			call_rcu(&event->rcu, evdi_event_free_rcu);
+			evdi_event_free(event);
 		} else {
 			WRITE_ONCE(event->next, NULL);
 			if (!new_head) {

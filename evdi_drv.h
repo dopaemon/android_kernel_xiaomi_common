@@ -179,7 +179,6 @@ struct evdi_event {
 	struct evdi_event *next;
 	struct llist_node llist;
 	struct drm_file *owner;
-	struct rcu_head rcu;
 	struct evdi_device *evdi;
 	atomic_t freed;
 	u8 cache_idx;
