@@ -17,6 +17,34 @@
 #include <linux/overflow.h>
 #include <linux/file.h>
 
+static struct kmem_cache *evdi_fb_cache;
+
+int evdi_fb_cache_init(void)
+{
+	evdi_fb_cache = kmem_cache_create("evdi_framebuffer",
+					  sizeof(struct evdi_framebuffer),
+					  0, SLAB_HWCACHE_ALIGN, NULL);
+	if (!evdi_fb_cache)
+		return -ENOMEM;
+
+	return 0;
+}
+
+void evdi_fb_cache_cleanup(void)
+{
+	if (evdi_fb_cache) {
+		kmem_cache_destroy(evdi_fb_cache);
+		evdi_fb_cache = NULL;
+	}
+}
+
+static struct evdi_framebuffer *evdi_fb_alloc(gfp_t gfp)
+{
+	if (unlikely(!evdi_fb_cache))
+		return NULL;
+	return kmem_cache_zalloc(evdi_fb_cache, gfp);
+}
+
 static inline void evdi_gem_object_put_local(struct drm_gem_object *obj)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
@@ -37,7 +65,7 @@ static void evdi_fb_destroy(struct drm_framebuffer *fb)
 
 	// Closing fb isnt same as destroying buffer, so DONT enque destroy
 
-	kfree(efb);
+	kmem_cache_free(evdi_fb_cache, efb);
 }
 
 static int evdi_fb_create_handle(struct drm_framebuffer *fb,
@@ -169,7 +197,7 @@ struct drm_framebuffer *evdi_fb_user_fb_create(struct drm_device *dev,
 	if (!bo)
 		return ERR_PTR(-ENOENT);
 
-	efb = kzalloc(sizeof(*efb), GFP_KERNEL);
+	efb = evdi_fb_alloc(GFP_KERNEL);
 	if (!efb) {
 		evdi_gem_object_put_local(&bo->base);
 		return ERR_PTR(-ENOMEM);
@@ -185,7 +213,7 @@ struct drm_framebuffer *evdi_fb_user_fb_create(struct drm_device *dev,
 	ret = evdi_fb_init_core(dev, efb, mode_cmd);
 	if (ret) {
 		evdi_gem_object_put_local(&bo->base);
-		kfree(efb);
+		kmem_cache_free(evdi_fb_cache, efb);
 		return ERR_PTR(ret);
 	}
 	return &efb->base;
