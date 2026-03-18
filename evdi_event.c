@@ -391,6 +391,19 @@ static void evdi_inflight_req_release(struct kref *kref)
 	}
 }
 
+static __always_inline void evdi_inflight_req_reinit_fast(struct evdi_inflight_req *req,
+							  int slot)
+{
+	memset(&req->reply, 0, sizeof(req->reply));
+	req->type = 0;
+	req->owner = NULL;
+	kref_init(&req->refcount);
+	init_completion(&req->done);
+	atomic_set(&req->from_percpu, 1);
+	atomic_set(&req->freed, 0);
+	req->percpu_slot = slot;
+}
+
 struct evdi_inflight_req *evdi_inflight_req_alloc(struct evdi_device *evdi)
 {
 	struct evdi_inflight_req *req = NULL;
@@ -424,16 +437,16 @@ struct evdi_inflight_req *evdi_inflight_req_alloc(struct evdi_device *evdi)
 			return NULL;
 	}
 
+	if (likely(from_percpu)) {
+		evdi_inflight_req_reinit_fast(req, sel_slot);
+		return req;
+	}
+
 	memset(req, 0, sizeof(*req));
 	kref_init(&req->refcount);
 	init_completion(&req->done);
-	if (from_percpu) {
-		atomic_set(&req->from_percpu, 1);
-		req->percpu_slot = sel_slot;
-	} else {
-		atomic_set(&req->from_percpu, 0);
-		req->percpu_slot = -1;
-	}
+	atomic_set(&req->from_percpu, 0);
+	req->percpu_slot = -1;
 	atomic_set(&req->freed, 0);
 
 	return req;
