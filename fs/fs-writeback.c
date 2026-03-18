@@ -2382,22 +2382,12 @@ static void wakeup_dirtytime_writeback(struct work_struct *w)
 				wb_wakeup(wb);
 	}
 	rcu_read_unlock();
-<<<<<<< HEAD
-	if (dirtytime_expire_interval)
-		schedule_delayed_work(&dirtytime_work, dirtytime_expire_interval * HZ);
-=======
 	queue_delayed_work(system_power_efficient_wq, &dirtytime_work, dirtytime_expire_interval * HZ);
->>>>>>> b7ec203a1a11 (treewide: use power efficient workingqueues)
 }
 
 static int __init start_dirtytime_writeback(void)
 {
-<<<<<<< HEAD
-	if (dirtytime_expire_interval)
-		schedule_delayed_work(&dirtytime_work, dirtytime_expire_interval * HZ);
-=======
 	queue_delayed_work(system_power_efficient_wq, &dirtytime_work, dirtytime_expire_interval * HZ);
->>>>>>> b7ec203a1a11 (treewide: use power efficient workingqueues)
 	return 0;
 }
 __initcall(start_dirtytime_writeback);
