@@ -811,6 +811,25 @@ endif
 endif
 endif
 
+ifdef CONFIG_CC_IS_CLANG
+# Hot cold split optimization
+ifeq ($(call cc-option-yn, -mllvm -hot-cold-split=true),y)
+KBUILD_CFLAGS += -mllvm -hot-cold-split=true
+endif
+
+# MLGO optimization for register allocation advisor
+ifeq ($(call cc-option-yn, -mllvm -regalloc-enable-advisor=release),y)
+KBUILD_CFLAGS += -mllvm -regalloc-enable-advisor=release
+KBUILD_LDFLAGS += -mllvm -regalloc-enable-advisor=release
+endif
+
+# MLGO optimization for inliner
+ifeq ($(call cc-option-yn, -mllvm -enable-ml-inliner=release),y)
+KBUILD_CFLAGS += -mllvm -enable-ml-inliner=release
+KBUILD_LDFLAGS += -mllvm -enable-ml-inliner=release
+endif
+endif
+
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
 KBUILD_CFLAGS	+= $(call cc-option,-fno-allow-store-data-races)
