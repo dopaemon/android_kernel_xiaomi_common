@@ -17,7 +17,7 @@
 #include <linux/string.h> /* memcpy() */
 #include <linux/types.h> /* uint8_t, int8_t, uint16_t, int16_t,
 uint32_t, int32_t, uint64_t, int64_t */
-#include <stddef.h>
+#include <linux/stddef.h>
 
 typedef uint64_t uint_fast32_t;
 typedef int64_t int_fast32_t;
