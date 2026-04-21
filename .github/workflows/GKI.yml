@@ -632,6 +632,44 @@ jobs:
           zip -r9 "$ZIP_NAME" *
           mv "$ZIP_NAME" $GITHUB_WORKSPACE/
 
+      - name: Verify GKI ABI/KMI
+        if: matrix.device == 'gki' && github.event.inputs.KERNEL_BRANCH == 'Rebase'
+        run: |
+          set -euo pipefail
+          cd $GITHUB_WORKSPACE/android-kernel
+
+          MODULE_SYMVERS="$GITHUB_WORKSPACE/android-kernel/out/Module.symvers"
+          [ -s "$MODULE_SYMVERS" ] || { echo "ERROR: missing $MODULE_SYMVERS"; exit 1; }
+
+          export ROOT_DIR="$GITHUB_WORKSPACE/android-kernel"
+          export KERNEL_DIR="common"
+          set +u
+          source "$ROOT_DIR/$KERNEL_DIR/build.config.gki.aarch64"
+          set -u
+
+          [ -n "${KMI_SYMBOL_LIST:-}" ] || { echo "ERROR: KMI_SYMBOL_LIST is empty"; exit 1; }
+
+          MERGED_SYMBOL_LIST="$RUNNER_TEMP/abi_symbollist"
+          RAW_SYMBOL_LIST="$RUNNER_TEMP/abi_symbollist.raw"
+          ADDITIONAL_SYMBOL_LISTS=()
+
+          if [ -n "${ADDITIONAL_KMI_SYMBOL_LISTS:-}" ]; then
+            while IFS= read -r symbol_list; do
+              [ -n "$symbol_list" ] && ADDITIONAL_SYMBOL_LISTS+=("$symbol_list")
+            done <<< "${ADDITIONAL_KMI_SYMBOL_LISTS}"
+          fi
+
+          "$ROOT_DIR/build/copy_symbols.sh" \
+            "$MERGED_SYMBOL_LIST" \
+            "$ROOT_DIR/$KERNEL_DIR" \
+            "$KMI_SYMBOL_LIST" \
+            "${ADDITIONAL_SYMBOL_LISTS[@]}"
+
+          cat "$MERGED_SYMBOL_LIST" | "$ROOT_DIR/build/abi/flatten_symbol_list" > "$RAW_SYMBOL_LIST"
+
+          KMI_STRICT_MODE_OBJECTS=vmlinux \
+            "$ROOT_DIR/build/abi/compare_to_symbol_list" "$MODULE_SYMVERS" "$RAW_SYMBOL_LIST"
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
