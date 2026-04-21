@@ -207,6 +207,13 @@ jobs:
           rmz_version: "3.1.1"
           testing: false
 
+      - name: Setup Swap Space
+        uses: thejerrybao/setup-swap-space@v1
+        with:
+          swap-space-path: /swapfile
+          swap-size-gb: 16
+          remove-existing-swap-files: true
+
       - name: Check Initial Disk Space
         run: |
           echo "===== Initial Total Disk Space in GB ====="
@@ -389,6 +396,39 @@ jobs:
           fi
           rm -rf $GITHUB_WORKSPACE/android-kernel/out
 
+          log_resource_snapshot() {
+            local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
+            local swap_total_kb swap_free_kb swap_used_kb swap_used_mib swap_total_mib swap_used_pct
+            local disk_usage
+
+            mem_total_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+            mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+            mem_used_kb=$((mem_total_kb - mem_avail_kb))
+            mem_used_mib=$((mem_used_kb / 1024))
+            mem_total_mib=$((mem_total_kb / 1024))
+            mem_used_pct=$((100 * mem_used_kb / mem_total_kb))
+
+            swap_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
+            swap_free_kb=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
+            if [ "$swap_total_kb" -gt 0 ]; then
+              swap_used_kb=$((swap_total_kb - swap_free_kb))
+              swap_used_mib=$((swap_used_kb / 1024))
+              swap_total_mib=$((swap_total_kb / 1024))
+              swap_used_pct=$((100 * swap_used_kb / swap_total_kb))
+            else
+              swap_used_mib=0
+              swap_total_mib=0
+              swap_used_pct=0
+            fi
+
+            disk_usage=$(df -P -BG "$GITHUB_WORKSPACE" | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
+            printf '[monitor] %s | RAM %s/%s MiB (%s%%) | SWAP %s/%s MiB (%s%%) | DISK %s\n' \
+              "$(date +'%F %T')" \
+              "$mem_used_mib" "$mem_total_mib" "$mem_used_pct" \
+              "$swap_used_mib" "$swap_total_mib" "$swap_used_pct" \
+              "$disk_usage"
+          }
+
           run_make_keepalive() {
             local log_file="$1"
             shift
@@ -396,9 +436,11 @@ jobs:
             "$@" 2>&1 | tee "$log_file" &
             MAKE_PID=$!
 
+            log_resource_snapshot
+
             while kill -0 "$MAKE_PID" 2>/dev/null; do
-              echo "[keepalive] $(date +'%F %T') still building..."
-              sleep 60
+              log_resource_snapshot
+              sleep 30
             done &
             KEEPALIVE_PID=$!
 
@@ -514,6 +556,39 @@ jobs:
           fi
           rm -rf $GITHUB_WORKSPACE/android-kernel/out
 
+          log_resource_snapshot() {
+            local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
+            local swap_total_kb swap_free_kb swap_used_kb swap_used_mib swap_total_mib swap_used_pct
+            local disk_usage
+
+            mem_total_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+            mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+            mem_used_kb=$((mem_total_kb - mem_avail_kb))
+            mem_used_mib=$((mem_used_kb / 1024))
+            mem_total_mib=$((mem_total_kb / 1024))
+            mem_used_pct=$((100 * mem_used_kb / mem_total_kb))
+
+            swap_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
+            swap_free_kb=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
+            if [ "$swap_total_kb" -gt 0 ]; then
+              swap_used_kb=$((swap_total_kb - swap_free_kb))
+              swap_used_mib=$((swap_used_kb / 1024))
+              swap_total_mib=$((swap_total_kb / 1024))
+              swap_used_pct=$((100 * swap_used_kb / swap_total_kb))
+            else
+              swap_used_mib=0
+              swap_total_mib=0
+              swap_used_pct=0
+            fi
+
+            disk_usage=$(df -P -BG "$GITHUB_WORKSPACE" | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
+            printf '[monitor] %s | RAM %s/%s MiB (%s%%) | SWAP %s/%s MiB (%s%%) | DISK %s\n' \
+              "$(date +'%F %T')" \
+              "$mem_used_mib" "$mem_total_mib" "$mem_used_pct" \
+              "$swap_used_mib" "$swap_total_mib" "$swap_used_pct" \
+              "$disk_usage"
+          }
+
           run_make_keepalive() {
             local log_file="$1"
             shift
@@ -521,9 +596,11 @@ jobs:
             "$@" 2>&1 | tee "$log_file" &
             MAKE_PID=$!
 
+            log_resource_snapshot
+
             while kill -0 "$MAKE_PID" 2>/dev/null; do
-              echo "[keepalive] $(date +'%F %T') still building..."
-              sleep 60
+              log_resource_snapshot
+              sleep 30
             done &
             KEEPALIVE_PID=$!
 
@@ -690,6 +767,39 @@ jobs:
              BUILD_JOBS=4
           fi
 
+          log_resource_snapshot() {
+            local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
+            local swap_total_kb swap_free_kb swap_used_kb swap_used_mib swap_total_mib swap_used_pct
+            local disk_usage
+
+            mem_total_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+            mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+            mem_used_kb=$((mem_total_kb - mem_avail_kb))
+            mem_used_mib=$((mem_used_kb / 1024))
+            mem_total_mib=$((mem_total_kb / 1024))
+            mem_used_pct=$((100 * mem_used_kb / mem_total_kb))
+
+            swap_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
+            swap_free_kb=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
+            if [ "$swap_total_kb" -gt 0 ]; then
+              swap_used_kb=$((swap_total_kb - swap_free_kb))
+              swap_used_mib=$((swap_used_kb / 1024))
+              swap_total_mib=$((swap_total_kb / 1024))
+              swap_used_pct=$((100 * swap_used_kb / swap_total_kb))
+            else
+              swap_used_mib=0
+              swap_total_mib=0
+              swap_used_pct=0
+            fi
+
+            disk_usage=$(df -P -BG "$GITHUB_WORKSPACE" | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
+            printf '[monitor] %s | RAM %s/%s MiB (%s%%) | SWAP %s/%s MiB (%s%%) | DISK %s\n' \
+              "$(date +'%F %T')" \
+              "$mem_used_mib" "$mem_total_mib" "$mem_used_pct" \
+              "$swap_used_mib" "$swap_total_mib" "$swap_used_pct" \
+              "$disk_usage"
+          }
+
           run_make_keepalive() {
             local log_file="$1"
             shift
@@ -697,9 +807,11 @@ jobs:
             "$@" 2>&1 | tee "$log_file" &
             MAKE_PID=$!
 
+            log_resource_snapshot
+
             while kill -0 "$MAKE_PID" 2>/dev/null; do
-              echo "[keepalive] $(date +'%F %T') still building..."
-              sleep 60
+              log_resource_snapshot
+              sleep 30
             done &
             KEEPALIVE_PID=$!
 
