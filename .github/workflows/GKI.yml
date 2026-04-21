@@ -459,8 +459,8 @@ jobs:
 
           if [ -x scripts/config ]; then
              scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
-               -d LTO_CLANG_FULL \
-               -e LTO_CLANG_THIN
+               -d LTO_CLANG_THIN \
+               -e LTO_CLANG_FULL
           fi
 
           make -j"$BUILD_JOBS" \
@@ -584,8 +584,8 @@ jobs:
 
           if [ -x scripts/config ]; then
              scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
-               -d LTO_CLANG_FULL \
-               -e LTO_CLANG_THIN
+               -d LTO_CLANG_THIN \
+               -e LTO_CLANG_FULL
           fi
 
           make -j"$BUILD_JOBS" \
