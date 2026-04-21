@@ -214,6 +214,18 @@ jobs:
           swap-size-gb: 16
           remove-existing-swap-files: true
 
+      - name: Tune Swap Aggressiveness
+        run: |
+          set -euo pipefail
+          sudo sysctl -w vm.swappiness=200
+          sudo sysctl -w vm.page-cluster=0
+          sudo swapoff /swapfile || true
+          sudo swapon -p 32767 /swapfile
+          echo "===== Swap Tuning ====="
+          cat /proc/sys/vm/swappiness
+          cat /proc/sys/vm/page-cluster
+          swapon --show --bytes
+
       - name: Check Initial Disk Space
         run: |
           echo "===== Initial Total Disk Space in GB ====="
@@ -709,8 +721,8 @@ jobs:
           zip -r9 "$ZIP_NAME" *
           mv "$ZIP_NAME" $GITHUB_WORKSPACE/
 
-      - name: Verify GKI ABI/KMI
-        if: matrix.device == 'gki' && github.event.inputs.KERNEL_BRANCH == 'Rebase'
+      - name: Verify ABI/KMI
+        if: github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
           set -euo pipefail
           cd $GITHUB_WORKSPACE/android-kernel
