@@ -410,6 +410,7 @@ jobs:
             return "$MAKE_RC"
           }
 
+
           export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-KSU-ccache.log"
           export CCACHE_COMPILERCHECK="none"
           export CCACHE_BASEDIR="${{ github.workspace }}"
@@ -533,6 +534,7 @@ jobs:
 
             return "$MAKE_RC"
           }
+
 
           export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-NonKSU-ccache.log"
           export CCACHE_COMPILERCHECK="none"
