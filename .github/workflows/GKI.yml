@@ -173,6 +173,7 @@ jobs:
   build:
     needs: [create_release, set-matrix]
     runs-on: ubuntu-latest
+    timeout-minutes: 360
 
     strategy:
       matrix:
@@ -368,11 +369,36 @@ jobs:
       - name: Build Selected Devices KSU
         if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
-          set -e
+          set -euo pipefail
           DEVICE="${{ matrix.device }}"
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
+          BUILD_JOBS="$(nproc --all)"
+          if [ "$BUILD_JOBS" -gt 6 ]; then
+             BUILD_JOBS=6
+          fi
           rm -rf $GITHUB_WORKSPACE/android-kernel/out
+
+          run_make_keepalive() {
+            local log_file="$1"
+            shift
+
+            "$@" 2>&1 | tee "$log_file" &
+            MAKE_PID=$!
+
+            while kill -0 "$MAKE_PID" 2>/dev/null; do
+              echo "[keepalive] $(date +'%F %T') still building..."
+              sleep 60
+            done &
+            KEEPALIVE_PID=$!
+
+            wait "$MAKE_PID"
+            MAKE_RC=$?
+            kill "$KEEPALIVE_PID" 2>/dev/null || true
+            wait "$KEEPALIVE_PID" 2>/dev/null || true
+
+            return "$MAKE_RC"
+          }
 
           export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-KSU-ccache.log"
           export CCACHE_COMPILERCHECK="none"
@@ -409,9 +435,6 @@ jobs:
           echo 'export FAKETIME="'$FAKETIME'"' >> cc-wrapper
           echo 'ccache clang "$@"' >> cc-wrapper
           echo '#!/bin/bash' > ld-wrapper
-          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> ld-wrapper
-          echo 'export FAKESTAT="'$FAKESTAT'"' >> ld-wrapper
-          echo 'export FAKETIME="'$FAKETIME'"' >> ld-wrapper
           echo 'ld.lld "$@"' >> ld-wrapper
           touch test-wrapper.sh
           chmod +x test-wrapper.sh
@@ -438,7 +461,7 @@ jobs:
 
           export DTC=$(pwd)/scripts/dtc/dtc
 
-          make -j$(nproc --all) \
+          make -j"$BUILD_JOBS" \
                LLVM=1 \
                ARCH=arm64 \
                CROSS_COMPILE="aarch64-linux-gnu-" \
@@ -448,17 +471,18 @@ jobs:
                DTC_EXT=dtc \
                gki_defconfig
 
-          time make -j$(nproc --all) \
-               LLVM=1 \
-               ARCH=arm64 \
-               CROSS_COMPILE="aarch64-linux-gnu-" \
-               CC="$(pwd)/cc-wrapper" \
-               LD="$(pwd)/ld-wrapper" \
-               O=$GITHUB_WORKSPACE/android-kernel/out \
-               LLVM_IAS=1 \
-               DTC_EXT=dtc \
-               DTC_FLAGS="-Wno-all" \
-               Image
+          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-KSU.log" \
+            make -j"$BUILD_JOBS" \
+              LLVM=1 \
+              ARCH=arm64 \
+              CROSS_COMPILE="aarch64-linux-gnu-" \
+              CC="$(pwd)/cc-wrapper" \
+              LD="$(pwd)/ld-wrapper" \
+              O=$GITHUB_WORKSPACE/android-kernel/out \
+              LLVM_IAS=1 \
+              DTC_EXT=dtc \
+              DTC_FLAGS="-Wno-all" \
+              Image
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
 
@@ -479,11 +503,36 @@ jobs:
       - name: Build Selected Devices NonKSU
         if: (github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
-          set -e
+          set -euo pipefail
           DEVICE="${{ matrix.device }}"
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
+          BUILD_JOBS="$(nproc --all)"
+          if [ "$BUILD_JOBS" -gt 6 ]; then
+             BUILD_JOBS=6
+          fi
           rm -rf $GITHUB_WORKSPACE/android-kernel/out
+
+          run_make_keepalive() {
+            local log_file="$1"
+            shift
+
+            "$@" 2>&1 | tee "$log_file" &
+            MAKE_PID=$!
+
+            while kill -0 "$MAKE_PID" 2>/dev/null; do
+              echo "[keepalive] $(date +'%F %T') still building..."
+              sleep 60
+            done &
+            KEEPALIVE_PID=$!
+
+            wait "$MAKE_PID"
+            MAKE_RC=$?
+            kill "$KEEPALIVE_PID" 2>/dev/null || true
+            wait "$KEEPALIVE_PID" 2>/dev/null || true
+
+            return "$MAKE_RC"
+          }
 
           export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-NonKSU-ccache.log"
           export CCACHE_COMPILERCHECK="none"
@@ -520,9 +569,6 @@ jobs:
           echo 'export FAKETIME="'$FAKETIME'"' >> cc-wrapper
           echo 'ccache clang "$@"' >> cc-wrapper
           echo '#!/bin/bash' > ld-wrapper
-          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> ld-wrapper
-          echo 'export FAKESTAT="'$FAKESTAT'"' >> ld-wrapper
-          echo 'export FAKETIME="'$FAKETIME'"' >> ld-wrapper
           echo 'ld.lld "$@"' >> ld-wrapper
           touch test-wrapper.sh
           chmod +x test-wrapper.sh
@@ -549,7 +595,7 @@ jobs:
 
           export DTC=$(pwd)/scripts/dtc/dtc
 
-          make -j$(nproc --all) \
+          make -j"$BUILD_JOBS" \
                LLVM=1 \
                ARCH=arm64 \
                CROSS_COMPILE="aarch64-linux-gnu-" \
@@ -559,17 +605,18 @@ jobs:
                DTC_EXT=dtc \
                gki_defconfig
 
-          time make -j$(nproc --all) \
-               LLVM=1 \
-               ARCH=arm64 \
-               CROSS_COMPILE="aarch64-linux-gnu-" \
-               CC="$(pwd)/cc-wrapper" \
-               LD="$(pwd)/ld-wrapper" \
-               O=$GITHUB_WORKSPACE/android-kernel/out \
-               LLVM_IAS=1 \
-               DTC_EXT=dtc \
-               DTC_FLAGS="-Wno-all" \
-               Image
+          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-NonKSU.log" \
+            make -j"$BUILD_JOBS" \
+              LLVM=1 \
+              ARCH=arm64 \
+              CROSS_COMPILE="aarch64-linux-gnu-" \
+              CC="$(pwd)/cc-wrapper" \
+              LD="$(pwd)/ld-wrapper" \
+              O=$GITHUB_WORKSPACE/android-kernel/out \
+              LLVM_IAS=1 \
+              DTC_EXT=dtc \
+              DTC_FLAGS="-Wno-all" \
+              Image
 
           [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
 
@@ -607,11 +654,38 @@ jobs:
       - name: Generate CCACHE
         if: (github.event.inputs.BUILDING_CCACHE == 'Enable' && github.event.inputs.BUILD_TARGET != 'Both')
         run: |
+          set -euo pipefail
+          BUILD_JOBS="$(nproc --all)"
+          if [ "$BUILD_JOBS" -gt 6 ]; then
+             BUILD_JOBS=6
+          fi
+
+          run_make_keepalive() {
+            local log_file="$1"
+            shift
+
+            "$@" 2>&1 | tee "$log_file" &
+            MAKE_PID=$!
+
+            while kill -0 "$MAKE_PID" 2>/dev/null; do
+              echo "[keepalive] $(date +'%F %T') still building..."
+              sleep 60
+            done &
+            KEEPALIVE_PID=$!
+
+            wait "$MAKE_PID"
+            MAKE_RC=$?
+            kill "$KEEPALIVE_PID" 2>/dev/null || true
+            wait "$KEEPALIVE_PID" 2>/dev/null || true
+
+            return "$MAKE_RC"
+          }
+
           cd $GITHUB_WORKSPACE/android-kernel/common/
 
           rm -rf $GITHUB_WORKSPACE/android-kernel/out
 
-          make -j$(nproc --all) \
+          make -j"$BUILD_JOBS" \
                LLVM=1 \
                LLVM_IAS=1 \
                ARCH=arm64 \
@@ -622,17 +696,18 @@ jobs:
                HOSTLD=ld.lld \
                gki_defconfig
 
-          time make -j$(nproc --all) \
-               LLVM=1 \
-               LLVM_IAS=1 \
-               ARCH=arm64 \
-               CROSS_COMPILE="aarch64-linux-gnu-" \
-               CC="$(pwd)/cc-wrapper" \
-               LD="$(pwd)/ld-wrapper" \
-               O=$GITHUB_WORKSPACE/android-kernel/out \
-               LD="ld.lld" \
-               HOSTLD=ld.lld \
-               Image
+          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-${{ matrix.device }}-ccache.log" \
+            make -j"$BUILD_JOBS" \
+              LLVM=1 \
+              LLVM_IAS=1 \
+              ARCH=arm64 \
+              CROSS_COMPILE="aarch64-linux-gnu-" \
+              CC="$(pwd)/cc-wrapper" \
+              LD="$(pwd)/ld-wrapper" \
+              O=$GITHUB_WORKSPACE/android-kernel/out \
+              LD="ld.lld" \
+              HOSTLD=ld.lld \
+              Image
 
       - name: Upload CCACHE Logs to artifact
         uses: actions/upload-artifact@v5
