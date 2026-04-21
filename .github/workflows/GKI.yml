@@ -376,13 +376,6 @@ jobs:
             ccache -sv
           fi
 
-      - name: Fakestats - Faketime
-        run: |
-          export FAKESTAT="2025-05-25 12:00:00"
-          export FAKETIME="@2025-05-25 13:00:00"
-          echo "FAKESTAT=$FAKESTAT" >> $GITHUB_ENV
-          echo "FAKETIME=$FAKETIME" >> $GITHUB_ENV
-
       - name: Build Selected Devices KSU
         if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
@@ -428,7 +421,6 @@ jobs:
 
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
-          export PRELOAD_LIBS="$GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/lib64/libfakestat.so $GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/lib64/libfaketimeMT.so"
 
           unset DTC
           export DTC="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin/dtc"
@@ -440,32 +432,6 @@ jobs:
           rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
           echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
-
-          rm -rf *-wrapper
-          rm -rf test-wrapper.sh
-          touch cc-wrapper
-          touch ld-wrapper
-          chmod +x *-wrapper
-          echo '#!/bin/bash' > cc-wrapper
-          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> cc-wrapper
-          echo 'export FAKESTAT="'$FAKESTAT'"' >> cc-wrapper
-          echo 'export FAKETIME="'$FAKETIME'"' >> cc-wrapper
-          echo 'ccache clang "$@"' >> cc-wrapper
-          echo '#!/bin/bash' > ld-wrapper
-          echo 'ld.lld "$@"' >> ld-wrapper
-          touch test-wrapper.sh
-          chmod +x test-wrapper.sh
-          echo '#!/bin/bash' > test-wrapper.sh
-          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> test-wrapper.sh
-          echo 'export FAKESTAT="'$FAKESTAT'"' >> test-wrapper.sh
-          echo 'export FAKETIME="'$FAKETIME'"' >> test-wrapper.sh
-          echo 'echo ">>> Wrapper check enviroment."' >> test-wrapper.sh
-          echo 'exec "$@"' >> test-wrapper.sh
-          chmod +x test-wrapper.sh
-          ./test-wrapper.sh date
-          ./test-wrapper.sh stat ./Makefile
-          chmod +x cc-wrapper ld-wrapper
-          LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
 
           rm ./android/abi_gki_protected_exports_* || true
 
@@ -485,16 +451,33 @@ jobs:
                CC="ccache clang" \
                O=$GITHUB_WORKSPACE/android-kernel/out \
                LLVM_IAS=1 \
+               LD="ld.lld" \
+               HOSTLD="ld.lld" \
                DTC_EXT=dtc \
                gki_defconfig
+
+          if [ -x scripts/config ]; then
+             scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
+               -d LTO_CLANG_FULL \
+               -e LTO_CLANG_THIN
+          fi
+
+          make -j"$BUILD_JOBS" \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               LLVM_IAS=1 \
+               olddefconfig
 
           run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-KSU.log" \
             make -j"$BUILD_JOBS" \
               LLVM=1 \
               ARCH=arm64 \
               CROSS_COMPILE="aarch64-linux-gnu-" \
-              CC="$(pwd)/cc-wrapper" \
-              LD="$(pwd)/ld-wrapper" \
+              CC="ccache clang" \
+              LD="ld.lld" \
+              HOSTLD="ld.lld" \
               O=$GITHUB_WORKSPACE/android-kernel/out \
               LLVM_IAS=1 \
               DTC_EXT=dtc \
@@ -562,7 +545,6 @@ jobs:
 
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
-          export PRELOAD_LIBS="$GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/lib64/libfakestat.so $GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/lib64/libfaketimeMT.so"
 
           unset DTC
           export DTC="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin/dtc"
@@ -574,32 +556,6 @@ jobs:
           rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
           echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
-
-          rm -rf *-wrapper
-          rm -rf test-wrapper.sh
-          touch cc-wrapper
-          touch ld-wrapper
-          chmod +x *-wrapper
-          echo '#!/bin/bash' > cc-wrapper
-          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> cc-wrapper
-          echo 'export FAKESTAT="'$FAKESTAT'"' >> cc-wrapper
-          echo 'export FAKETIME="'$FAKETIME'"' >> cc-wrapper
-          echo 'ccache clang "$@"' >> cc-wrapper
-          echo '#!/bin/bash' > ld-wrapper
-          echo 'ld.lld "$@"' >> ld-wrapper
-          touch test-wrapper.sh
-          chmod +x test-wrapper.sh
-          echo '#!/bin/bash' > test-wrapper.sh
-          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> test-wrapper.sh
-          echo 'export FAKESTAT="'$FAKESTAT'"' >> test-wrapper.sh
-          echo 'export FAKETIME="'$FAKETIME'"' >> test-wrapper.sh
-          echo 'echo ">>> Wrapper check enviroment."' >> test-wrapper.sh
-          echo 'exec "$@"' >> test-wrapper.sh
-          chmod +x test-wrapper.sh
-          ./test-wrapper.sh date
-          ./test-wrapper.sh stat ./Makefile
-          chmod +x cc-wrapper ld-wrapper
-          LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
 
           rm ./android/abi_gki_protected_exports_* || true
 
@@ -619,16 +575,33 @@ jobs:
                CC="ccache clang" \
                O=$GITHUB_WORKSPACE/android-kernel/out \
                LLVM_IAS=1 \
+               LD="ld.lld" \
+               HOSTLD="ld.lld" \
                DTC_EXT=dtc \
                gki_defconfig
+
+          if [ -x scripts/config ]; then
+             scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
+               -d LTO_CLANG_FULL \
+               -e LTO_CLANG_THIN
+          fi
+
+          make -j"$BUILD_JOBS" \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               LLVM_IAS=1 \
+               olddefconfig
 
           run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-NonKSU.log" \
             make -j"$BUILD_JOBS" \
               LLVM=1 \
               ARCH=arm64 \
               CROSS_COMPILE="aarch64-linux-gnu-" \
-              CC="$(pwd)/cc-wrapper" \
-              LD="$(pwd)/ld-wrapper" \
+              CC="ccache clang" \
+              LD="ld.lld" \
+              HOSTLD="ld.lld" \
               O=$GITHUB_WORKSPACE/android-kernel/out \
               LLVM_IAS=1 \
               DTC_EXT=dtc \
@@ -719,10 +692,9 @@ jobs:
               LLVM_IAS=1 \
               ARCH=arm64 \
               CROSS_COMPILE="aarch64-linux-gnu-" \
-              CC="$(pwd)/cc-wrapper" \
-              LD="$(pwd)/ld-wrapper" \
-              O=$GITHUB_WORKSPACE/android-kernel/out \
+              CC="ccache clang" \
               LD="ld.lld" \
+              O=$GITHUB_WORKSPACE/android-kernel/out \
               HOSTLD=ld.lld \
               Image
 
