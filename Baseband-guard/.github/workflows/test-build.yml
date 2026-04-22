@@ -1,0 +1,182 @@
+name: Build Check - All LTS Kernels
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  push:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  build-check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel_config:
+          # Android 12 - Kernel 5.10 LTS
+          - android_version: "android12"
+            kernel_version: "5.10"
+            sub_level: "X"
+            os_patch_level: "lts"
+          
+          # Android 13 - Kernel 5.10 LTS
+          - android_version: "android13"
+            kernel_version: "5.10"
+            sub_level: "X"
+            os_patch_level: "lts"
+          
+          # Android 13 - Kernel 5.15 LTS
+          - android_version: "android13"
+            kernel_version: "5.15"
+            sub_level: "X"
+            os_patch_level: "lts"
+          
+          # Android 14 - Kernel 5.15 LTS
+          - android_version: "android14"
+            kernel_version: "5.15"
+            sub_level: "X"
+            os_patch_level: "lts"
+          
+          # Android 14 - Kernel 6.1 LTS
+          - android_version: "android14"
+            kernel_version: "6.1"
+            sub_level: "X"
+            os_patch_level: "lts"
+          
+          # Android 15 - Kernel 6.6 LTS
+          - android_version: "android15"
+            kernel_version: "6.6"
+            sub_level: "X"
+            os_patch_level: "lts"
+
+          # Android 16 - Kernel 6.12 LTS
+          - android_version: "android16"
+            kernel_version: "6.12"
+            sub_level: "X"
+            os_patch_level: "lts"
+
+    name: Build Check - ${{ matrix.kernel_config.android_version }} (Kernel ${{ matrix.kernel_config.kernel_version }})
+    
+    steps:
+      - name: Clean up build environment
+        run: |
+          # pick from https://github.com/cctv18/oppo_oplus_realme_sm8750/blob/test/.github/workflows/fastbuild_6.6.66.yml
+          sudo apt-mark hold firefox
+          sudo apt-mark hold libc-bin
+          sudo apt purge man-db
+          sudo rm -rf /var/lib/man-db/auto-update
+          # pick from https://github.com/easimon/maximize-build-space/blob/master/action.yml
+          sudo docker image prune --all --force
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+      - name: Set CONFIG Environment Variable
+        run: |
+          # Set CONFIG dynamically based on matrix values
+          CONFIG="${{ matrix.kernel_config.android_version }}-${{ matrix.kernel_config.kernel_version }}-${{ matrix.kernel_config.sub_level }}"
+
+          # Set CONFIG as an environment variable for future steps
+          echo "CONFIG=$CONFIG" >> $GITHUB_ENV
+
+      - name: Setup Build Environment
+        run: |
+          mkdir -p ./git-repo
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ./git-repo/repo
+          chmod a+rx ./git-repo/repo
+          echo "REPO=$GITHUB_WORKSPACE/./git-repo/repo" >> $GITHUB_ENV
+          mkdir -p "$CONFIG"
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: gki-kernel-${{ env.CONFIG }}
+          max-size: 3G
+
+      - name: Get Baseband-guard Source
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.CONFIG }}/Baseband-guard
+
+      - name: Initialize and Sync Kernel Source
+        run: |
+          cd "$CONFIG"
+          
+          FORMATTED_BRANCH="${{ matrix.kernel_config.android_version }}-${{ matrix.kernel_config.kernel_version }}-${{ matrix.kernel_config.os_patch_level }}"
+          
+          $REPO init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
+          
+          REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${FORMATTED_BRANCH})
+          DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
+          if grep -q deprecated <<< $REMOTE_BRANCH; then
+            sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
+          fi
+          
+          $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+
+      - name: Add BBG
+        run: |
+          cd "$CONFIG"
+          BBG_DIR="$(pwd)/Baseband-guard"
+          SECURITY_DIR="$(pwd)/common/security"
+          SECURITY_MAKEFILE="$SECURITY_DIR/Makefile"
+          SECURITY_KCONFIG="$SECURITY_DIR/Kconfig"
+          BBG_SYMLINK="$SECURITY_DIR/baseband-guard"
+          SELINUX_MAKEFILE="$SECURITY_DIR/selinux/Makefile"
+          PATCH_FILE="$BBG_DIR/sepatch.txt"
+          echo "Adding BBG..."
+          # prefer relative path; fall back to absolute if realpath --relative-to not available
+          if command -v realpath >/dev/null 2>&1; then
+              rel="$(realpath --relative-to="$SECURITY_DIR" "$BBG_DIR" 2>/dev/null || true)"
+          else
+              rel="$BBG_DIR"
+          fi
+          ln -sfn "$rel" "$BBG_SYMLINK" && echo "- symlink created"
+          # Makefile entry (idempotent)
+          printf '\nobj-$(CONFIG_BBG) += baseband-guard/\n' >> "$SECURITY_MAKEFILE" && echo " - Makefile updated"
+          # Kconfig source (insert before last endmenu; fallback append)
+          grep -q "source \"security/baseband-guard/Kconfig\"" "$SECURITY_KCONFIG" || sed -i "/endmenu/i\source \"security/baseband-guard/Kconfig\"" "$SECURITY_KCONFIG" && echo " - Kconfig updated"
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' $SECURITY_KCONFIG
+
+      - name: Apply Kernel Configuration
+        run: |
+          cd "$CONFIG"
+          # Remove check_defconfig
+          sed -i 's/check_defconfig//' ./common/build.config.gki
+
+      # Hey,rust_binder.ko,maybe we need to talk about why you makes build failed
+      - name: Append ashmem exports if missing
+        if: startsWith(matrix.kernel_config.android_version, 'android16')
+        run: |
+          cd "$CONFIG"
+          FILE=common/drivers/staging/android/ashmem.c
+          if [[ -f "$FILE" ]] && ! grep -q 'is_ashmem_file' "$FILE"; then
+          cat >>"$FILE" <<'EOF'
+
+          bool is_ashmem_file(struct file *file) { return false; }
+          int ashmem_area_name(struct file *file, char *name) { return 0; }
+          long ashmem_area_size(struct file *file) { return 0; }
+          struct file *ashmem_area_vmfile(struct file *file) { return NULL; }
+          EXPORT_SYMBOL_GPL(is_ashmem_file);
+          EXPORT_SYMBOL_GPL(ashmem_area_name);
+          EXPORT_SYMBOL_GPL(ashmem_area_size);
+          EXPORT_SYMBOL_GPL(ashmem_area_vmfile);
+          EOF
+          fi
+
+          sed -i -E 's/\$\(CONFIG_ANDROID_BINDER_IPC_RUST\)/m/g' common/drivers/android/Makefile
+
+      - name: Build
+        run : |
+          set -e
+          set -x
+          cd "$CONFIG"
+          echo "Building the kernel..."
+          if [ -f "build/build.sh" ]; then
+            LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || exit 1
+          else
+            tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast //common:kernel_aarch64_dist || exit 1
+          fi
