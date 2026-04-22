@@ -3,6 +3,7 @@
 #include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/syscalls.h>
 #include <linux/slab.h>
 #include <linux/task_work.h>
 #include <linux/uaccess.h>
