@@ -9,7 +9,6 @@
 #define KERNEL_SU_VERSION_TAG KSU_VERSION_TAG
 
 extern struct cred *ksu_cred;
-extern bool ksu_late_loaded;
 extern bool allow_shell;
 
 static inline int startswith(char *s, char *prefix)

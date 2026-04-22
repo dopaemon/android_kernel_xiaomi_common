@@ -5,6 +5,7 @@
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <linux/workqueue.h>
+#include <linux/susfs.h>
 
 #include "policy/allowlist.h"
 #include "policy/app_profile.h"
@@ -12,22 +13,15 @@
 #include "klog.h" // IWYU pragma: keep
 #include "manager/manager_observer.h"
 #include "manager/throne_tracker.h"
-#include "hook/syscall_hook_manager.h"
 #include "runtime/ksud.h"
 #include "runtime/ksud_boot.h"
 #include "supercall/supercall.h"
 #include "ksu.h"
 #include "infra/file_wrapper.h"
 #include "selinux/selinux.h"
-#include "hook/syscall_hook.h"
 
-#if defined(__x86_64__)
-#include <asm/cpufeature.h>
-#include <linux/version.h>
-#ifndef X86_FEATURE_INDIRECT_SAFE
-#error "FATAL: Your kernel is missing the indirect syscall bypass patches!"
-#endif
-#endif
+#include "hook/setuid_hook.h"
+#include "feature/sucompat.h"
 
 // workaround for A12-5.10 kernel
 // Some third-party kernel (e.g. linegaeOS) uses wrong toolchain, which supports
@@ -67,32 +61,9 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 #endif
 
 struct cred *ksu_cred;
-bool ksu_late_loaded;
 
 int __init kernelsu_init(void)
 {
-#if defined(__x86_64__)
-    // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set 
-    if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
-        pr_alert("*************************************************************");
-        pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
-        pr_alert("**                                                         **");
-        pr_alert("**        X86_FEATURE_INDIRECT_SAFE is not enabled!        **");
-        pr_alert("**      KernelSU will abort initialization to prevent      **");
-        pr_alert("**                     kernel panic.                       **");
-        pr_alert("**                                                         **");
-        pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
-        pr_alert("*************************************************************");
-        return -ENOSYS;
-    }
-#endif
-
-#ifdef MODULE
-	ksu_late_loaded = (current->pid != 1);
-#else
-	ksu_late_loaded = false;
-#endif
-
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert("*************************************************************");
 	pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
@@ -108,52 +79,20 @@ int __init kernelsu_init(void)
         pr_err("prepare cred failed!\n");
     }
 
-	ksu_syscall_hook_init();
-
 	ksu_feature_init();
 
 	ksu_supercalls_init();
 
-	if (ksu_late_loaded) {
-		pr_info("late load mode, skipping kprobe hooks\n");
+    ksu_sucompat_init();
 
-		apply_kernelsu_rules();
-		cache_sid();
-		setup_ksu_cred();
+	ksu_allowlist_init();
 
-		// Grant current process (ksud late-load) root
-		// with KSU SELinux domain before enforcing SELinux, so it
-		// can continue to access /data/app etc. after enforcement.
-		escape_to_root_for_init();
+	ksu_throne_tracker_init();
 
-		ksu_allowlist_init();
-		ksu_load_allow_list();
+	ksu_ksud_init();
 
-		ksu_syscall_hook_manager_init();
-
-		ksu_throne_tracker_init();
-		ksu_observer_init();
-		ksu_file_wrapper_init();
-
-		ksu_boot_completed = true;
-		track_throne(false);
-
-		if (!getenforce()) {
-			pr_info("Permissive SELinux, enforcing\n");
-			setenforce(true);
-		}
-
-	} else {
-		ksu_syscall_hook_manager_init();
-
-		ksu_allowlist_init();
-
-		ksu_throne_tracker_init();
-
-		ksu_ksud_init();
-
-		ksu_file_wrapper_init();
-	}
+	ksu_file_wrapper_init();
+	susfs_init();
 
 #ifdef MODULE
 #ifndef CONFIG_KSU_DEBUG
@@ -165,15 +104,9 @@ int __init kernelsu_init(void)
 
 void __exit kernelsu_exit(void)
 {
-	// Phase 1: Stop all hooks first to prevent new callbacks
-	ksu_syscall_hook_manager_exit();
-
 	ksu_supercalls_exit();
 
-	if (!ksu_late_loaded)
-		ksu_ksud_exit();
-
-	// Wait for any in-flight RCU readers (e.g. handler traversing allow_list)
+	// Now safe to release data structures
 	synchronize_rcu();
 
 	// Phase 2: Now safe to release data structures

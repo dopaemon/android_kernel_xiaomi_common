@@ -124,8 +124,14 @@ void apply_kernelsu_rules()
     ksu_destroy_sepolicy(old_pol);
 
     reset_avc_cache();
+
 out_unlock:
     mutex_unlock(&selinux_state.policy_mutex);
+
+    susfs_set_priv_app_sid();
+    susfs_set_init_sid();
+    susfs_set_ksu_sid();
+    susfs_set_zygote_sid();
 }
 
 #define KSU_SEPOLICY_MAX_BATCH_SIZE (8U * 1024U * 1024U)
