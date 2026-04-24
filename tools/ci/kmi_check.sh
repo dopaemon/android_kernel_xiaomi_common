@@ -4,6 +4,33 @@ set -euo pipefail
 ROOT_DIR=${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 KERNEL_DIR=${KERNEL_DIR:-common}
 BUILD_CONFIG=${BUILD_CONFIG:-common/build.config.gki.aarch64}
+HERMETIC_BIN_DIRS=(
+  "${ROOT_DIR}/build/build-tools/path/linux-x86"
+  "${ROOT_DIR}/build-tools/path/linux-x86"
+)
+
+populate_hermetic_bins() {
+  local src_dir
+  local src
+  local dst_dir
+  local name
+
+  for dst_dir in "${HERMETIC_BIN_DIRS[@]}"; do
+    mkdir -p "${dst_dir}"
+  done
+
+  for src_dir in /usr/bin /bin /usr/sbin /sbin; do
+    [[ -d "${src_dir}" ]] || continue
+    for src in "${src_dir}"/*; do
+      [[ -f "${src}" ]] || continue
+      [[ -x "${src}" ]] || continue
+      name="$(basename "${src}")"
+      for dst_dir in "${HERMETIC_BIN_DIRS[@]}"; do
+        ln -sf "${src}" "${dst_dir}/${name}"
+      done
+    done
+  done
+}
 
 ensure_host_tool() {
   local tool="$1"
@@ -23,10 +50,9 @@ ensure_host_tool() {
     exit 127
   fi
 
-  mkdir -p "${ROOT_DIR}/build/build-tools/path/linux-x86" \
-           "${ROOT_DIR}/build-tools/path/linux-x86"
-  ln -sf "${src}" "${ROOT_DIR}/build/build-tools/path/linux-x86/${tool}"
-  ln -sf "${src}" "${ROOT_DIR}/build-tools/path/linux-x86/${tool}"
+  for dst_dir in "${HERMETIC_BIN_DIRS[@]}"; do
+    ln -sf "${src}" "${dst_dir}/${tool}"
+  done
 }
 
 if [[ ! -x "${ROOT_DIR}/build/build_abi.sh" ]]; then
@@ -48,6 +74,8 @@ export SKIP_MRPROPER=${SKIP_MRPROPER:-1}
 
 # build/build_abi.sh may replace PATH with hermetic tool dirs. Ensure
 # essential host tools exist there to avoid exit 127 failures.
+populate_hermetic_bins
+
 for t in \
   find mktemp readlink realpath dirname basename \
   grep sed awk sort uniq xargs \
