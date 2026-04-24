@@ -38,9 +38,11 @@ export TRIM_NONLISTED_KMI=${TRIM_NONLISTED_KMI:-1}
 export LTO=${LTO:-none}
 export SKIP_MRPROPER=${SKIP_MRPROPER:-1}
 
-# build/build_abi.sh may replace PATH with hermetic tool dirs; ensure 'find'
-# exists in those dirs so ABI extraction does not fail with exit 127.
-ensure_host_tool find
+# build/build_abi.sh may replace PATH with hermetic tool dirs. Ensure
+# essential host tools exist there to avoid exit 127 failures.
+for t in find mktemp readlink realpath dirname basename grep sed awk sort uniq xargs; do
+  ensure_host_tool "${t}"
+done
 
 cd "${ROOT_DIR}"
 
