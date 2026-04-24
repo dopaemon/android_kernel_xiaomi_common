@@ -1,0 +1,49 @@
+name: KMI | Strict ABI Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      KERNEL_BRANCH:
+        description: 'Kernel branch'
+        required: true
+        default: 'Rebase'
+      KERNEL_GIT:
+        description: 'Kernel source git'
+        required: true
+        default: 'https://github.com/dopaemon/android_kernel_xiaomi_common.git'
+
+jobs:
+  kmi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout CI repo (master)
+        uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex cpio curl file git jq \
+            libelf-dev libssl-dev pahole rsync unzip xz-utils zstd
+
+      - name: Prepare kernel tree
+        run: |
+          set -euo pipefail
+          mkdir -p android-kernel
+          git clone -b "${{ github.event.inputs.KERNEL_BRANCH }}" --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" android-kernel/common
+          git clone -b build --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" android-kernel/build
+          git clone -b build-tools --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" android-kernel/build-tools
+
+      - name: Run strict KMI check
+        env:
+          ROOT_DIR: ${{ github.workspace }}/android-kernel
+          KERNEL_DIR: common
+          BUILD_CONFIG: common/build.config.gki.aarch64
+          KMI_SYMBOL_LIST_STRICT_MODE: '1'
+          TRIM_NONLISTED_KMI: '1'
+          LTO: none
+          SKIP_MRPROPER: '1'
+        run: |
+          bash tools/ci/kmi_check.sh
