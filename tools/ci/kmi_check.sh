@@ -44,7 +44,9 @@ for t in \
   find mktemp readlink realpath dirname basename \
   grep sed awk sort uniq xargs \
   nproc rm cp mv ln mkdir rmdir cat echo printf tee cut tr \
-  head tail wc test env uname date pwd sh bash; do
+  head tail wc test env uname date pwd sh bash \
+  make clang ld.lld ar nm objcopy objdump strip \
+  python3 perl git rsync; do
   ensure_host_tool "${t}"
 done
 
