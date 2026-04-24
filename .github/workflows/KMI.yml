@@ -45,5 +45,7 @@ jobs:
           TRIM_NONLISTED_KMI: '1'
           LTO: none
           SKIP_MRPROPER: '1'
+          HERMETIC_TOOLCHAIN: '0'
+          DISABLE_HERMETIC_SYSROOT: '1'
         run: |
           bash tools/ci/kmi_check.sh

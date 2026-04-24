@@ -71,6 +71,10 @@ export KMI_SYMBOL_LIST_STRICT_MODE=${KMI_SYMBOL_LIST_STRICT_MODE:-1}
 export TRIM_NONLISTED_KMI=${TRIM_NONLISTED_KMI:-1}
 export LTO=${LTO:-none}
 export SKIP_MRPROPER=${SKIP_MRPROPER:-1}
+# For CI ABI checks, prefer host distro toolchain behavior to avoid
+# hermetic sysroot/host-tools mismatches.
+export HERMETIC_TOOLCHAIN=${HERMETIC_TOOLCHAIN:-0}
+export DISABLE_HERMETIC_SYSROOT=${DISABLE_HERMETIC_SYSROOT:-1}
 # Keep kernel target on LLVM, but force host tools (fixdep, genksyms, etc.)
 # to use distro GCC/G++ so libc headers are resolved from host sysroot.
 export HOSTCC=${HOSTCC:-gcc}
