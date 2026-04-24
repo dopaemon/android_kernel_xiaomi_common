@@ -35,11 +35,6 @@
 static const unsigned int vmpressure_level_med = 60;
 static const unsigned int vmpressure_level_critical = 95;
 
-static unsigned long vmpressure_scale_max = 100;
-
-/* vmpressure values >= this will be scaled based on allocstalls */
-static unsigned long allocstall_threshold = 70;
-
 static struct vmpressure global_vmpressure;
 static BLOCKING_NOTIFIER_HEAD(vmpressure_notifier);
 
@@ -165,19 +160,6 @@ out:
 		 scanned, reclaimed);
 
 	return pressure;
-}
-
-static unsigned long vmpressure_account_stall(unsigned long pressure,
-				unsigned long stall, unsigned long scanned)
-{
-	unsigned long scale;
-
-	if (pressure < allocstall_threshold)
-		return pressure;
-
-	scale = ((vmpressure_scale_max - pressure) * stall) / scanned;
-
-	return pressure + scale;
 }
 
 struct vmpressure_event {
@@ -353,43 +335,11 @@ static void vmpressure_memcg(gfp_t gfp, struct mem_cgroup *memcg, bool critical,
 			     unsigned long reclaimed) { }
 #endif
 
-bool vmpressure_inc_users(int order)
-{
-	struct vmpressure *vmpr = &global_vmpressure;
-	unsigned long flags;
-
-	if (order > PAGE_ALLOC_COSTLY_ORDER)
-		return false;
-
-	write_lock_irqsave(&vmpr->users_lock, flags);
-	if (atomic_long_inc_return_relaxed(&vmpr->users) == 1) {
-		/* Clear out stale vmpressure data when reclaim begins */
-		spin_lock(&vmpr->sr_lock);
-		vmpr->scanned = 0;
-		vmpr->reclaimed = 0;
-		vmpr->stall = 0;
-		spin_unlock(&vmpr->sr_lock);
-	}
-	write_unlock_irqrestore(&vmpr->users_lock, flags);
-
-	return true;
-}
-
-void vmpressure_dec_users(void)
-{
-	struct vmpressure *vmpr = &global_vmpressure;
-
-	/* Decrement the vmpressure user count with release semantics */
-	smp_mb__before_atomic();
-	atomic_long_dec(&vmpr->users);
-}
-
 static void vmpressure_global(gfp_t gfp, unsigned long scanned, bool critical,
 			      unsigned long reclaimed)
 {
 	struct vmpressure *vmpr = &global_vmpressure;
 	unsigned long pressure;
-	unsigned long stall;
 	unsigned long flags;
 
 	if (critical)
@@ -399,11 +349,6 @@ static void vmpressure_global(gfp_t gfp, unsigned long scanned, bool critical,
 	if (scanned) {
 		vmpr->scanned += scanned;
 		vmpr->reclaimed += reclaimed;
-
-		if (!current_is_kswapd())
-			vmpr->stall += scanned;
-
-		stall = vmpr->stall;
 		scanned = vmpr->scanned;
 		reclaimed = vmpr->reclaimed;
 
@@ -414,12 +359,10 @@ static void vmpressure_global(gfp_t gfp, unsigned long scanned, bool critical,
 	}
 	vmpr->scanned = 0;
 	vmpr->reclaimed = 0;
-	vmpr->stall = 0;
 	spin_unlock_irqrestore(&vmpr->sr_lock, flags);
 
 	if (scanned) {
 		pressure = vmpressure_calc_pressure(scanned, reclaimed);
-		pressure = vmpressure_account_stall(pressure, stall, scanned);
 	} else {
 		pressure = 100;
 	}
@@ -459,27 +402,8 @@ static void __vmpressure(gfp_t gfp, struct mem_cgroup *memcg, bool critical,
  * This function does not return any value.
  */
 void vmpressure(gfp_t gfp, struct mem_cgroup *memcg, bool tree,
-		unsigned long scanned, unsigned long reclaimed, int order)
+		unsigned long scanned, unsigned long reclaimed)
 {
-	struct vmpressure *vmpr = &global_vmpressure;
-	unsigned long flags;
-
-	if (order > PAGE_ALLOC_COSTLY_ORDER)
-		return;
-
-	/*
-	 * It's possible for kswapd to keep doing reclaim even though memory
-	 * pressure isn't high anymore. We should only track vmpressure when
-	 * there are failed memory allocations actively stuck in the page
-	 * allocator's slow path. No failed allocations means pressure is fine.
-	 */
-	read_lock_irqsave(&vmpr->users_lock, flags);
-	if (!atomic_long_read(&vmpr->users)) {
-		read_unlock_irqrestore(&vmpr->users_lock, flags);
-		return;
-	}
-	read_unlock_irqrestore(&vmpr->users_lock, flags);
-
 	__vmpressure(gfp, memcg, false, tree, scanned, reclaimed);
 }
 
@@ -494,11 +418,8 @@ void vmpressure(gfp_t gfp, struct mem_cgroup *memcg, bool tree,
  *
  * This function does not return any value.
  */
-void vmpressure_prio(gfp_t gfp, struct mem_cgroup *memcg, int prio, int order)
+void vmpressure_prio(gfp_t gfp, struct mem_cgroup *memcg, int prio)
 {
-	if (order > PAGE_ALLOC_COSTLY_ORDER)
-		return;
-
 	/*
 	 * We only use prio for accounting critical level. For more info
 	 * see comment for vmpressure_level_critical_prio variable above.
@@ -627,8 +548,6 @@ void vmpressure_init(struct vmpressure *vmpr)
 	mutex_init(&vmpr->events_lock);
 	INIT_LIST_HEAD(&vmpr->events);
 	INIT_WORK(&vmpr->work, vmpressure_work_fn);
-	atomic_long_set(&vmpr->users, 0);
-	rwlock_init(&vmpr->users_lock);
 }
 
 /**
