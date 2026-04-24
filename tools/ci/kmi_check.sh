@@ -40,7 +40,11 @@ export SKIP_MRPROPER=${SKIP_MRPROPER:-1}
 
 # build/build_abi.sh may replace PATH with hermetic tool dirs. Ensure
 # essential host tools exist there to avoid exit 127 failures.
-for t in find mktemp readlink realpath dirname basename grep sed awk sort uniq xargs; do
+for t in \
+  find mktemp readlink realpath dirname basename \
+  grep sed awk sort uniq xargs \
+  nproc rm cp mv ln mkdir rmdir cat echo printf tee cut tr \
+  head tail wc test env uname date pwd sh bash; do
   ensure_host_tool "${t}"
 done
 
