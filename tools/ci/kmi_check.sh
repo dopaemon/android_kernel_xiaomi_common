@@ -8,8 +8,16 @@ BUILD_CONFIG=${BUILD_CONFIG:-common/build.config.gki.aarch64}
 ensure_host_tool() {
   local tool="$1"
   local src
+  local candidate
 
-  src="$(command -v "${tool}" || true)"
+  src=""
+  for candidate in "${tool}" "${tool}-18" "${tool}-17" "${tool}-16" "${tool}-15" "${tool}-14" "${tool}-13" "${tool}-12"; do
+    src="$(command -v "${candidate}" || true)"
+    if [[ -n "${src}" ]]; then
+      break
+    fi
+  done
+
   if [[ -z "${src}" ]]; then
     echo "ERROR: required host tool '${tool}' not found"
     exit 127
