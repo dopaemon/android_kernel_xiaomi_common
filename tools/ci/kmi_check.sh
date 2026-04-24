@@ -71,6 +71,10 @@ export KMI_SYMBOL_LIST_STRICT_MODE=${KMI_SYMBOL_LIST_STRICT_MODE:-1}
 export TRIM_NONLISTED_KMI=${TRIM_NONLISTED_KMI:-1}
 export LTO=${LTO:-none}
 export SKIP_MRPROPER=${SKIP_MRPROPER:-1}
+# Keep kernel target on LLVM, but force host tools (fixdep, genksyms, etc.)
+# to use distro GCC/G++ so libc headers are resolved from host sysroot.
+export HOSTCC=${HOSTCC:-gcc}
+export HOSTCXX=${HOSTCXX:-g++}
 
 # build/build_abi.sh may replace PATH with hermetic tool dirs. Ensure
 # essential host tools exist there to avoid exit 127 failures.
@@ -82,7 +86,7 @@ for t in \
   nproc rm cp mv ln mkdir rmdir cat echo printf tee cut tr \
   head tail wc test env uname date pwd sh bash \
   make clang ld.lld ar nm objcopy objdump strip \
-  python3 perl git rsync; do
+  gcc g++ python3 perl git rsync; do
   ensure_host_tool "${t}"
 done
 
