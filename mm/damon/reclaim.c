@@ -51,32 +51,32 @@ static unsigned long min_age __read_mostly = 60000000;
 module_param(min_age, ulong, 0600);
 
 static struct damos_quota damon_reclaim_quota = {
-	/* use up to 50 ms time, reclaim up to 128 MiB per 1 sec by default */
-	.ms = 50,
-	.sz = 128 * 1024 * 1024,
+	/* use up to 30 ms time, reclaim up to 96 MiB per 1 sec by default */
+	.ms = 30,
+	.sz = 96 * 1024 * 1024,
 	.reset_interval = 1000,
 	/* Within the quota, page out older regions first. */
 	.weight_sz = 0,
-	.weight_nr_accesses = 0,
-	.weight_age = 1
+	.weight_nr_accesses = 3,
+	.weight_age = 7,
 };
 DEFINE_DAMON_MODULES_DAMOS_QUOTAS(damon_reclaim_quota);
 
 static struct damos_watermarks damon_reclaim_wmarks = {
 	.metric = DAMOS_WMARK_FREE_MEM_RATE,
-	.interval = 5000000,	/*  5 seconds */
-	.high = 250,		/* 25 percent */
-	.mid = 150,		/* 15 percent */
-	.low = 50,		/*  5 percent */
+	.interval = 5000000,
+	.high = 300,
+	.mid = 200,
+	.low = 100,
 };
 DEFINE_DAMON_MODULES_WMARKS_PARAMS(damon_reclaim_wmarks);
 
 static struct damon_attrs damon_reclaim_mon_attrs = {
-	.sample_interval = 10000,	/* 10 ms */
-	.aggr_interval = 100000,	/* 100 ms */
+	.sample_interval = 8000,	/* 8 ms */
+	.aggr_interval = 70000,	/* 70 ms */
 	.ops_update_interval = 0,
-	.min_nr_regions = 10,
-	.max_nr_regions = 1000,
+	.min_nr_regions = 64,
+	.max_nr_regions = 512,
 };
 DEFINE_DAMON_MODULES_MON_ATTRS_PARAMS(damon_reclaim_mon_attrs);
 
@@ -104,7 +104,7 @@ module_param(monitor_region_end, ulong, 0600);
  * If this parameter is set as ``Y``, DAMON_RECLAIM does not reclaim anonymous
  * pages.  By default, ``N``.
  */
-static bool skip_anon __read_mostly;
+static bool skip_anon __read_mostly = false;
 module_param(skip_anon, bool, 0600);
 
 /*
@@ -133,8 +133,8 @@ static struct damos *damon_reclaim_new_scheme(void)
 		.min_nr_accesses = 0,
 		.max_nr_accesses = 0,
 		/* for min_age or more micro-seconds */
-		.min_age_region = min_age /
-			damon_reclaim_mon_attrs.aggr_interval,
+		.min_age_region = max(1UL,
+			min_age / damon_reclaim_mon_attrs.aggr_interval),
 		.max_age_region = UINT_MAX,
 	};
 
@@ -236,7 +236,7 @@ static const struct kernel_param_ops enabled_param_ops = {
 
 module_param_cb(enabled, &enabled_param_ops, &enabled, 0600);
 MODULE_PARM_DESC(enabled,
-        "Enable or disable DAMON_RECLAIM (default: disabled)");
+        "Enable or disable DAMON_RECLAIM (default: enabled)");
 
 static int damon_reclaim_handle_commit_inputs(void)
 {

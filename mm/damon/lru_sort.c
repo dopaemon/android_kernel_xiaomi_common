@@ -27,7 +27,7 @@
  * watermarks-based activation condition.  Refer to below descriptions for the
  * watermarks parameter for this.
  */
-static bool enabled __read_mostly;
+static bool enabled __read_mostly = true;
 
 /*
  * Make DAMON_LRU_SORT reads the input parameters again, except ``enabled``.
@@ -46,10 +46,10 @@ module_param(commit_inputs, bool, 0600);
  *
  * If a memory region is accessed in frequency of this or higher,
  * DAMON_LRU_SORT identifies the region as hot, and mark it as accessed on the
- * LRU list, so that it could not be reclaimed under memory pressure.  50% by
+ * LRU list, so that it could not be reclaimed under memory pressure.  35% by
  * default.
  */
-static unsigned long hot_thres_access_freq = 500;
+static unsigned long hot_thres_access_freq = 350;
 module_param(hot_thres_access_freq, ulong, 0600);
 
 /*
@@ -57,39 +57,39 @@ module_param(hot_thres_access_freq, ulong, 0600);
  *
  * If a memory region is not accessed for this or longer time, DAMON_LRU_SORT
  * identifies the region as cold, and mark it as unaccessed on the LRU list, so
- * that it could be reclaimed first under memory pressure.  120 seconds by
+ * that it could be reclaimed first under memory pressure.  60 seconds by
  * default.
  */
-static unsigned long cold_min_age __read_mostly = 120000000;
+static unsigned long cold_min_age __read_mostly = 60000000;
 module_param(cold_min_age, ulong, 0600);
 
 static struct damos_quota damon_lru_sort_quota = {
-	/* Use up to 10 ms per 1 sec, by default */
-	.ms = 10,
+	/* Use up to 20 ms per 1 sec, by default */
+	.ms = 20,
 	.sz = 0,
 	.reset_interval = 1000,
 	/* Within the quota, mark hotter regions accessed first. */
 	.weight_sz = 0,
-	.weight_nr_accesses = 1,
-	.weight_age = 0,
+	.weight_nr_accesses = 7,
+	.weight_age = 3,
 };
 DEFINE_DAMON_MODULES_DAMOS_TIME_QUOTA(damon_lru_sort_quota);
 
 static struct damos_watermarks damon_lru_sort_wmarks = {
 	.metric = DAMOS_WMARK_FREE_MEM_RATE,
 	.interval = 5000000,	/* 5 seconds */
-	.high = 200,		/* 20 percent */
-	.mid = 150,		/* 15 percent */
-	.low = 50,		/* 5 percent */
+	.high = 350,		/* 35 percent */
+	.mid = 250,		/* 25 percent */
+	.low = 150,		/* 15 percent */
 };
 DEFINE_DAMON_MODULES_WMARKS_PARAMS(damon_lru_sort_wmarks);
 
 static struct damon_attrs damon_lru_sort_mon_attrs = {
-	.sample_interval = 5000,	/* 5 ms */
-	.aggr_interval = 100000,	/* 100 ms */
+	.sample_interval = 8000,	/* 8 ms */
+	.aggr_interval = 70000,	/* 70 ms */
 	.ops_update_interval = 0,
-	.min_nr_regions = 10,
-	.max_nr_regions = 1000,
+	.min_nr_regions = 64,
+	.max_nr_regions = 512,
 };
 DEFINE_DAMON_MODULES_MON_ATTRS_PARAMS(damon_lru_sort_mon_attrs);
 
@@ -150,20 +150,13 @@ static struct damos *damon_lru_sort_new_scheme(
 {
 	struct damos_quota quota = damon_lru_sort_quota;
 
-	/* Use half of total quota for hot/cold pages sorting */
-	quota.ms = quota.ms / 2;
+	if (action == DAMOS_LRU_PRIO)
+		quota.ms = (quota.ms * 12) / 20;   /* 60% for hot */
+	else
+		quota.ms = (quota.ms * 8) / 20;    /* 40% for cold */
 
-	return damon_new_scheme(
-			/* find the pattern, and */
-			pattern,
-			/* (de)prioritize on LRU-lists */
-			action,
-			/* for each aggregation interval */
-			0,
-			/* under the quota. */
-			&quota,
-			/* (De)activate this according to the watermarks. */
-			&damon_lru_sort_wmarks);
+	return damon_new_scheme(pattern, action, 0, &quota,
+				&damon_lru_sort_wmarks);
 }
 
 /* Create a DAMON-based operation scheme for hot memory regions */
