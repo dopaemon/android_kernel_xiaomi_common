@@ -3324,7 +3324,7 @@ static u32 count_child_tasks(struct task_struct *p) {
 	return cnt;
 }
 
-static inline bool task_is_inheritable(struct task_struct *p) {
+static inline bool task_burst_inheritable(struct task_struct *p) {
 	return (p->sched_class == &fair_sched_class);
 }
 
@@ -3335,7 +3335,7 @@ static inline bool child_burst_cache_expired(struct task_struct *p, u64 now) {
 }
 
 static void __update_child_burst_cache(
-	struct task_struct *p, u32 cnt, u32 sum, u64 now) {
+		struct task_struct *p, u32 cnt, u32 sum, u64 now) {
 	u8 avg = 0;
 	if (cnt) avg = sum / cnt;
 	p->se.child_burst = max(avg, p->se.burst_penalty);
@@ -3345,11 +3345,10 @@ static void __update_child_burst_cache(
 
 static inline void update_child_burst_direct(struct task_struct *p, u64 now) {
 	struct task_struct *child;
-	u32 cnt = 0;
-	u32 sum = 0;
+	u32 cnt = 0, sum = 0;
 
 	list_for_each_entry(child, &p->children, sibling) {
-		if (!task_is_inheritable(child)) continue;
+		if (!task_burst_inheritable(child)) continue;
 		cnt++;
 		sum += child->se.burst_penalty;
 	}
@@ -3368,8 +3367,7 @@ static inline u8 __inherit_burst_direct(struct task_struct *p, u64 now) {
 static void update_child_burst_topological(
 	struct task_struct *p, u64 now, u32 depth, u32 *acnt, u32 *asum) {
 	struct task_struct *child, *dec;
-	u32 cnt = 0, dcnt = 0;
-	u32 sum = 0;
+	u32 cnt = 0, dcnt = 0, sum = 0;
 
 	list_for_each_entry(child, &p->children, sibling) {
 		dec = child;
@@ -3377,7 +3375,7 @@ static void update_child_burst_topological(
 			dec = list_first_entry(&dec->children, struct task_struct, sibling);
 		
 		if (!dcnt || !depth) {
-			if (!task_is_inheritable(dec)) continue;
+			if (!task_burst_inheritable(dec)) continue;
 			cnt++;
 			sum += dec->se.burst_penalty;
 			continue;
@@ -3423,7 +3421,7 @@ static inline void inherit_burst(struct task_struct *p) {
 }
 
 static void sched_post_fork_bore(struct task_struct *p) {
-	if (p->sched_class == &fair_sched_class)
+	if (task_burst_inheritable(p))
 		inherit_burst(p);
 	p->se.burst_penalty = p->se.prev_burst_penalty;
 }
@@ -7638,7 +7636,7 @@ void __init sched_init(void)
 
 #ifdef CONFIG_SCHED_BORE
 	sched_init_bore();
-	printk(KERN_INFO "BORE (Burst-Oriented Response Enhancer) CPU Scheduler modification 5.1.0 by Masahito Suzuki");
+	printk(KERN_INFO "BORE (Burst-Oriented Response Enhancer) CPU Scheduler modification 5.1.11 by Masahito Suzuki");
 #endif // CONFIG_SCHED_BORE
 
 	wait_bit_init();
