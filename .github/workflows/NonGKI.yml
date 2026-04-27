@@ -3,6 +3,17 @@ name: NonGKI | DoraCore Kernel Build
 on:
   workflow_dispatch:
     inputs:
+      KERNEL_BRANCH:
+        description: 'DoraCore Branch'
+        required: true
+        default: 'Rebase'
+        type: choice
+        options:
+        - Rebase
+      KERNEL_GIT:
+        description: 'Kernel Source Code'
+        required: true
+        default: 'https://github.com/dopaemon/android_kernel_xiaomi_common.git'
       BUILD_DEVICE:
         description: 'Device Target'
         required: true
@@ -22,6 +33,10 @@ on:
         - ziyi
         - ingres
         - gki
+      MANIFEST_GIT:
+        description: 'Kernel Manifest Git'
+        required: true
+        default: 'https://github.com/dopaemon/android_kernel_xiaomi_common.git'
       BUILD_TARGET:
         description: 'Specify your Build Target (lindroid only KSU)'
         required: true
@@ -31,6 +46,30 @@ on:
         - NonKSU
         - KSU
         - Both
+      USING_CCACHE:
+        description: 'Using CCACHE'
+        required: true
+        default: 'Enable'
+        type: choice
+        options:
+        - Enable
+        - Disable
+      CLEAN_CCACHE:
+        description: 'Clean CCACHE'
+        required: true
+        default: 'Disable'
+        type: choice
+        options:
+        - Enable
+        - Disable
+      BUILDING_CCACHE:
+        description: 'Building CCACHE'
+        required: true
+        default: 'Disable'
+        type: choice
+        options:
+        - Enable
+        - Disable
       RELEASE:
         description: 'Status Release'
         required: true
@@ -42,12 +81,23 @@ on:
         - release
 
 jobs:
+  cache-clear:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Clean CCACHE
+        if: github.event.inputs.CLEAN_CCACHE == 'Enable'
+        uses: easimon/wipe-cache@main
+
   set-matrix:
-    runs-on: ubuntu-22.04
+    needs: cache-clear
+    runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - id: set-matrix
+      - name: Matrix Setup
+        id: set-matrix
         shell: bash
         env:
           BUILD_DEVICE: ${{ github.event.inputs.BUILD_DEVICE }}
@@ -73,8 +123,8 @@ jobs:
           elif [ "$BUILD_DEVICE" = "ziyi" ]; then
             matrix='["ziyi"]'
           elif [ "$BUILD_DEVICE" = "ingres" ]; then
-            matrix='["ziyi"]'
-          elif [ "$BUILD_DEVICE" = "ingres" ]; then
+            matrix='["ingres"]'
+          elif [ "$BUILD_DEVICE" = "gki" ]; then
             matrix='["gki"]'
           elif [ "$BUILD_DEVICE" = "all" ]; then
             matrix='["mayfly", "cupid", "unicorn", "zeus", "diting", "marble", "mondrian", "thor", "zizhan", "ziyi", "ingres", "gki"]'
@@ -97,33 +147,36 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set tag as timestamp
         id: set-tag
         run: echo "tag=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.set-tag.outputs.tag }}
           name: DoraCore Build ${{ steps.set-tag.outputs.tag }}
           draft: ${{ github.event.inputs.RELEASE == 'draft' }}
           prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
+          make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
           body: |
             Build: DoraCore Kernel For GKI Linux 5.10.y
             Linux: Linux 5.10.y
             Type: GKI
-            Developer: @dopaemon
-            Credits: @ArianK16a, @bachnxuan, @Gelbpunkt, @ztc1997, @pzqqt, @KernelToast, @Arter97, @ramabondanp, @Gosth15, @Flopster101, @bheatleyyy, @keosh1, @n08i40k, @bryanyee33, @adithya2306, @n08i40k, @ParsaAslaniYC, ...
+            Developer: dopaemon
+            Credits: ArianK16a, bachnxuan, Gelbpunkt, ztc1997, pzqqt, KernelToast, Arter97, ramabondanp, Gosth15, Flopster101, bheatleyyy, keosh1, n08i40k, ParsaAslaniYC, ...
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build:
     needs: [create_release, set-matrix]
     runs-on: ubuntu-latest
+    timeout-minutes: 360
 
     strategy:
+      fail-fast: false
       matrix:
         device: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
 
@@ -136,110 +189,777 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Free Disk Space
+        if: true
+        uses: endersonmenezes/free-disk-space@v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: true
+          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+          remove_packages_one_command: true
+          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+          rm_cmd: "rmz"
+          rmz_version: "3.1.1"
+          testing: false
+
+      - name: Setup Swap Space
+        uses: thejerrybao/setup-swap-space@v1
+        with:
+          swap-space-path: /swapfile
+          swap-size-gb: 16
+          remove-existing-swap-files: true
+
+      - name: Tune Swap Aggressiveness
+        run: |
+          set -euo pipefail
+          sudo sysctl -w vm.swappiness=200
+          sudo sysctl -w vm.page-cluster=0
+          sudo swapoff /swapfile || true
+          sudo swapon -p 32767 /swapfile
+          echo "===== Swap Tuning ====="
+          cat /proc/sys/vm/swappiness
+          cat /proc/sys/vm/page-cluster
+          swapon --show --bytes
+
+      - name: Check Initial Disk Space
+        run: |
+          echo "===== Initial Total Disk Space in GB ====="
+          df -BG
+
+      # - name: Clean-up
+        # uses: rokibhasansagar/slimhub_actions@main
+
+      # - name: Check Disk Space After Cleanup
+        # run: |
+          # echo "===== Total Disk Space After Cleanup in GB ====="
+          # df -BG
 
       - name: Build Environment
         run: |
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           echo "BUILD_DATE=$(TZ=Asia/Ho_Chi_Minh date +'%Y-%m%d-%H%M')" >> $GITHUB_ENV
-          cd $GITHUB_WORKSPACE
+          sudo apt-mark hold firefox
+          sudo apt-mark hold libc-bin
+          sudo apt purge man-db
+          sudo rm -rf /var/lib/man-db/auto-update
           sudo apt-get update
-          sudo apt-get install -yyq \
-                build-essential bison flex \
-                libncurses-dev libelf-dev wget \
-                sudo curl git ccache automake \
-                zip bzip2 libbz2-dev libbz2-1.0 \
-                libghc-bzlib-dev dpkg-dev make \
-                optipng maven pwgen libswitch-perl \
-                policycoreutils minicom libxml-sax-base-perl \
-                libxml-simple-perl libc6-dev-i386 libx11-dev \
-                lib32z-dev libgl1-mesa-dev unzip \
-                device-tree-compiler rename dwarves \
-                openjdk-8-jdk bc bison g++-multilib \
-                gcc-multilib gnupg gperf imagemagick \
-                lib32readline-dev \
-                lib32z1-dev liblz4-tool libncurses5-dev \
-                libsdl1.2-dev libssl-dev nano \
-                libxml2 libxml2-utils \
-                lzop pngcrush rsync schedtool squashfs-tools \
-                xsltproc zlib1g-dev python3 python-is-python3
+          sudo apt-get install -y --no-install-recommends \
+            curl bison flex make binutils git perl gcc python3 \
+            python-is-python3 bc libssl-dev libelf-dev \
+            bc aria2 zip unzip ccache binutils-aarch64-linux-gnu \
+            tar which wget zip unzip lz4 \
+            cpio kmod u-boot-tools xz-utils fdisk util-linux \
+            pkg-config ccache android-sdk-libsparse-utils vim
+          cd $GITHUB_WORKSPACE
           sudo wget -O /usr/bin/repo http://commondatastorage.googleapis.com/git-repo-downloads/repo
           sudo chmod +x /usr/bin/repo
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           mkdir -p $GITHUB_WORKSPACE/android-kernel && cd $GITHUB_WORKSPACE/android-kernel
-          repo init --depth=1 --u https://github.com/dopaemon/android_kernel_manifest.git -b sm8450
+          repo init --depth=1 --u ${{ github.event.inputs.KERNEL_GIT }} -b manifest
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
-          git clone -b sm8450 --depth=1 --single-branch https://github.com/dopaemon/Anykernel3.git ./AnyKernel3
+          git clone -b build --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git build
+          rm -rf .git .github .repo common
+          rm -rf ./build/_setup_env.sh
+          wget -O ./build/_setup_env.sh https://raw.githubusercontent.com/dopaemon/android_kernel_xiaomi_common/refs/heads/master/.github/scripts/_setup_env.sh
+          chmod +x ./build/_setup_env.sh
+          if [ "$TARGET" != "Both" ]; then
+             git clone -b master --depth=1 --single-branch https://github.com/dopaemon/Anykernel3.git ./AnyKernel3
+          else
+             git clone -b volume --depth=1 --single-branch https://github.com/dopaemon/Anykernel3.git ./AnyKernel3
+          fi
           rm -rf ./AnyKernel3/.git
+          rm -rf ${{ github.workspace }}/android-kernel/prebuilts/build-tools
+          rm -rf ${{ github.workspace }}/android-kernel/prebuilts/kernel-build-tools
+          cd ${{ github.workspace }}/android-kernel/prebuilts
+          git clone -b build-tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/android-kernel/prebuilts/build-tools
+          git clone -b build-tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/android-kernel/prebuilts/kernel-build-tools
+
+      - name: Setup Enviroment NonGKI
+        run: |
+          mkdir -p ${{ github.workspace }}/mkbootimg ${{ github.workspace }}/clang ${{ github.workspace }}/dist ${{ github.workspace }}/images
+          wget https://android.googlesource.com/platform/system/tools/mkbootimg/+archive/refs/heads/main.tar.gz -O mkb.tar.gz && tar -zxvf mkb.tar.gz -C ${{ github.workspace }}/mkbootimg
+          git clone -b LKM_Tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/LKM_Tools
+          wget https://github.com/dopaemon/android_kernel_xiaomi_common/releases/download/Origin-Images/boot-${{ matrix.device }}.img -O ${{ github.workspace }}/images/boot.img
+          wget https://github.com/dopaemon/android_kernel_xiaomi_common/releases/download/Origin-Images/vendor_boot-${{ matrix.device }}.img -O ${{ github.workspace }}/images/vendor_boot.img
+          wget https://github.com/dopaemon/android_kernel_xiaomi_common/releases/download/Origin-Images/vendor_dlkm-${{ matrix.device }}.img -O ${{ github.workspace }}/images/vendor_dlkm.img
+
+      - name: Get SM8450 Trees
+        run: |
+          git clone -b lineage-23.0 \
+              --single-branch \
+              --depth=1 \
+              https://github.com/dopaemon/android_kernel_xiaomi_sm8450-devicetrees.git \
+              $GITHUB_WORKSPACE/android-kernel/sm8450-devicetrees
+
+          git clone -b lineage-23.0 \
+              --single-branch \
+              --depth=1 \
+              https://github.com/dopaemon/android_kernel_xiaomi_sm8450-modules.git \
+              $GITHUB_WORKSPACE/android-kernel/sm8450-modules
+
+      - name: Cache Kernel
+        if: github.event.inputs.USING_CCACHE == 'Enable'
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: android-kernel/common
+          key: kernel-${{ github.event.inputs.KERNEL_BRANCH }}
+          restore-keys: |
+            kernel-
+
+      - name: Clone Kernel if cache missed
+        if: steps.cache-kernel.outputs.cache-hit != 'true'
+        run: |
+          git clone -b ${{ github.event.inputs.KERNEL_BRANCH }} --recurse-submodules -j$(nproc --all) --single-branch --no-tags ${{ github.event.inputs.KERNEL_GIT }} android-kernel/common
+
+      - name: Sync Kernel if cache complete
+        if: steps.cache-kernel.outputs.cache-hit == 'true'
+        run: |
+          cd android-kernel/common
+          git fetch origin Rebase
+          git reset --hard FETCH_HEAD
+          git submodule update --init --recursive
+
+      - name: Cache Clang
+        if: github.event.inputs.USING_CCACHE == 'Enable'
+        id: cache-clang
+        uses: actions/cache@v4
+        with:
+          path: android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
+          key: clang-${{ github.event.inputs.KERNEL_BRANCH }}
+          restore-keys: |
+            clang-
+
+      - name: Clone Clang if cache missed
+        if: steps.cache-clang.outputs.cache-hit != 'true'
+        run: |
+          # git clone -b ${{ github.event.inputs.CLANG_BRANCH }} --depth=1 --single-branch ${{ github.event.inputs.CLANG_PREBUILT }} $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
+          # git clone -b 21 \
+              # --single-branch \
+              # --depth=1 \
+              # --no-tags \
+              # https://gitlab.com/clangsantoni/zyc_clang.git \
+              # $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
+          mkdir -p $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
+          # cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/
+          # aria2c -s16 -x16 -k1M https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
+          # tar -xvf Clang-22.0.0git-20250928.tar.gz
+          # rm -rf Clang-22.0.0git-20250928.tar.gz
+          cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/
+          # aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang20-r547379/clang-r547379.zip -o clang.zip &&
+          # unzip -q clang.zip -d clang-r416183b
+          # rm -rf clang.zip
+          git clone -b 21 --single-branch --depth=1 https://gitlab.com/vantoman/playground-clang.git clang-r416183b
+
+      - name: Setup Enviroment
+        run: |
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
+          # echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"' >> $GITHUB_ENV
+          # echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"' >> $GITHUB_ENV
+          CLANG_DIR="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin"
+          CLANG_VERSION="$($CLANG_DIR/clang --version | head -n 1)"
+          LLD_VERSION="$($CLANG_DIR/ld.lld --version | head -n 1)"
+          echo "Prebuilts Infomation:"
+          echo "Clang Version: $CLANG_VERSION"
+          echo "LLD Version: $LLD_VERSION"
+
+      - name: First Setup CCACHE
+        run: |
+          CCACHE_DIR="${{ github.workspace }}/ccache"
+          mkdir -p $CCACHE_DIR
+          sudo chmod 7777 $CCACHE_DIR
+          echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}" >> $GITHUB_ENV
+
+      - name: Get Cache CCACHE
+        if: github.event.inputs.USING_CCACHE == 'Enable'
+        id: cache-ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.device }}-${{ github.event.inputs.KERNEL_BRANCH }}
+          restore-keys: |
+            ccache-${{ matrix.device }}-
+
+      - name: Complete Setup CCACHE
+        run: |
+          ccache --set-config=cache_dir=${{ env.CCACHE_DIR }}
+          ccache --set-config=max_size=5G
+          ccache --set-config=sloppiness=time_macros,include_file_ctime,include_file_mtime,file_stat_matches
+          ccache --set-config=hash_dir=false
+          ccache -s
+
+      - name: CCACHE Infomation
+        run: |
+          echo "First Status ccache:"
+          ccache -s
+          if [ "${{ steps.cache-ccache.outputs.cache-hit }}" == 'true' ]; then
+            echo "\n\n"
+            echo "CCACHE Infomation:"
+            ccache -sv
+          fi
 
       - name: Build Selected Devices KSU
-        if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both')
+        if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
-          set -e
+          set -euo pipefail
           DEVICE="${{ matrix.device }}"
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
+          BUILD_JOBS="$(nproc --all)"
+          if [ "$BUILD_JOBS" -gt 4 ]; then
+             BUILD_JOBS=4
+          fi
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out
+
+          log_resource_snapshot() {
+            local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
+            local swap_total_kb swap_free_kb swap_used_kb swap_used_mib swap_total_mib swap_used_pct
+            local disk_usage
+
+            mem_total_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+            mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+            mem_used_kb=$((mem_total_kb - mem_avail_kb))
+            mem_used_mib=$((mem_used_kb / 1024))
+            mem_total_mib=$((mem_total_kb / 1024))
+            mem_used_pct=$((100 * mem_used_kb / mem_total_kb))
+
+            swap_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
+            swap_free_kb=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
+            if [ "$swap_total_kb" -gt 0 ]; then
+              swap_used_kb=$((swap_total_kb - swap_free_kb))
+              swap_used_mib=$((swap_used_kb / 1024))
+              swap_total_mib=$((swap_total_kb / 1024))
+              swap_used_pct=$((100 * swap_used_kb / swap_total_kb))
+            else
+              swap_used_mib=0
+              swap_total_mib=0
+              swap_used_pct=0
+            fi
+
+            disk_usage=$(df -P -BG "$GITHUB_WORKSPACE" | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
+            printf '[monitor] %s | RAM %s/%s MiB (%s%%) | SWAP %s/%s MiB (%s%%) | DISK %s\n' \
+              "$(date +'%F %T')" \
+              "$mem_used_mib" "$mem_total_mib" "$mem_used_pct" \
+              "$swap_used_mib" "$swap_total_mib" "$swap_used_pct" \
+              "$disk_usage"
+          }
+
+          run_make_keepalive() {
+            local log_file="$1"
+            shift
+
+            "$@" 2>&1 | tee "$log_file" &
+            MAKE_PID=$!
+
+            log_resource_snapshot
+
+            while kill -0 "$MAKE_PID" 2>/dev/null; do
+              log_resource_snapshot
+              sleep 30
+            done &
+            KEEPALIVE_PID=$!
+
+            wait "$MAKE_PID"
+            MAKE_RC=$?
+            kill "$KEEPALIVE_PID" 2>/dev/null || true
+            wait "$KEEPALIVE_PID" 2>/dev/null || true
+
+            return "$MAKE_RC"
+          }
+
+          export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-KSU-ccache.log"
+          export CCACHE_COMPILERCHECK="none"
+          export CCACHE_BASEDIR="${{ github.workspace }}"
+          export CCACHE_NOHASHDIR="true"
+          export CCACHE_HARDLINK="true"
+          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+          export CCACHE_MAXSIZE="3G"
+          export KERNEL_USE_CCACHE=1
+
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
+
+          unset DTC
+          export DTC="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin/dtc"
+
+          # Kernel Enviroment / Setup
+          mkdir -p ${{ github.workspace }}/modules_sync \
+                   ${{ github.workspace }}/vendor_boot_unpack \
+                   ${{ github.workspace }}/vendor_dlkm_unpack \
+                   ${{ github.workspace }}/boot \
+                   ${{ github.workspace }}/vendor_boot_deps \
+                   ${{ github.workspace }}/vendor_dlkm_deps \
+                   ${{ github.workspace }}/vendor_boot_modules \
+                   ${{ github.workspace }}/vendor_dlkm_modules \
+                   ${{ github.workspace }}/vendor_boot_new \
+                   ${{ github.workspace }}/vendor_dlkm_new
+
+
+          export MOD_SYNC=${{ github.workspace }}/modules_sync
+          export DIST=${{ github.workspace }}/dist
+          export VENDOR_BOOT_UNPACK=${{ github.workspace }}/vendor_boot_unpack
+          export VENDOR_DLKM_UNPACK=${{ github.workspace }}/vendor_dlkm_unpack
+          export BOOT_UNPACK=${{ github.workspace }}/boot
+          export ORIGIN_IMAGES_DIR=${{ github.workspace }}/images
+          export VENDOR_BOOT_DEPS=${{ github.workspace }}/vendor_boot_deps
+          export VENDOR_DLKM_DEPS=${{ github.workspace }}/vendor_dlkm_deps
+          export LKM_TOOLS=${{ github.workspace }}/LKM_Tools
+          export VENDOR_BOOT_MODULES=${{ github.workspace }}/vendor_boot_modules
+          export VENDOR_DLKM_MODULES=${{ github.workspace }}/vendor_dlkm_modules
+          export VENDOR_BOOT_NEW=${{ github.workspace }}/vendor_boot_new
+          export VENDOR_DLKM_NEW=${{ github.workspace }}/vendor_dlkm_new
 
           cd $GITHUB_WORKSPACE/android-kernel
-          rm -rf ${DEVICE}-kernel
-          cd ./sm8450
+          cd ./common/
+          git add -vA
           git reset --hard HEAD
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
           echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
+
+          rm ./android/abi_gki_protected_exports_* || true
+
+          if [ "$DEVICE" != "gki" ]; then
+             cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
+          fi
+
+          export DTC=$(pwd)/scripts/dtc/dtc
+
+          make -j"$BUILD_JOBS" \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
+               CC="ccache clang" \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               LLVM_IAS=1 \
+               LD="ld.lld" \
+               HOSTLD="ld.lld" \
+               DTC_EXT=dtc \
+               gki_defconfig
+
+          if [ -x scripts/config ]; then
+             scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
+               -d LTO_CLANG_THIN \
+               -e LTO_CLANG_FULL
+          fi
+
+          make -j"$BUILD_JOBS" \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               LLVM_IAS=1 \
+               olddefconfig
+
+          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-KSU.log" \
+            make -j"$BUILD_JOBS" \
+              LLVM=1 \
+              ARCH=arm64 \
+              CROSS_COMPILE="aarch64-linux-gnu-" \
+              CC="ccache clang" \
+              LD="ld.lld" \
+              HOSTLD="ld.lld" \
+              O=$GITHUB_WORKSPACE/android-kernel/out \
+              LLVM_IAS=1 \
+              DTC_EXT=dtc \
+              DTC_FLAGS="-Wno-all" \
+              Image modules
+
+          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-KSU.log" \
+            make -j"$BUILD_JOBS" \
+              LLVM=1 \
+              ARCH=arm64 \
+              CROSS_COMPILE="aarch64-linux-gnu-" \
+              CC="ccache clang" \
+              LD="ld.lld" \
+              HOSTLD="ld.lld" \
+              O=$GITHUB_WORKSPACE/android-kernel/out \
+              LLVM_IAS=1 \
+              DTC_EXT=dtc \
+              DTC_FLAGS="-Wno-all" \
+              INSTALL_MOD_PATH="$MOD_SYNC" \
+              modules_install
+
+          [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
+
+          export REAL_VER=$(ls "$MOD_SYNC/lib/modules/" | head -n 1)
+          echo ">>> Detected Kernel Version: $REAL_VER"
+
+          echo ">>> Unpacking vendor_boot..."
+          python3 "${{ github.workspace }}/mkbootimg/unpack_bootimg.py" \
+              --boot_img "$ORIGIN_IMAGES_DIR/vendor_boot.img" \
+              --out "$VENDOR_BOOT_UNPACK" | tee "$VENDOR_BOOT_UNPACK/unpack_info.txt"
+
+          HEADER_VER=$(grep "vendor boot image header version:" "$VENDOR_BOOT_UNPACK/unpack_info.txt" | awk '{print $6}')
+          PAGE_SIZE=$(grep "page size:" "$VENDOR_BOOT_UNPACK/unpack_info.txt" | awk '{print $3}')
+          PAGE_SIZE=$((PAGE_SIZE))
+          KERNEL_OFFSET=$(grep "kernel load address:" "$VENDOR_BOOT_UNPACK/unpack_info.txt" | awk '{print $4}')
+          RAMDISK_OFFSET=$(grep "ramdisk load address:" "$VENDOR_BOOT_UNPACK/unpack_info.txt" | awk '{print $4}')
+          TAGS_OFFSET=$(grep "kernel tags load address:" "$VENDOR_BOOT_UNPACK/unpack_info.txt" | awk '{print $5}')
+          DTB_OFFSET=$(grep "dtb address:" "$VENDOR_BOOT_UNPACK/unpack_info.txt" | awk '{print $3}')
+          VENDOR_CMDLINE=$(grep "vendor command line args:" "$VENDOR_BOOT_UNPACK/unpack_info.txt" | sed 's/vendor command line args: //')
+
+          echo ">>> HEADER_VER=$HEADER_VER"
+          echo ">>> PAGE_SIZE=$PAGE_SIZE"
+          echo ">>> KERNEL_OFFSET=$KERNEL_OFFSET"
+          echo ">>> RAMDISK_OFFSET=$RAMDISK_OFFSET"
+          echo ">>> TAGS_OFFSET=$TAGS_OFFSET"
+          echo ">>> DTB_OFFSET=$DTB_OFFSET"
+
+          DLKM_FRAGMENT=$(find "$VENDOR_BOOT_UNPACK/vendor-ramdisk-by-name" -type f -name "ramdisk_dlkm" | head -n1)
+          [ -n "$DLKM_FRAGMENT" ] || { echo "!!! dlkm fragment missing"; exit 1; }
+
+          DLKM_REALFILE=$(readlink -f "$DLKM_FRAGMENT")
+          DLKM_BASENAME=$(basename "$DLKM_REALFILE")
+
+          echo ">>> DLKM fragment = $DLKM_BASENAME"
+
+          mapfile -t ORIGINAL_FRAGMENTS < <(grep -o 'vendor_ramdisk[0-9][0-9]' "$VENDOR_BOOT_UNPACK/unpack_info.txt" | uniq)
+          [ ${#ORIGINAL_FRAGMENTS[@]} -gt 0 ] || { echo "!!! no fragment table parsed"; exit 1; }
+
+          declare -A FRAG_TYPES
+          declare -A FRAG_NAMES
+
+          CURRENT=""
+          while IFS= read -r line; do
+              if [[ "$line" =~ (vendor_ramdisk[0-9][0-9]): ]]; then
+                  CURRENT="${BASH_REMATCH[1]}"
+              fi
+
+              if [[ "$line" =~ type:\ (0x[0-9]+) ]]; then
+                  FRAG_TYPES[$CURRENT]="${BASH_REMATCH[1]}"
+              fi
+
+              if [[ "$line" =~ name:\ (.*)$ ]]; then
+                  FRAG_NAMES[$CURRENT]="${BASH_REMATCH[1]}"
+              fi
+          done < "$VENDOR_BOOT_UNPACK/unpack_info.txt"
+
+          mkdir -p "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents"
+
+          FRAG_FILE_DESC=$(file "$DLKM_REALFILE")
+          echo ">>> DLKM file type: $FRAG_FILE_DESC"
+
+          if echo "$FRAG_FILE_DESC" | grep -qi "LZ4 compressed"; then
+              lz4 -d "$DLKM_REALFILE" "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.cpio"
+          elif echo "$FRAG_FILE_DESC" | grep -qi "gzip compressed"; then
+              cp "$DLKM_REALFILE" "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.gz"
+              gunzip -f "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.gz"
+              mv "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm" "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.cpio"
+          else
+              cp "$DLKM_REALFILE" "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.cpio"
+          fi
+
+          cd "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents"
+          cpio -idmv < ../vendor_ramdisk_dlkm.cpio
+          cd $GITHUB_WORKSPACE/android-kernel/common
+
+          echo ">>> Setup modules..."
+          sudo [ -e /dev/loop0 ] || sudo mknod /dev/loop0 b 7 0 || true
+          sudo umount -l "$VENDOR_DLKM_UNPACK" || true
+          sudo mount -o loop "$ORIGIN_IMAGES_DIR/vendor_dlkm.img" "$VENDOR_DLKM_UNPACK"
+
+          $LKM_TOOLS/01.module_dep.sh \
+              "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents/lib/modules/modules.load.recovery" \
+              "$VENDOR_BOOT_DEPS"
+
+          $LKM_TOOLS/01.module_dep.sh \
+              "$VENDOR_DLKM_UNPACK/lib/modules/modules.dep" \
+              "$VENDOR_DLKM_DEPS"
+
+          $LKM_TOOLS/02.prepare_vendor_boot_modules.sh \
+              "$VENDOR_BOOT_DEPS/modules_list.txt" \
+              "$MOD_SYNC/lib/modules/$REAL_VER" \
+              "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents/lib/modules/modules.load.recovery" \
+              "$GITHUB_WORKSPACE/android-kernel/out/System.map" \
+              "${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin/llvm-strip" \
+              "$VENDOR_BOOT_MODULES"
+
+          $LKM_TOOLS/03.prepare_vendor_dlkm.sh \
+              "$VENDOR_DLKM_DEPS/modules_list.txt" \
+              "$MOD_SYNC/lib/modules/$REAL_VER" \
+              "$VENDOR_DLKM_UNPACK/lib/modules/modules.dep" \
+              "$GITHUB_WORKSPACE/android-kernel/out/System.map" \
+              "${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin/llvm-strip" \
+              "$VENDOR_DLKM_MODULES" \
+              "$VENDOR_BOOT_DEPS/modules_list.txt" \
+              ""
+
+          echo ">>> Building new vendor_dlkm..."
+          STOCK_VDLKM_SIZE=$(stat -c%s "$ORIGIN_IMAGES_DIR/vendor_dlkm.img")
+          dd if=/dev/zero of=vendor_dlkm_new.img bs=1 count=0 seek="$STOCK_VDLKM_SIZE"
+          mkfs.ext2 -F -L vendor_dlkm -b 4096 -N 3000 vendor_dlkm_new.img
+
+          sudo umount -l "$VENDOR_DLKM_NEW" || true
+          sudo mount -o loop vendor_dlkm_new.img "$VENDOR_DLKM_NEW"
+          sudo mkdir -p "$VENDOR_DLKM_NEW/lib/modules"
+          sudo cp -af "$VENDOR_DLKM_MODULES/"* "$VENDOR_DLKM_NEW/lib/modules/"
+          sudo cp -af "$VENDOR_DLKM_UNPACK/etc" "$VENDOR_DLKM_NEW/"
+          sudo umount "$VENDOR_DLKM_NEW"
+          sudo umount "$VENDOR_DLKM_UNPACK"
+
+          img2simg vendor_dlkm_new.img "$DIST/vendor_dlkm.img"
+
+          echo ">>> Building new vendor_boot..."
+          rm -rf "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents/lib/modules/"*
+          cp -af "$VENDOR_BOOT_MODULES/"* "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents/lib/modules/"
+
+          [ -f "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents/lib/modules/modules.load" ] && \
+          mv "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents/lib/modules/modules.load" \
+             "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents/lib/modules/modules.load.recovery" || true
+
+          cd "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents"
+          find . -mindepth 1 | sort | cpio -H newc -o --owner root:root > ../new_vendor_ramdisk_dlkm.cpio
+          cd "$VENDOR_BOOT_UNPACK"
+
+          if echo "$FRAG_FILE_DESC" | grep -qi "LZ4 compressed"; then
+              lz4 -l -12 new_vendor_ramdisk_dlkm.cpio new_vendor_ramdisk_dlkm.repack
+          elif echo "$FRAG_FILE_DESC" | grep -qi "gzip compressed"; then
+              gzip -n -9 -c new_vendor_ramdisk_dlkm.cpio > new_vendor_ramdisk_dlkm.repack
+          else
+              cp new_vendor_ramdisk_dlkm.cpio new_vendor_ramdisk_dlkm.repack
+          fi
+
+          MKBOOT_CMD=(
+              python3 "${{ github.workspace }}/mkbootimg/mkbootimg.py"
+              --header_version "$HEADER_VER"
+              --base 0x00000000
+              --pagesize "$PAGE_SIZE"
+              --kernel_offset "$KERNEL_OFFSET"
+              --ramdisk_offset "$RAMDISK_OFFSET"
+              --tags_offset "$TAGS_OFFSET"
+              --dtb_offset "$DTB_OFFSET"
+              --vendor_cmdline "$VENDOR_CMDLINE"
+              --dtb "$VENDOR_BOOT_UNPACK/dtb"
+              --vendor_bootconfig "$VENDOR_BOOT_UNPACK/bootconfig"
+          )
+
+          for fragbase in "${ORIGINAL_FRAGMENTS[@]}"; do
+              frag="$VENDOR_BOOT_UNPACK/$fragbase"
+              ftype="${FRAG_TYPES[$fragbase]}"
+              fname="${FRAG_NAMES[$fragbase]}"
+
+              case "$ftype" in
+                  0x1) TYPE_ARG="PLATFORM" ;;
+                  0x2) TYPE_ARG="RECOVERY" ;;
+                  0x3) TYPE_ARG="DLKM" ;;
+                  *) TYPE_ARG="PLATFORM" ;;
+              esac
+
+              if [ "$fragbase" = "$DLKM_BASENAME" ]; then
+                  MKBOOT_CMD+=( --vendor_ramdisk_fragment "$VENDOR_BOOT_UNPACK/new_vendor_ramdisk_dlkm.repack" )
+              else
+                  MKBOOT_CMD+=( --vendor_ramdisk_fragment "$frag" )
+              fi
+
+              MKBOOT_CMD+=( --ramdisk_type "$TYPE_ARG" )
+
+              if [ -n "$fname" ]; then
+                  MKBOOT_CMD+=( --ramdisk_name "$fname" )
+              fi
+          done
+
+          MKBOOT_CMD+=( -o "$DIST/vendor_boot.img" )
+          "${MKBOOT_CMD[@]}"
+
+          STOCK_VB_SIZE=$(stat -c%s "$ORIGIN_IMAGES_DIR/vendor_boot.img")
+          NEW_VB_SIZE=$(stat -c%s "$DIST/vendor_boot.img")
+
+          if [ "$NEW_VB_SIZE" -gt "$STOCK_VB_SIZE" ]; then
+              echo "!!! vendor_boot new image larger than stock partition"
+              exit 1
+          fi
+
+          truncate -s "$STOCK_VB_SIZE" "$DIST/vendor_boot.img"
 
           cd $GITHUB_WORKSPACE/android-kernel
-          cd ./sm8450/
+          cd ./common/
 
-          ./build.sh ${DEVICE}
-
-          ZIP_NAME="DoraCore-${DEVICE}-NonGKI-KSU-5.10-A12-${BUILD_DATE}.zip"
-
-          cd $GITHUB_WORKSPACE/android-kernel/${DEVICE}-kernel
-          cp -rv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
-          cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/dtb
-          cd ./vendor_dlkm && tar -cJf $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.tar.xz . && cd ../
-          cd ./vendor_ramdisk && find . | cpio -o -H newc > ../vendor_ramdisk.cpio && cd ../
-          lz4 -l -B6 --content-size vendor_ramdisk.cpio $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.cpio.lz4
-          cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-          rm -rf .git README.md || true
-          find . -type f -name 'placeholder' -delete
-          find . -type d -empty -delete
-
-          zip -r9 "$ZIP_NAME" *
-          mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+          if [ "$TARGET" != "Both" ]; then
+             ZIP_NAME="DoraCore-${DEVICE}-KSU-5.10-A12-${BUILD_DATE}.zip"
+             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
+             zip -r9 "$ZIP_NAME" *
+             mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+          else
+             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-kernelsu
+          fi
 
       - name: Build Selected Devices NonKSU
-        if: (github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both')
+        if: (github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
-          set -e
+          set -euo pipefail
           DEVICE="${{ matrix.device }}"
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           ZIP_NAME=""
+          BUILD_JOBS="$(nproc --all)"
+          if [ "$BUILD_JOBS" -gt 4 ]; then
+             BUILD_JOBS=4
+          fi
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out
+
+          log_resource_snapshot() {
+            local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
+            local swap_total_kb swap_free_kb swap_used_kb swap_used_mib swap_total_mib swap_used_pct
+            local disk_usage
+
+            mem_total_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+            mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+            mem_used_kb=$((mem_total_kb - mem_avail_kb))
+            mem_used_mib=$((mem_used_kb / 1024))
+            mem_total_mib=$((mem_total_kb / 1024))
+            mem_used_pct=$((100 * mem_used_kb / mem_total_kb))
+
+            swap_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
+            swap_free_kb=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
+            if [ "$swap_total_kb" -gt 0 ]; then
+              swap_used_kb=$((swap_total_kb - swap_free_kb))
+              swap_used_mib=$((swap_used_kb / 1024))
+              swap_total_mib=$((swap_total_kb / 1024))
+              swap_used_pct=$((100 * swap_used_kb / swap_total_kb))
+            else
+              swap_used_mib=0
+              swap_total_mib=0
+              swap_used_pct=0
+            fi
+
+            disk_usage=$(df -P -BG "$GITHUB_WORKSPACE" | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
+            printf '[monitor] %s | RAM %s/%s MiB (%s%%) | SWAP %s/%s MiB (%s%%) | DISK %s\n' \
+              "$(date +'%F %T')" \
+              "$mem_used_mib" "$mem_total_mib" "$mem_used_pct" \
+              "$swap_used_mib" "$swap_total_mib" "$swap_used_pct" \
+              "$disk_usage"
+          }
+
+          run_make_keepalive() {
+            local log_file="$1"
+            shift
+
+            "$@" 2>&1 | tee "$log_file" &
+            MAKE_PID=$!
+
+            log_resource_snapshot
+
+            while kill -0 "$MAKE_PID" 2>/dev/null; do
+              log_resource_snapshot
+              sleep 30
+            done &
+            KEEPALIVE_PID=$!
+
+            wait "$MAKE_PID"
+            MAKE_RC=$?
+            kill "$KEEPALIVE_PID" 2>/dev/null || true
+            wait "$KEEPALIVE_PID" 2>/dev/null || true
+
+            return "$MAKE_RC"
+          }
+
+
+          export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-NonKSU-ccache.log"
+          export CCACHE_COMPILERCHECK="none"
+          export CCACHE_BASEDIR="${{ github.workspace }}"
+          export CCACHE_NOHASHDIR="true"
+          export CCACHE_HARDLINK="true"
+          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+          export CCACHE_MAXSIZE="3G"
+          export KERNEL_USE_CCACHE=1
+
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+          export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
+
+          unset DTC
+          export DTC="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin/dtc"
 
           cd $GITHUB_WORKSPACE/android-kernel
-          rm -rf ${DEVICE}-kernel
-          cd ./sm8450
+          cd ./common/
+          git add -vA
           git reset --hard HEAD
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
           echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
 
-          cd $GITHUB_WORKSPACE/android-kernel
-          cd ./sm8450/
+          rm ./android/abi_gki_protected_exports_* || true
 
-          ./build.sh ${DEVICE}
+          if [ "$DEVICE" != "gki" ]; then
+             cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> arch/arm64/configs/gki_defconfig
+             cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
+          fi
 
-          ZIP_NAME="DoraCore-${DEVICE}-NonGKI-NonKSU-5.10-A12-${BUILD_DATE}.zip"
+          export DTC=$(pwd)/scripts/dtc/dtc
 
-          cd $GITHUB_WORKSPACE/android-kernel/${DEVICE}-kernel
-          cp -rv ./Image $GITHUB_WORKSPACE/android-kernel/AnyKernel3/
-          cp -rv ./dtbs/*.dtb $GITHUB_WORKSPACE/android-kernel/AnyKernel3/dtb
-          cd ./vendor_dlkm && tar -cJf $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.tar.xz . && cd ../
-          cd ./vendor_ramdisk && find . | cpio -o -H newc > ../vendor_ramdisk.cpio && cd ../
-          lz4 -l -B6 --content-size vendor_ramdisk.cpio $GITHUB_WORKSPACE/android-kernel/AnyKernel3/modules/dlkm.cpio.lz4
+          make -j"$BUILD_JOBS" \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
+               CC="ccache clang" \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               LLVM_IAS=1 \
+               LD="ld.lld" \
+               HOSTLD="ld.lld" \
+               DTC_EXT=dtc \
+               gki_defconfig
+
+          if [ -x scripts/config ]; then
+             scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
+               -d LTO_CLANG_THIN \
+               -e LTO_CLANG_FULL
+          fi
+
+          make -j"$BUILD_JOBS" \
+               LLVM=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               LLVM_IAS=1 \
+               olddefconfig
+
+          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-NonKSU.log" \
+            make -j"$BUILD_JOBS" \
+              LLVM=1 \
+              ARCH=arm64 \
+              CROSS_COMPILE="aarch64-linux-gnu-" \
+              CC="ccache clang" \
+              LD="ld.lld" \
+              HOSTLD="ld.lld" \
+              O=$GITHUB_WORKSPACE/android-kernel/out \
+              LLVM_IAS=1 \
+              DTC_EXT=dtc \
+              DTC_FLAGS="-Wno-all" \
+              Image
+
+          [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
+
+          if [ "$TARGET" != "Both" ]; then
+             ZIP_NAME="DoraCore-${DEVICE}-NonKSU-5.10-A12-${BUILD_DATE}.zip"
+             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
+             zip -r9 "$ZIP_NAME" *
+             mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+          else
+             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
+             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-standard
+          fi
+
+      - name: Create Flashable Both Image
+        if: github.event.inputs.BUILD_TARGET == 'Both' && github.event.inputs.KERNEL_BRANCH != 'lindroid'
+        run: |
+          DEVICE="${{ matrix.device }}"
+          ZIP_NAME="DoraCore-${DEVICE}-5.10-A12-${BUILD_DATE}.zip"
           cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-          rm -rf .git README.md || true
-          find . -type f -name 'placeholder' -delete
-          find . -type d -empty -delete
-
           zip -r9 "$ZIP_NAME" *
           mv "$ZIP_NAME" $GITHUB_WORKSPACE/
 
@@ -247,6 +967,107 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.create_release.outputs.tag }}
+          draft: ${{ github.event.inputs.RELEASE == 'draft' }}
+          prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
+          make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
           files: DoraCore*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate CCACHE
+        if: (github.event.inputs.BUILDING_CCACHE == 'Enable' && github.event.inputs.BUILD_TARGET != 'Both')
+        run: |
+          set -euo pipefail
+          BUILD_JOBS="$(nproc --all)"
+          if [ "$BUILD_JOBS" -gt 4 ]; then
+             BUILD_JOBS=4
+          fi
+
+          log_resource_snapshot() {
+            local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
+            local swap_total_kb swap_free_kb swap_used_kb swap_used_mib swap_total_mib swap_used_pct
+            local disk_usage
+
+            mem_total_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+            mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+            mem_used_kb=$((mem_total_kb - mem_avail_kb))
+            mem_used_mib=$((mem_used_kb / 1024))
+            mem_total_mib=$((mem_total_kb / 1024))
+            mem_used_pct=$((100 * mem_used_kb / mem_total_kb))
+
+            swap_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
+            swap_free_kb=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
+            if [ "$swap_total_kb" -gt 0 ]; then
+              swap_used_kb=$((swap_total_kb - swap_free_kb))
+              swap_used_mib=$((swap_used_kb / 1024))
+              swap_total_mib=$((swap_total_kb / 1024))
+              swap_used_pct=$((100 * swap_used_kb / swap_total_kb))
+            else
+              swap_used_mib=0
+              swap_total_mib=0
+              swap_used_pct=0
+            fi
+
+            disk_usage=$(df -P -BG "$GITHUB_WORKSPACE" | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
+            printf '[monitor] %s | RAM %s/%s MiB (%s%%) | SWAP %s/%s MiB (%s%%) | DISK %s\n' \
+              "$(date +'%F %T')" \
+              "$mem_used_mib" "$mem_total_mib" "$mem_used_pct" \
+              "$swap_used_mib" "$swap_total_mib" "$swap_used_pct" \
+              "$disk_usage"
+          }
+
+          run_make_keepalive() {
+            local log_file="$1"
+            shift
+
+            "$@" 2>&1 | tee "$log_file" &
+            MAKE_PID=$!
+
+            log_resource_snapshot
+
+            while kill -0 "$MAKE_PID" 2>/dev/null; do
+              log_resource_snapshot
+              sleep 30
+            done &
+            KEEPALIVE_PID=$!
+
+            wait "$MAKE_PID"
+            MAKE_RC=$?
+            kill "$KEEPALIVE_PID" 2>/dev/null || true
+            wait "$KEEPALIVE_PID" 2>/dev/null || true
+
+            return "$MAKE_RC"
+          }
+
+          cd $GITHUB_WORKSPACE/android-kernel/common/
+
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out
+
+          make -j"$BUILD_JOBS" \
+               LLVM=1 \
+               LLVM_IAS=1 \
+               ARCH=arm64 \
+               CROSS_COMPILE="aarch64-linux-gnu-" \
+               CC="ccache clang" \
+               O=$GITHUB_WORKSPACE/android-kernel/out \
+               LD="ld.lld" \
+               HOSTLD=ld.lld \
+               gki_defconfig
+
+          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-${{ matrix.device }}-ccache.log" \
+            make -j"$BUILD_JOBS" \
+              LLVM=1 \
+              LLVM_IAS=1 \
+              ARCH=arm64 \
+              CROSS_COMPILE="aarch64-linux-gnu-" \
+              CC="ccache clang" \
+              LD="ld.lld" \
+              O=$GITHUB_WORKSPACE/android-kernel/out \
+              HOSTLD=ld.lld \
+              Image
+
+      - name: Upload CCACHE Logs to artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.device }}-ccache-logs
+          path: ${{ github.workspace }}/*-*-ccache.log
