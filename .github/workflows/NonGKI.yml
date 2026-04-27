@@ -596,6 +596,8 @@ jobs:
           export REAL_VER=$(ls "$MOD_SYNC/lib/modules/" | head -n 1)
           echo ">>> Detected Kernel Version: $REAL_VER"
 
+          set -e
+
           echo ">>> Unpacking vendor_boot..."
           python3 "${{ github.workspace }}/mkbootimg/unpack_bootimg.py" \
               --boot_img "$ORIGIN_IMAGES_DIR/vendor_boot.img" \
@@ -625,26 +627,29 @@ jobs:
 
           echo ">>> DLKM fragment = $DLKM_BASENAME"
 
-          mapfile -t ORIGINAL_FRAGMENTS < <(grep -o 'vendor_ramdisk[0-9][0-9]' "$VENDOR_BOOT_UNPACK/unpack_info.txt" | uniq)
-          [ ${#ORIGINAL_FRAGMENTS[@]} -gt 0 ] || { echo "!!! no fragment table parsed"; exit 1; }
-
           declare -A FRAG_TYPES
           declare -A FRAG_NAMES
+          declare -a ORIGINAL_FRAGMENTS
 
           CURRENT=""
           while IFS= read -r line; do
               if [[ "$line" =~ (vendor_ramdisk[0-9][0-9]): ]]; then
                   CURRENT="${BASH_REMATCH[1]}"
+                  ORIGINAL_FRAGMENTS+=("$CURRENT")
               fi
 
               if [[ "$line" =~ type:\ (0x[0-9]+) ]]; then
                   FRAG_TYPES[$CURRENT]="${BASH_REMATCH[1]}"
               fi
 
-              if [[ "$line" =~ name:\ (.*)$ ]]; then
+              if [[ "$line" =~ name:\ *(.*)$ ]]; then
                   FRAG_NAMES[$CURRENT]="${BASH_REMATCH[1]}"
               fi
           done < "$VENDOR_BOOT_UNPACK/unpack_info.txt"
+
+          [ ${#ORIGINAL_FRAGMENTS[@]} -gt 0 ] || { echo "!!! no fragment entries parsed"; exit 1; }
+
+          echo ">>> Fragment order: ${ORIGINAL_FRAGMENTS[*]}"
 
           mkdir -p "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents"
 
@@ -653,12 +658,15 @@ jobs:
 
           if echo "$FRAG_FILE_DESC" | grep -qi "LZ4 compressed"; then
               lz4 -d "$DLKM_REALFILE" "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.cpio"
+              REPACK_MODE="lz4"
           elif echo "$FRAG_FILE_DESC" | grep -qi "gzip compressed"; then
               cp "$DLKM_REALFILE" "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.gz"
               gunzip -f "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.gz"
               mv "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm" "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.cpio"
+              REPACK_MODE="gzip"
           else
               cp "$DLKM_REALFILE" "$VENDOR_BOOT_UNPACK/vendor_ramdisk_dlkm.cpio"
+              REPACK_MODE="raw"
           fi
 
           cd "$VENDOR_BOOT_UNPACK/ramdisk_dlkm_contents"
@@ -697,8 +705,8 @@ jobs:
               ""
 
           echo ">>> Building new vendor_dlkm..."
-          STOCK_VDLKM_SIZE=$(stat -c%s "$ORIGIN_IMAGES_DIR/vendor_dlkm.img")
-          dd if=/dev/zero of=vendor_dlkm_new.img bs=1 count=0 seek="$STOCK_VDLKM_SIZE"
+          VENDOR_DLKM_PART_SIZE=137670656
+          dd if=/dev/zero of=vendor_dlkm_new.img bs=1 count=0 seek="$VENDOR_DLKM_PART_SIZE"
           mkfs.ext2 -F -L vendor_dlkm -b 4096 -N 3000 vendor_dlkm_new.img
 
           sudo umount -l "$VENDOR_DLKM_NEW" || true
@@ -723,13 +731,11 @@ jobs:
           find . -mindepth 1 | sort | cpio -H newc -o --owner root:root > ../new_vendor_ramdisk_dlkm.cpio
           cd "$VENDOR_BOOT_UNPACK"
 
-          if echo "$FRAG_FILE_DESC" | grep -qi "LZ4 compressed"; then
-              lz4 -l -12 new_vendor_ramdisk_dlkm.cpio new_vendor_ramdisk_dlkm.repack
-          elif echo "$FRAG_FILE_DESC" | grep -qi "gzip compressed"; then
-              gzip -n -9 -c new_vendor_ramdisk_dlkm.cpio > new_vendor_ramdisk_dlkm.repack
-          else
-              cp new_vendor_ramdisk_dlkm.cpio new_vendor_ramdisk_dlkm.repack
-          fi
+          case "$REPACK_MODE" in
+              lz4)  lz4 -l -12 new_vendor_ramdisk_dlkm.cpio new_vendor_ramdisk_dlkm.repack ;;
+              gzip) gzip -n -9 -c new_vendor_ramdisk_dlkm.cpio > new_vendor_ramdisk_dlkm.repack ;;
+              raw)  cp new_vendor_ramdisk_dlkm.cpio new_vendor_ramdisk_dlkm.repack ;;
+          esac
 
           MKBOOT_CMD=(
               python3 "${{ github.workspace }}/mkbootimg/mkbootimg.py"
@@ -748,7 +754,7 @@ jobs:
           for fragbase in "${ORIGINAL_FRAGMENTS[@]}"; do
               frag="$VENDOR_BOOT_UNPACK/$fragbase"
               ftype="${FRAG_TYPES[$fragbase]}"
-              fname="${FRAG_NAMES[$fragbase]}"
+              fname=$(echo "${FRAG_NAMES[$fragbase]}" | xargs)
 
               case "$ftype" in
                   0x1) TYPE_ARG="PLATFORM" ;;
@@ -773,11 +779,11 @@ jobs:
           MKBOOT_CMD+=( -o "$DIST/vendor_boot.img" )
           "${MKBOOT_CMD[@]}"
 
-          STOCK_VB_SIZE=$(stat -c%s "$ORIGIN_IMAGES_DIR/vendor_boot.img")
+          STOCK_VB_SIZE=100663296
           NEW_VB_SIZE=$(stat -c%s "$DIST/vendor_boot.img")
 
           if [ "$NEW_VB_SIZE" -gt "$STOCK_VB_SIZE" ]; then
-              echo "!!! vendor_boot new image larger than stock partition"
+              echo "!!! vendor_boot new image larger than partition"
               exit 1
           fi
 
