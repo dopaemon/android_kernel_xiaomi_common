@@ -9,7 +9,7 @@
 
 # Master Branch
 * [**Rebase**](https://github.com/dopaemon/android_kernel_xiaomi_common/tree/Rebase)
-* [**Lindroid - LXC**](https://github.com/dopaemon/android_kernel_xiaomi_common/tree/lindroid)
+* [**Lindroid - LXC**](https://github.com/dopaemon/android_kernel_xiaomi_common/tree/Lindroid-23.2)
 * [**Other Branch**](https://github.com/dopaemon/android_kernel_xiaomi_common/branches)
 
 # Downloads
