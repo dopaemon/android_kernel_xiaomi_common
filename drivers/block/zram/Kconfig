@@ -14,6 +14,23 @@ config ZRAM
 
 	  See Documentation/admin-guide/blockdev/zram.rst for more information.
 
+config ZRAM_AUTO_RESIZE
+	bool "Auto initialize zram disksize from physical RAM"
+	depends on ZRAM
+	help
+	  If enabled, zram devices are initialized automatically at boot with
+	  a disksize derived from total physical RAM, instead of requiring
+	  userspace to write /sys/block/zramX/disksize.
+
+config ZRAM_AUTO_RESIZE_PERCENT
+	int "zram auto-resize percent of total RAM"
+	depends on ZRAM_AUTO_RESIZE
+	range 1 400
+	default 50
+	help
+	  Percentage of total physical RAM used as zram disksize when
+	  CONFIG_ZRAM_AUTO_RESIZE is enabled.
+
 config ZRAM_WRITEBACK
        bool "Write back incompressible or idle page to backing device"
        depends on ZRAM
