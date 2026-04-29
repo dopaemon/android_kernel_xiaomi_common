@@ -34,6 +34,7 @@
 #include <linux/debugfs.h>
 #include <linux/cpuhotplug.h>
 #include <linux/part_stat.h>
+#include <linux/mm.h>
 
 #include "zram_drv.h"
 
@@ -250,6 +251,30 @@ static ssize_t disksize_show(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 
 	return scnprintf(buf, PAGE_SIZE, "%llu\n", zram->disksize);
+}
+
+static int zram_init_disksize(struct zram *zram, u64 disksize)
+{
+	struct zcomp *comp;
+
+	disksize = PAGE_ALIGN(disksize);
+	if (!zram_meta_alloc(zram, disksize))
+		return -ENOMEM;
+
+	comp = zcomp_create(zram->compressor);
+	if (IS_ERR(comp)) {
+		pr_err("Cannot initialise %s compressing backend\n",
+		       zram->compressor);
+		zram_meta_free(zram, disksize);
+		return PTR_ERR(comp);
+	}
+
+	zram->comp = comp;
+	zram->disksize = disksize;
+	set_capacity(zram->disk, zram->disksize >> SECTOR_SHIFT);
+	revalidate_disk_size(zram->disk, true);
+
+	return 0;
 }
 
 static ssize_t mem_limit_store(struct device *dev,
@@ -1735,7 +1760,6 @@ static ssize_t disksize_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	u64 disksize;
-	struct zcomp *comp;
 	struct zram *zram = dev_to_zram(dev);
 	int err;
 
@@ -1750,31 +1774,12 @@ static ssize_t disksize_store(struct device *dev,
 		goto out_unlock;
 	}
 
-	disksize = PAGE_ALIGN(disksize);
-	if (!zram_meta_alloc(zram, disksize)) {
-		err = -ENOMEM;
+	err = zram_init_disksize(zram, disksize);
+	if (err)
 		goto out_unlock;
-	}
-
-	comp = zcomp_create(zram->compressor);
-	if (IS_ERR(comp)) {
-		pr_err("Cannot initialise %s compressing backend\n",
-				zram->compressor);
-		err = PTR_ERR(comp);
-		goto out_free_meta;
-	}
-
-	zram->comp = comp;
-	zram->disksize = disksize;
-	set_capacity(zram->disk, zram->disksize >> SECTOR_SHIFT);
-
-	revalidate_disk_size(zram->disk, true);
 	up_write(&zram->init_lock);
 
 	return len;
-
-out_free_meta:
-	zram_meta_free(zram, disksize);
 out_unlock:
 	up_write(&zram->init_lock);
 	return err;
@@ -1914,6 +1919,10 @@ static int zram_add(void)
 	struct zram *zram;
 	struct request_queue *queue;
 	int ret, device_id;
+#ifdef CONFIG_ZRAM_AUTO_RESIZE
+	struct sysinfo i;
+	u64 ram_bytes, auto_disksize;
+#endif
 
 	zram = kzalloc(sizeof(struct zram), GFP_KERNEL);
 	if (!zram)
@@ -1986,6 +1995,20 @@ static int zram_add(void)
 	device_add_disk(NULL, zram->disk, zram_disk_attr_groups);
 
 	strlcpy(zram->compressor, default_compressor, sizeof(zram->compressor));
+
+#ifdef CONFIG_ZRAM_AUTO_RESIZE
+	si_meminfo(&i);
+	ram_bytes = (u64)i.totalram << PAGE_SHIFT;
+	auto_disksize = (ram_bytes / 100) * CONFIG_ZRAM_AUTO_RESIZE_PERCENT;
+	if (auto_disksize) {
+		down_write(&zram->init_lock);
+		ret = zram_init_disksize(zram, auto_disksize);
+		up_write(&zram->init_lock);
+		if (ret)
+			pr_warn("auto init disksize failed on %s: %d\n",
+				zram->disk->disk_name, ret);
+	}
+#endif
 
 	zram_debugfs_register(zram);
 	pr_info("Added device: %s\n", zram->disk->disk_name);
