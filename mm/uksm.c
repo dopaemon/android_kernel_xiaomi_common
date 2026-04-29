@@ -523,6 +523,7 @@ static unsigned long uksm_pages_shared;
 
 /* The number of page slots additionally sharing those nodes */
 static unsigned long uksm_pages_sharing;
+atomic_long_t uksm_zero_pages = ATOMIC_LONG_INIT(0);
 
 /* The number of nodes in the unstable tree */
 static unsigned long uksm_pages_unshared;
@@ -1719,7 +1720,7 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 				(page_to_pfn(kpage) == zero_pfn)) {
 		entry = pte_mkspecial(entry);
 		dec_mm_counter(mm, MM_ANONPAGES);
-		inc_zone_page_state(page, NR_UKSM_ZERO_PAGES);
+		atomic_long_inc(&uksm_zero_pages);
 	} else {
 		get_page(kpage);
 		page_add_anon_rmap(kpage, vma, addr, false);
@@ -5286,7 +5287,7 @@ static ssize_t pages_shared_show(struct kobject *kobj,
 				 struct kobj_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%lu\n", uksm_pages_shared +
-		       (global_zone_page_state(NR_UKSM_ZERO_PAGES) ? 1 : 0));
+		       (atomic_long_read(&uksm_zero_pages) ? 1 : 0));
 }
 UKSM_ATTR_RO(pages_shared);
 
@@ -5294,7 +5295,7 @@ static ssize_t pages_sharing_show(struct kobject *kobj,
 				  struct kobj_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%lu\n", uksm_pages_sharing +
-		       global_zone_page_state(NR_UKSM_ZERO_PAGES));
+		       atomic_long_read(&uksm_zero_pages));
 }
 UKSM_ATTR_RO(pages_sharing);
 
@@ -5704,4 +5705,3 @@ subsys_initcall(ksm_init);
 #else
 late_initcall(uksm_init);
 #endif
-
