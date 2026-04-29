@@ -16,8 +16,8 @@
 #include <linux/rmap.h>
 #include <linux/sched.h>
 
-extern unsigned long zero_pfn __read_mostly;
-extern unsigned long uksm_zero_pfn __read_mostly;
+extern unsigned long zero_pfn;
+extern unsigned long uksm_zero_pfn;
 extern struct page *empty_uksm_zero_page;
 extern atomic_long_t uksm_zero_pages;
 
