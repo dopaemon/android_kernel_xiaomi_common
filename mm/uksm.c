@@ -74,6 +74,7 @@
 #include <linux/oom.h>
 #include <linux/numa.h>
 #include <linux/sradix-tree.h>
+#include <linux/damon.h>
 
 #include <asm/tlbflush.h>
 #include "internal.h"
@@ -617,18 +618,18 @@ struct uksm_cpu_preset_s uksm_cpu_preset[5] = {
 	},
 	{
 		{
-			100,
-			-TIME_RATIO_SCALE / 10,
+			20,
+			-TIME_RATIO_SCALE / 4,
 			-TIME_RATIO_SCALE / 2,
 			-TIME_RATIO_SCALE
 		},
 		{
+			2000,
 			1000,
 			500,
-			200,
-			50
+			250
 		},
-		90
+		25
 	},
 };
 
@@ -4767,6 +4768,11 @@ static int ksmd_should_run(void)
 	return uksm_run & UKSM_RUN_MERGE;
 }
 
+static inline bool uksm_should_yield_to_damon(void)
+{
+	return IS_ENABLED(CONFIG_DAMON) && damon_nr_running_ctxs() > 0;
+}
+
 static int uksm_scan_thread(void *nothing)
 {
 	set_freezable();
@@ -4774,8 +4780,12 @@ static int uksm_scan_thread(void *nothing)
 
 	while (!kthread_should_stop()) {
 		mutex_lock(&uksm_thread_mutex);
-		if (ksmd_should_run())
+		if (ksmd_should_run() && !uksm_should_yield_to_damon()) {
 			uksm_do_scan();
+		} else if (ksmd_should_run() && uksm_should_yield_to_damon()) {
+			uksm_sleep_real = max(uksm_sleep_jiffies,
+					      msecs_to_jiffies(2000));
+		}
 		mutex_unlock(&uksm_thread_mutex);
 
 		try_to_freeze();
