@@ -108,12 +108,6 @@
 
 /* External variables not in a header file. */
 extern int extra_free_kbytes;
-extern u8 sysctl_anon_min_ratio;
-extern u8 sysctl_clean_low_ratio;
-extern u8 sysctl_clean_min_ratio;
-int vm_workingset_protection_update_handler(struct ctl_table *table, int write,
-					    void __user *buffer, size_t *lenp,
-					    loff_t *ppos);
 
 /* Constants used for minimum and  maximum */
 #ifdef CONFIG_LOCKUP_DETECTOR
@@ -3279,40 +3273,6 @@ static struct ctl_table vm_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 #endif
-	{
-		.procname	= "workingset_protection",
-		.data		= &sysctl_workingset_protection,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
-	{
-		.procname	= "anon_min_ratio",
-		.data		= &sysctl_anon_min_ratio,
-		.maxlen		= sizeof(u8),
-		.mode		= 0644,
-		.proc_handler	= &vm_workingset_protection_update_handler,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE_HUNDRED,
-	},
-	{
-		.procname	= "clean_low_ratio",
-		.data		= &sysctl_clean_low_ratio,
-		.maxlen		= sizeof(u8),
-		.mode		= 0644,
-		.proc_handler	= &vm_workingset_protection_update_handler,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE_HUNDRED,
-	},
-	{
-		.procname	= "clean_min_ratio",
-		.data		= &sysctl_clean_min_ratio,
-		.maxlen		= sizeof(u8),
-		.mode		= 0644,
-		.proc_handler	= &vm_workingset_protection_update_handler,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE_HUNDRED,
-	},
 	{
 		.procname	= "user_reserve_kbytes",
 		.data		= &sysctl_user_reserve_kbytes,
