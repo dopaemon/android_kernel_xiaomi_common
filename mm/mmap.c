@@ -3424,11 +3424,6 @@ void exit_mmap(struct mm_struct *mm)
 	mm->mmap = NULL;
 	mmap_write_unlock(mm);
 	vm_unacct_memory(nr_accounted);
-
-	mm->mmap = NULL;
-	mm->mm_rb = RB_ROOT;
-	vmacache_invalidate(mm);
-	mmap_write_unlock(mm);
 }
 
 /* Insert vm structure into process list sorted by address

@@ -19,6 +19,7 @@
 extern unsigned long zero_pfn __read_mostly;
 extern unsigned long uksm_zero_pfn __read_mostly;
 extern struct page *empty_uksm_zero_page;
+extern atomic_long_t uksm_zero_pages;
 
 /* must be done before linked to mm */
 extern void uksm_vma_add_new(struct vm_area_struct *vma);
@@ -61,13 +62,13 @@ struct vma_slot {
 static inline void uksm_unmap_zero_page(pte_t pte)
 {
 	if (pte_pfn(pte) == uksm_zero_pfn)
-		__dec_zone_page_state(empty_uksm_zero_page, NR_UKSM_ZERO_PAGES);
+		atomic_long_dec(&uksm_zero_pages);
 }
 
 static inline void uksm_map_zero_page(pte_t pte)
 {
 	if (pte_pfn(pte) == uksm_zero_pfn)
-		__inc_zone_page_state(empty_uksm_zero_page, NR_UKSM_ZERO_PAGES);
+		atomic_long_inc(&uksm_zero_pages);
 }
 
 static inline void uksm_cow_page(struct vm_area_struct *vma, struct page *page)
