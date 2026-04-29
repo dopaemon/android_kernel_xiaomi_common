@@ -13,6 +13,9 @@
 #include <linux/vmstat.h>
 #include <linux/atomic.h>
 #include <linux/vmalloc.h>
+#ifdef CONFIG_UKSM
+#include <linux/uksm.h>
+#endif
 #ifdef CONFIG_CMA
 #include <linux/cma.h>
 #endif
@@ -110,7 +113,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 		    global_zone_page_state(NR_PAGETABLE));
 #ifdef CONFIG_UKSM
 	show_val_kb(m, "KsmZeroPages:     ",
-		    global_zone_page_state(NR_UKSM_ZERO_PAGES));
+		    atomic_long_read(&uksm_zero_pages));
 #endif
 	show_val_kb(m, "NFS_Unstable:   ", 0);
 	show_val_kb(m, "Bounce:         ",
