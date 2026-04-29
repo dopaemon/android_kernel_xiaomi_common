@@ -4256,7 +4256,16 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 
 	if (!walk && bitmap_weight(bitmap, MIN_LRU_BATCH) < PAGEVEC_SIZE) {
 		for_each_set_bit(i, bitmap, MIN_LRU_BATCH) {
-			page = pte_page(pte[i]);
+			unsigned long pfn;
+
+			pfn = get_pte_pfn(pte[i], pvmw->vma, start + i * PAGE_SIZE);
+			if (pfn == -1)
+				continue;
+
+			page = get_pfn_page(pfn, memcg, pgdat, can_swap);
+			if (!page)
+				continue;
+
 			activate_page(page);
 		}
 		return;
@@ -4272,8 +4281,14 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	}
 
 	for_each_set_bit(i, bitmap, MIN_LRU_BATCH) {
-		page = compound_head(pte_page(pte[i]));
-		if (page_memcg_rcu(page) != memcg)
+		unsigned long pfn;
+
+		pfn = get_pte_pfn(pte[i], pvmw->vma, start + i * PAGE_SIZE);
+		if (pfn == -1)
+			continue;
+
+		page = get_pfn_page(pfn, memcg, pgdat, can_swap);
+		if (!page)
 			continue;
 
 		old_gen = page_update_gen(page, new_gen);
