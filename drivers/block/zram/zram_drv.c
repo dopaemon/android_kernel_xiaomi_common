@@ -59,6 +59,8 @@ static const struct block_device_operations zram_wb_devops;
 static void zram_free_page(struct zram *zram, size_t index);
 static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 				u32 index, int offset, struct bio *bio);
+static void zram_meta_free(struct zram *zram, u64 disksize);
+static bool zram_meta_alloc(struct zram *zram, u64 disksize);
 
 
 static int zram_slot_trylock(struct zram *zram, u32 index)
