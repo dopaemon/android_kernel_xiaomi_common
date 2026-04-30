@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2002,2008-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/debugfs.h>
@@ -158,7 +158,7 @@ static const char *memtype_str(int memtype)
 
 static char get_alignflag(const struct kgsl_memdesc *m)
 {
-	int align = kgsl_memdesc_get_align(m);
+	u32 align = kgsl_memdesc_get_align(m);
 
 	if (align >= ilog2(SZ_1M))
 		return 'L';
