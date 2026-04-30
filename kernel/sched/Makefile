@@ -38,3 +38,4 @@ obj-$(CONFIG_MEMBARRIER) += membarrier.o
 obj-$(CONFIG_CPU_ISOLATION) += isolation.o
 obj-$(CONFIG_PSI) += psi.o
 obj-$(CONFIG_SCHED_WALT) += walt/
+obj-$(CONFIG_SCHED_PREFER_SILVER) += prefer_silver.o
