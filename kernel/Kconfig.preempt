@@ -80,3 +80,11 @@ config PREEMPT_COUNT
 config PREEMPTION
        bool
        select PREEMPT_COUNT
+
+config SCHED_PREFER_SILVER
+	bool "Prefer scheduling light tasks on LITTLE/silver CPUs"
+	depends on SMP
+	default y
+	help
+	  Prefer placing light tasks on LITTLE/silver CPUs based on
+	  util and frequency thresholds. GKI 5.10: PELT only, no WALT.
