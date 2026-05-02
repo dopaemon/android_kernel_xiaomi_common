@@ -205,13 +205,13 @@ jobs:
           remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
           rm_cmd: "rmz"
           rmz_version: "3.1.1"
-          testing: false
+          testing: true
 
       - name: Setup Swap Space
         uses: thejerrybao/setup-swap-space@v1
         with:
           swap-space-path: /swapfile
-          swap-size-gb: 16
+          swap-size-gb: 32
           remove-existing-swap-files: true
 
       - name: Tune Swap Aggressiveness
