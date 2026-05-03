@@ -25,7 +25,19 @@
 #include <linux/psi.h>
 #include <linux/uio.h>
 #include <linux/sched/task.h>
+#include <linux/kthread.h>
+#include <linux/kfifo.h>
+#include <linux/limits.h>
 #include <trace/hooks/mm.h>
+
+struct kcompressd_ctx {
+	wait_queue_head_t wait;
+	struct task_struct *task;
+	struct kfifo fifo;
+	spinlock_t lock;
+};
+
+static struct kcompressd_ctx kcompressd_ctx[MAX_NUMNODES];
 
 static struct bio *get_swap_bio(gfp_t gfp_flags,
 				struct page *page, bio_end_io_t end_io)
@@ -68,6 +80,80 @@ void end_swap_bio_write(struct bio *bio)
 	}
 	end_page_writeback(page);
 	bio_put(bio);
+}
+
+static inline void do_swapout(struct page *page)
+{
+	struct writeback_control wbc = {
+		.sync_mode = WB_SYNC_NONE,
+		.nr_to_write = SWAP_CLUSTER_MAX,
+		.range_start = 0,
+		.range_end = LLONG_MAX,
+		.for_reclaim = 1,
+	};
+
+	if (frontswap_store(page) == 0) {
+		set_page_writeback(page);
+		unlock_page(page);
+		end_page_writeback(page);
+	} else {
+		__swap_writepage(page, &wbc, end_swap_bio_write);
+	}
+
+	put_page(page);
+}
+
+static bool kcompressd_store(struct page *page)
+{
+	struct kcompressd_work work, head = { };
+	struct kcompressd_ctx *ctx;
+	unsigned long flags;
+	bool queued = false;
+	int nid;
+	unsigned int threshold;
+
+	if (!current_is_kswapd())
+		return false;
+	if (!PageAnon(page))
+		return false;
+
+	nid = page_to_nid(page);
+	if (nid < 0 || nid >= MAX_NUMNODES)
+		return false;
+
+	ctx = &kcompressd_ctx[nid];
+	if (!vm_kcompressd)
+		return false;
+
+	threshold = min_t(unsigned int, vm_kcompressd, KCOMPRESS_FIFO_SIZE);
+	if (!threshold)
+		return false;
+
+	spin_lock_irqsave(&ctx->lock, flags);
+	if (unlikely(!ctx->task)) {
+		spin_unlock_irqrestore(&ctx->lock, flags);
+		return false;
+	}
+
+	if (kfifo_len(&ctx->fifo) >= threshold * sizeof(work))
+		(void)kfifo_out(&ctx->fifo, &head, sizeof(head));
+
+	get_page(page);
+	work.page = page;
+	if (kfifo_in(&ctx->fifo, &work, sizeof(work)) != sizeof(work)) {
+		put_page(page);
+		spin_unlock_irqrestore(&ctx->lock, flags);
+		return false;
+	}
+	queued = true;
+	spin_unlock_irqrestore(&ctx->lock, flags);
+
+	if (head.page)
+		do_swapout(head.page);
+
+	if (queued)
+		wake_up_interruptible(&ctx->wait);
+	return queued;
 }
 
 static void end_swap_bio_read(struct bio *bio)
@@ -214,6 +300,8 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		unlock_page(page);
 		goto out;
 	}
+	if (kcompressd_store(page))
+		goto out;
 	if (frontswap_store(page) == 0) {
 		set_page_writeback(page);
 		unlock_page(page);
@@ -223,6 +311,89 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 	ret = __swap_writepage(page, wbc, end_swap_bio_write);
 out:
 	return ret;
+}
+
+int kcompressd(void *p)
+{
+	struct kcompressd_ctx *ctx = &kcompressd_ctx[(long)p];
+
+	current->flags |= PF_MEMALLOC | PF_KSWAPD;
+
+	while (!kthread_should_stop()) {
+		struct kcompressd_work work;
+
+		wait_event_interruptible(ctx->wait,
+					 kthread_should_stop() ||
+					 !kfifo_is_empty(&ctx->fifo));
+		if (kthread_should_stop())
+			break;
+
+		while (kfifo_out_locked(&ctx->fifo, &work, sizeof(work),
+					&ctx->lock) == sizeof(work))
+			do_swapout(work.page);
+	}
+
+	return 0;
+}
+
+int kcompressd_run(int nid)
+{
+	struct kcompressd_ctx *ctx;
+	int ret;
+
+	if (nid < 0 || nid >= MAX_NUMNODES)
+		return -EINVAL;
+
+	ctx = &kcompressd_ctx[nid];
+	if (READ_ONCE(ctx->task))
+		return 0;
+
+	init_waitqueue_head(&ctx->wait);
+	spin_lock_init(&ctx->lock);
+
+	ret = kfifo_alloc(&ctx->fifo, KCOMPRESS_FIFO_SIZE * sizeof(struct kcompressd_work),
+			  GFP_KERNEL);
+	if (ret)
+		return ret;
+
+	ctx->task = kthread_run(kcompressd, (void *)(long)nid, "kcompressd%d", nid);
+	if (IS_ERR(ctx->task)) {
+		ret = PTR_ERR(ctx->task);
+		ctx->task = NULL;
+		kfifo_free(&ctx->fifo);
+		return ret;
+	}
+
+	return 0;
+}
+
+void kcompressd_stop(int nid)
+{
+	struct kcompressd_ctx *ctx;
+	struct kcompressd_work work;
+	struct task_struct *task;
+	unsigned long flags;
+
+	if (nid < 0 || nid >= MAX_NUMNODES)
+		return;
+
+	ctx = &kcompressd_ctx[nid];
+	task = READ_ONCE(ctx->task);
+	if (!task)
+		return;
+
+	spin_lock_irqsave(&ctx->lock, flags);
+	task = ctx->task;
+	ctx->task = NULL;
+	spin_unlock_irqrestore(&ctx->lock, flags);
+	if (!task)
+		return;
+
+	kthread_stop(task);
+
+	while (kfifo_out_locked(&ctx->fifo, &work, sizeof(work), &ctx->lock) == sizeof(work))
+		do_swapout(work.page);
+	kfifo_free(&ctx->fifo);
 }
 
 static inline void count_swpout_vm_event(struct page *page)

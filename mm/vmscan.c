@@ -193,6 +193,7 @@ struct scan_control {
  * From 0 .. 200.  Higher means more swappy.
  */
 int vm_swappiness = 100;
+int vm_kcompressd = 24;
 
 #define DEF_KSWAPD_THREADS_PER_NODE 1
 static int kswapd_threads = DEF_KSWAPD_THREADS_PER_NODE;
@@ -7088,7 +7089,13 @@ int kswapd_run(int nid)
 		pr_err("Failed to start kswapd on node %d\n", nid);
 		ret = PTR_ERR(pgdat->kswapd);
 		pgdat->kswapd = NULL;
+		return ret;
 	}
+
+	ret = kcompressd_run(nid);
+	if (ret)
+		pr_warn("Failed to start kcompressd on node %d, ret=%d\n", nid, ret);
+
 	return ret;
 }
 
@@ -7109,6 +7116,7 @@ void kswapd_stop(int nid)
 		kthread_stop(kswapd);
 		NODE_DATA(nid)->kswapd = NULL;
 	}
+	kcompressd_stop(nid);
 }
 
 static int __init kswapd_init(void)

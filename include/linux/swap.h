@@ -389,6 +389,7 @@ extern unsigned long mem_cgroup_shrink_node(struct mem_cgroup *mem,
 						unsigned long *nr_scanned);
 extern unsigned long shrink_all_memory(unsigned long nr_pages);
 extern int vm_swappiness;
+extern int vm_kcompressd;
 extern int remove_mapping(struct address_space *mapping, struct page *page);
 
 extern unsigned long reclaim_pages(struct list_head *page_list);
@@ -405,6 +406,12 @@ extern void check_move_unevictable_pages(struct pagevec *pvec);
 extern int kswapd_run(int nid);
 extern void kswapd_stop(int nid);
 
+#define KCOMPRESS_FIFO_SIZE 256
+
+struct kcompressd_work {
+	struct page *page;
+};
+
 #ifdef CONFIG_SWAP
 
 #include <linux/blk_types.h> /* for bio_end_io_t */
@@ -415,6 +422,9 @@ extern int swap_writepage(struct page *page, struct writeback_control *wbc);
 extern void end_swap_bio_write(struct bio *bio);
 extern int __swap_writepage(struct page *page, struct writeback_control *wbc,
 	bio_end_io_t end_write_func);
+extern int kcompressd(void *p);
+extern int kcompressd_run(int nid);
+extern void kcompressd_stop(int nid);
 extern int swap_set_page_dirty(struct page *page);
 
 int add_swap_extent(struct swap_info_struct *sis, unsigned long start_page,
@@ -582,6 +592,20 @@ static inline struct page *swapin_readahead(swp_entry_t swp, gfp_t gfp_mask,
 static inline int swap_writepage(struct page *p, struct writeback_control *wbc)
 {
 	return 0;
+}
+
+static inline int kcompressd(void *p)
+{
+	return 0;
+}
+
+static inline int kcompressd_run(int nid)
+{
+	return 0;
+}
+
+static inline void kcompressd_stop(int nid)
+{
 }
 
 static inline struct page *lookup_swap_cache(swp_entry_t swp,

@@ -62,7 +62,7 @@ static void kcompressd_try_to_sleep(struct kcompressd_para *p)
 	atomic_set(p->running, KCOMPRESSD_RUNNING);
 }
 
-static int kcompressd(void *para)
+static int zram_kcompressd_thread(void *para)
 {
 	struct task_struct *tsk = current;
 	struct kcompressd_para *p = para;
@@ -180,7 +180,8 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 		switch (atomic_read(&kcompress[i].running)) {
 		case KCOMPRESSD_NOT_STARTED:
 			atomic_set(&kcompress[i].running, KCOMPRESSD_RUNNING);
-			kcompress[i].kcompressd = kthread_run(kcompressd, &kcompressd_para[i],
+			kcompress[i].kcompressd = kthread_run(zram_kcompressd_thread,
+							      &kcompressd_para[i],
 							      "kcompressd:%d", i);
 			if (IS_ERR(kcompress[i].kcompressd)) {
 				atomic_set(&kcompress[i].running, KCOMPRESSD_NOT_STARTED);
