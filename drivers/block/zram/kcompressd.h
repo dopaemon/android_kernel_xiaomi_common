@@ -4,6 +4,7 @@
 
 #include <linux/atomic.h>
 #include <linux/kfifo.h>
+#include <linux/spinlock.h>
 #include <linux/wait.h>
 
 struct bio;
@@ -15,6 +16,7 @@ struct kcompress {
 	struct task_struct *kcompressd;
 	wait_queue_head_t kcompressd_wait;
 	struct kfifo write_fifo;
+	spinlock_t fifo_lock;
 	atomic_t running;
 };
 

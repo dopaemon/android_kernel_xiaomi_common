@@ -29,6 +29,7 @@ struct write_work {
 struct kcompressd_para {
 	wait_queue_head_t *kcompressd_wait;
 	struct kfifo *write_fifo;
+	spinlock_t *fifo_lock;
 	atomic_t *running;
 };
 
@@ -47,14 +48,15 @@ static void kcompressd_try_to_sleep(struct kcompressd_para *p)
 {
 	DEFINE_WAIT(wait);
 
-	if (!kfifo_is_empty(p->write_fifo))
+	if (!kfifo_is_empty_spinlocked(p->write_fifo, p->fifo_lock))
 		return;
 	if (freezing(current) || kthread_should_stop())
 		return;
 
 	atomic_set(p->running, KCOMPRESSD_SLEEPING);
 	prepare_to_wait(p->kcompressd_wait, &wait, TASK_INTERRUPTIBLE);
-	if (!kthread_should_stop() && kfifo_is_empty(p->write_fifo))
+	if (!kthread_should_stop() &&
+	    kfifo_is_empty_spinlocked(p->write_fifo, p->fifo_lock))
 		schedule();
 	finish_wait(p->kcompressd_wait, &wait);
 	atomic_set(p->running, KCOMPRESSD_RUNNING);
@@ -78,10 +80,11 @@ static int kcompressd(void *para)
 		if (frozen)
 			continue;
 
-		while (!kfifo_is_empty(p->write_fifo)) {
+		while (!kfifo_is_empty_spinlocked(p->write_fifo, p->fifo_lock)) {
 			struct write_work entry;
 
-			if (kfifo_out(p->write_fifo, &entry, sizeof(entry)) != sizeof(entry))
+			if (kfifo_out_spinlocked(p->write_fifo, &entry, sizeof(entry),
+						 p->fifo_lock) != sizeof(entry))
 				break;
 			entry.cb(entry.mem, entry.bio);
 			bio_put(entry.bio);
@@ -99,8 +102,11 @@ static int init_write_queue(void)
 	unsigned int queue_len = queue_size_per_kcompressd * sizeof(struct write_work);
 
 	for (i = 0; i < nr_kcompressd; i++) {
-		if (kfifo_alloc(&kcompress[i].write_fifo, queue_len, GFP_KERNEL))
+		if (kfifo_alloc(&kcompress[i].write_fifo, queue_len, GFP_KERNEL)) {
+			while (--i >= 0)
+				kfifo_free(&kcompress[i].write_fifo);
 			return -ENOMEM;
+		}
 	}
 
 	return 0;
@@ -109,12 +115,24 @@ static int init_write_queue(void)
 static void clean_bio_queue(int idx)
 {
 	struct write_work entry;
+	struct kcompress *kc = &kcompress[idx];
 
-	while (kfifo_out(&kcompress[idx].write_fifo, &entry, sizeof(entry)) == sizeof(entry)) {
+	while (kfifo_out_spinlocked(&kc->write_fifo, &entry, sizeof(entry),
+				    &kc->fifo_lock) == sizeof(entry)) {
 		entry.cb(entry.mem, entry.bio);
 		bio_put(entry.bio);
 	}
-	kfifo_free(&kcompress[idx].write_fifo);
+	kfifo_free(&kc->write_fifo);
+}
+
+static void drop_bio_queue_no_cb(int idx)
+{
+	struct write_work entry;
+	struct kcompress *kc = &kcompress[idx];
+
+	while (kfifo_out_spinlocked(&kc->write_fifo, &entry, sizeof(entry),
+				    &kc->fifo_lock) == sizeof(entry))
+		bio_put(entry.bio);
 }
 
 static void stop_all_kcompressd_thread(void)
@@ -153,8 +171,9 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 	for (i = 0; i < nr_kcompressd; i++) {
 		bool submit_success;
 
-		submit_success = (kfifo_avail(&kcompress[i].write_fifo) >= sz_work) &&
-			(kfifo_in(&kcompress[i].write_fifo, &entry, sz_work) == sz_work);
+		submit_success = (kfifo_in_spinlocked(&kcompress[i].write_fifo, &entry,
+						      sz_work, &kcompress[i].fifo_lock) ==
+				  sz_work);
 		if (!submit_success)
 			continue;
 
@@ -166,8 +185,7 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 			if (IS_ERR(kcompress[i].kcompressd)) {
 				atomic_set(&kcompress[i].running, KCOMPRESSD_NOT_STARTED);
 				kcompress[i].kcompressd = NULL;
-				clean_bio_queue(i);
-				bio_put(bio);
+				drop_bio_queue_no_cb(i);
 				return -EBUSY;
 			}
 			break;
@@ -214,8 +232,10 @@ static int __init kcompressd_init(void)
 
 	for (i = 0; i < nr_kcompressd; i++) {
 		init_waitqueue_head(&kcompress[i].kcompressd_wait);
+		spin_lock_init(&kcompress[i].fifo_lock);
 		kcompressd_para[i].kcompressd_wait = &kcompress[i].kcompressd_wait;
 		kcompressd_para[i].write_fifo = &kcompress[i].write_fifo;
+		kcompressd_para[i].fifo_lock = &kcompress[i].fifo_lock;
 		kcompressd_para[i].running = &kcompress[i].running;
 		atomic_set(&kcompress[i].running, KCOMPRESSD_NOT_STARTED);
 	}
