@@ -25,7 +25,10 @@ files can be found in mm/swap.c.
 Currently, these files are in /proc/sys/vm:
 
 - admin_reserve_kbytes
+- anon_min_ratio
 - block_dump
+- clean_low_ratio
+- clean_min_ratio
 - compact_memory
 - compaction_proactiveness
 - compact_unevictable_allowed
@@ -70,6 +73,7 @@ Currently, these files are in /proc/sys/vm:
 - stat_interval
 - stat_refresh
 - numa_stat
+- workingset_protection
 - swappiness
 - unprivileged_userfaultfd
 - user_reserve_kbytes
@@ -905,6 +909,46 @@ be 133 (x + 2x = 200, 2x = 133.33).
 
 At 0, the kernel will not initiate swap until the amount of free and
 file-backed pages is less than the high watermark in a zone.
+
+When `vm.workingset_protection=1`, this knob is additionally constrained by
+`vm.anon_min_ratio`, `vm.clean_low_ratio`, and `vm.clean_min_ratio`.
+
+anon_min_ratio
+==============
+
+Hard protection for anonymous pages. If reclaimable anon memory on a node
+falls below this ratio (percentage of node memory), anon reclaim is blocked.
+
+Default: 1
+
+clean_low_ratio
+===============
+
+Best-effort protection for clean file pages. If clean file cache on a node
+falls below this ratio, reclaim prefers scanning anon pages unless near OOM.
+
+Default: 0
+
+clean_min_ratio
+===============
+
+Hard protection for clean file pages. If clean file cache on a node falls
+below this ratio, clean file reclaim is blocked.
+
+Default: 4
+
+workingset_protection
+=====================
+
+Enable ratio-based reclaim protection controlled by:
+
+- `vm.anon_min_ratio`
+- `vm.clean_low_ratio`
+- `vm.clean_min_ratio`
+
+When disabled, reclaim behavior is unchanged.
+
+Default: 1
 
 
 unprivileged_userfaultfd

@@ -215,6 +215,12 @@ extern int sysctl_max_map_count;
 
 extern unsigned long sysctl_user_reserve_kbytes;
 extern unsigned long sysctl_admin_reserve_kbytes;
+extern bool sysctl_workingset_protection;
+extern u8 sysctl_anon_min_ratio;
+extern u8 sysctl_clean_low_ratio;
+extern u8 sysctl_clean_min_ratio;
+int vm_workingset_protection_update_handler(struct ctl_table *table,
+		int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 
 extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;

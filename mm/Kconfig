@@ -2,6 +2,30 @@
 
 menu "Memory Management options"
 
+config ANON_MIN_RATIO
+	int "Default value for vm.anon_min_ratio"
+	depends on SYSCTL
+	range 0 100
+	default 1
+	help
+	  Default value for vm.anon_min_ratio.
+
+config CLEAN_LOW_RATIO
+	int "Default value for vm.clean_low_ratio"
+	depends on SYSCTL
+	range 0 100
+	default 0
+	help
+	  Default value for vm.clean_low_ratio.
+
+config CLEAN_MIN_RATIO
+	int "Default value for vm.clean_min_ratio"
+	depends on SYSCTL
+	range 0 100
+	default 4
+	help
+	  Default value for vm.clean_min_ratio.
+
 config SELECT_MEMORY_MODEL
 	def_bool y
 	depends on ARCH_SELECT_MEMORY_MODEL
