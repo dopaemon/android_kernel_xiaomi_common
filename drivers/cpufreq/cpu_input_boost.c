@@ -10,7 +10,10 @@
 #include <linux/fb.h>
 #include <linux/input.h>
 #include <linux/kthread.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/moduleparam.h>
+#include <linux/pm_qos.h>
 #include <linux/slab.h>
 #include <linux/version.h>
 
@@ -76,6 +79,14 @@ struct boost_drv {
 	wait_queue_head_t boost_waitq;
 	atomic_long_t max_boost_expires;
 	unsigned long state;
+	struct mutex lock;
+	struct list_head policy_list;
+};
+
+struct boost_policy_req {
+	struct list_head node;
+	struct cpufreq_policy *policy;
+	struct freq_qos_request qos_req;
 };
 
 static void input_unboost_worker(struct work_struct *work);
@@ -86,7 +97,9 @@ static struct boost_drv boost_drv_g __read_mostly = {
 						    input_unboost_worker, 0),
 	.max_unboost = __DELAYED_WORK_INITIALIZER(boost_drv_g.max_unboost,
 						  max_unboost_worker, 0),
-	.boost_waitq = __WAIT_QUEUE_HEAD_INITIALIZER(boost_drv_g.boost_waitq)
+	.boost_waitq = __WAIT_QUEUE_HEAD_INITIALIZER(boost_drv_g.boost_waitq),
+	.lock = __MUTEX_INITIALIZER(boost_drv_g.lock),
+	.policy_list = LIST_HEAD_INIT(boost_drv_g.policy_list),
 };
 
 static unsigned int get_input_boost_freq(struct cpufreq_policy *policy)
@@ -144,22 +157,92 @@ static unsigned int get_idle_freq(struct cpufreq_policy *policy)
 }
 
 
-static void update_online_cpu_policy(void)
+static unsigned int get_target_min_freq(struct boost_drv *b,
+					struct cpufreq_policy *policy)
 {
-	unsigned int cpu;
+	if (test_bit(SCREEN_OFF, &b->state))
+		return get_idle_freq(policy);
+	if (test_bit(MAX_BOOST, &b->state))
+		return get_max_boost_freq(policy);
+	if (test_bit(INPUT_BOOST, &b->state))
+		return get_input_boost_freq(policy);
+	return get_min_freq(policy);
+}
 
-	get_online_cpus();
-	for_each_possible_cpu(cpu) {
-		if (cpu_online(cpu)) {
-			if (cpumask_intersects(cpumask_of(cpu), cpu_lp_mask))
-				cpufreq_update_policy(cpu);
-			if (cpumask_intersects(cpumask_of(cpu), cpu_perf_mask))
-				cpufreq_update_policy(cpu);
-			if (cpumask_intersects(cpumask_of(cpu), cpu_prime_mask))
-				cpufreq_update_policy(cpu);
-		}
+static struct boost_policy_req *find_policy_req_locked(struct boost_drv *b,
+						       struct cpufreq_policy *policy)
+{
+	struct boost_policy_req *entry;
+
+	list_for_each_entry(entry, &b->policy_list, node) {
+		if (entry->policy == policy)
+			return entry;
 	}
-	put_online_cpus();
+
+	return NULL;
+}
+
+static int add_policy_req(struct boost_drv *b, struct cpufreq_policy *policy)
+{
+	struct boost_policy_req *entry;
+	unsigned int target_min;
+	int ret;
+
+	mutex_lock(&b->lock);
+	if (find_policy_req_locked(b, policy)) {
+		mutex_unlock(&b->lock);
+		return 0;
+	}
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry) {
+		mutex_unlock(&b->lock);
+		return -ENOMEM;
+	}
+
+	entry->policy = policy;
+	target_min = get_target_min_freq(b, policy);
+	ret = freq_qos_add_request(&policy->constraints, &entry->qos_req,
+				   FREQ_QOS_MIN, target_min);
+	if (ret < 0) {
+		kfree(entry);
+		mutex_unlock(&b->lock);
+		return ret;
+	}
+
+	list_add(&entry->node, &b->policy_list);
+	mutex_unlock(&b->lock);
+	return 0;
+}
+
+static void remove_policy_req(struct boost_drv *b, struct cpufreq_policy *policy)
+{
+	struct boost_policy_req *entry;
+
+	mutex_lock(&b->lock);
+	entry = find_policy_req_locked(b, policy);
+	if (!entry) {
+		mutex_unlock(&b->lock);
+		return;
+	}
+
+	list_del(&entry->node);
+	freq_qos_remove_request(&entry->qos_req);
+	kfree(entry);
+	mutex_unlock(&b->lock);
+}
+
+static void update_policy_qos(struct boost_drv *b)
+{
+	struct boost_policy_req *entry;
+
+	mutex_lock(&b->lock);
+	list_for_each_entry(entry, &b->policy_list, node) {
+		unsigned int target_min = get_target_min_freq(b, entry->policy);
+
+		freq_qos_update_request(&entry->qos_req, target_min);
+	}
+	mutex_unlock(&b->lock);
 }
 
 static void __cpu_input_boost_kick(struct boost_drv *b)
@@ -252,7 +335,7 @@ static int cpu_boost_thread(void *data)
 			break;
 
 		old_state = curr_state;
-		update_online_cpu_policy();
+		update_policy_qos(b);
 	}
 
 	return 0;
@@ -263,28 +346,17 @@ static int cpu_notifier_cb(struct notifier_block *nb, unsigned long action,
 {
 	struct boost_drv *b = container_of(nb, typeof(*b), cpu_notif);
 	struct cpufreq_policy *policy = data;
-	(void)action;
 
-	/* Unboost when the screen is off */
-	if (test_bit(SCREEN_OFF, &b->state)) {
-		policy->min = get_idle_freq(policy);
-		return NOTIFY_OK;
+	switch (action) {
+	case CPUFREQ_CREATE_POLICY:
+		add_policy_req(b, policy);
+		break;
+	case CPUFREQ_REMOVE_POLICY:
+		remove_policy_req(b, policy);
+		break;
+	default:
+		break;
 	}
-
-	/* Boost CPU to max frequency for max boost */
-	if (test_bit(MAX_BOOST, &b->state)) {
-		policy->min = get_max_boost_freq(policy);
-		return NOTIFY_OK;
-	}
-
-	/*
-	 * Boost to policy->max if the boost frequency is higher. When
-	 * unboosting, set policy->min to the absolute min freq for the CPU.
-	 */
-	if (test_bit(INPUT_BOOST, &b->state))
-		policy->min = get_input_boost_freq(policy);
-	else
-		policy->min = get_min_freq(policy);
 
 	return NOTIFY_OK;
 }
@@ -398,6 +470,8 @@ static int __init cpu_input_boost_init(void)
 {
 	struct boost_drv *b = &boost_drv_g;
 	struct task_struct *thread;
+	struct cpufreq_policy *policy;
+	unsigned int cpu;
 	int ret;
 
 	b->cpu_notif.notifier_call = cpu_notifier_cb;
@@ -429,6 +503,17 @@ static int __init cpu_input_boost_init(void)
 		pr_err("Failed to start CPU boost thread, err: %d\n", ret);
 		goto unregister_fb_notif;
 	}
+
+	get_online_cpus();
+	for_each_online_cpu(cpu) {
+		policy = cpufreq_cpu_get(cpu);
+		if (!policy)
+			continue;
+		if (policy->cpu == cpu)
+			add_policy_req(b, policy);
+		cpufreq_cpu_put(policy);
+	}
+	put_online_cpus();
 
 	return 0;
 
