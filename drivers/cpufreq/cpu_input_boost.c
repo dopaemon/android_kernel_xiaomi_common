@@ -263,9 +263,7 @@ static int cpu_notifier_cb(struct notifier_block *nb, unsigned long action,
 {
 	struct boost_drv *b = container_of(nb, typeof(*b), cpu_notif);
 	struct cpufreq_policy *policy = data;
-
-	if (action != CPUFREQ_ADJUST)
-		return NOTIFY_OK;
+	(void)action;
 
 	/* Unboost when the screen is off */
 	if (test_bit(SCREEN_OFF, &b->state)) {
