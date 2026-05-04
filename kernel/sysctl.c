@@ -2971,7 +2971,9 @@ static struct ctl_table vm_table[] = {
 		.data		= &sysctl_workingset_protection,
 		.maxlen		= sizeof(bool),
 		.mode		= 0644,
-		.proc_handler	= proc_dobool,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 	{
 		.procname	= "anon_min_ratio",
