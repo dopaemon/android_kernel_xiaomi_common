@@ -26,6 +26,7 @@
 
 #define MAX_SLOTS (1 << SLOT_BITS)
 #define SLOT_MASK ((0x1UL << SLOT_BITS) - 1)
+#define ZBLOCK_MAGIC 0x5A424C4B /* "ZBLK" */
 
 #define ZBLOCK_HEADER_SIZE	round_up(sizeof(struct zblock_block), sizeof(long))
 #define BLOCK_DATA_SIZE(order) ((PAGE_SIZE << order) - ZBLOCK_HEADER_SIZE)
@@ -43,6 +44,8 @@ struct zblock_block {
 	struct list_head link;
 	DECLARE_BITMAP(slot_info, 1 << SLOT_BITS);
 	u32 free_slots;
+	u32 magic;
+	u16 block_type;
 };
 
 /**
