@@ -122,8 +122,8 @@ u8   __read_mostly sched_burst_exclude_kthreads = 1;
 u8   __read_mostly sched_burst_smoothness_long  = 1;
 u8   __read_mostly sched_burst_smoothness_short = 0;
 u8   __read_mostly sched_burst_fork_atavistic   = 2;
-u8   __read_mostly sched_burst_penalty_offset   = 22;
-uint __read_mostly sched_burst_penalty_scale    = 1280;
+u8   __read_mostly sched_burst_penalty_offset   = 24;
+uint __read_mostly sched_burst_penalty_scale    = 1536;
 uint __read_mostly sched_burst_cache_lifetime   = 60000000;
 #endif // CONFIG_SCHED_BORE
 
