@@ -10,6 +10,12 @@
 
 #include <asm/uaccess.h>
 
+#ifndef can_do_masked_user_access
+#define can_do_masked_user_access() 0
+#define masked_user_access_begin(src) NULL
+#define mask_user_address(src) (src)
+#endif
+
 #ifdef CONFIG_SET_FS
 /*
  * Force the uaccess routines to be wired up for actual userspace access,
@@ -154,12 +160,26 @@ _copy_from_user(void *to, const void __user *from, unsigned long n)
 {
 	unsigned long res = n;
 	might_fault();
-	if (!should_fail_usercopy() && likely(access_ok(from, n))) {
+	if (should_fail_usercopy())
+		goto fail;
+	if (can_do_masked_user_access())
+		from = mask_user_address(from);
+	else {
+		if (!access_ok(from, n))
+			goto fail;
+		/*
+		 * Ensure that bad access_ok() speculation will not
+		 * lead to nasty side effects *after* the copy is
+		 * finished:
+		 */
+		barrier_nospec();
+	}
 		instrument_copy_from_user(to, from, n);
 		res = raw_copy_from_user(to, from, n);
-	}
-	if (unlikely(res))
-		memset(to + (n - res), 0, res);
+	if (likely(!res))
+		return 0;
+fail:
+	memset(to + (n - res), 0, res);
 	return res;
 }
 #else
