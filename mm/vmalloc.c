@@ -269,8 +269,8 @@ static int vmap_range_noflush(unsigned long addr, unsigned long end,
 	if (mask & ARCH_PAGE_TABLE_SYNC_MASK)
 		arch_sync_kernel_mappings(start, end);
 
-	if (IS_ENABLED(CONFIG_ARCH_HAS_IOREMAP_PHYS_HOOKS) && !err)
-		ioremap_phys_range_hook(phys_start, end - start, prot);
+	/* Keep compatible with this 5.10 tree: hook may be unavailable. */
+	(void)phys_start;
 
 	return err;
 }
@@ -2745,6 +2745,8 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 {
 	const gfp_t nested_gfp = (gfp_mask & GFP_RECLAIM_MASK) | __GFP_ZERO;
 	unsigned int nr_pages = get_vm_area_size(area) >> PAGE_SHIFT;
+	unsigned long addr = (unsigned long)area->addr;
+	unsigned long size = get_vm_area_size(area);
 	unsigned long array_size;
 	unsigned int i;
 	struct page **pages;
@@ -2767,7 +2769,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		warn_alloc(gfp_mask, NULL,
 			   "vmalloc size %lu allocation failure: "
 			   "page array size %lu allocation failed",
-			   nr_small_pages * PAGE_SIZE, array_size);
+			   (unsigned long)nr_pages * PAGE_SIZE, array_size);
 		return NULL;
 	}
 
@@ -2789,7 +2791,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 			warn_alloc(gfp_mask, NULL,
 				   "vmalloc size %lu allocation failure: "
 				   "page order %u allocation failed",
-				   area->nr_pages * PAGE_SIZE, page_order);
+				   area->nr_pages * PAGE_SIZE, 0U);
 			goto fail;
 		}
 		area->pages[i] = page;
@@ -2844,11 +2846,12 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	unsigned long real_size = size;
 
 	size = PAGE_ALIGN(size);
-	if (!size || (size >> PAGE_SHIFT) > totalram_pages())
+	if (!size || (size >> PAGE_SHIFT) > totalram_pages()) {
 		warn_alloc(gfp_mask, NULL,
 			   "vmalloc size %lu allocation failure: "
 			   "exceeds total pages", real_size);
 		goto fail;
+	}
 
 	area = __get_vm_area_node(real_size, align, VM_ALLOC | VM_UNINITIALIZED |
 				vm_flags, start, end, node, gfp_mask, caller);

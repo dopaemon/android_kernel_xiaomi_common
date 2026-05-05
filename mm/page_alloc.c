@@ -5311,7 +5311,6 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 	/* Attempt the batch allocation */
 	local_irq_save(flags);
 	pcp = &this_cpu_ptr(zone->pageset)->pcp;
-	spin_lock(&pcp->lock);
 
 	while (nr_populated < nr_pages) {
 
@@ -5322,11 +5321,10 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 		}
 
 		page = __rmqueue_pcplist(zone, ac.migratetype, alloc_flags,
-								pcp, true);
+					 pcp, gfp);
 		if (unlikely(!page)) {
 			/* Try and allocate at least one page */
 			if (!nr_account) {
-				spin_unlock(&pcp->lock);
 				goto failed_irq;
 			}
 			break;
@@ -5350,7 +5348,6 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 		nr_populated++;
 	}
 
-	spin_unlock(&pcp->lock);
 	local_irq_restore(flags);
 
 out:
