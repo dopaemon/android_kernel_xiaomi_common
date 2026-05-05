@@ -11,6 +11,13 @@
 #include <uapi/linux/random.h>
 
 struct notifier_block;
+struct module;
+
+struct random_ready_callback {
+	struct list_head list;
+	void (*func)(struct random_ready_callback *rdy);
+	struct module *owner;
+};
 
 void add_device_randomness(const void *buf, size_t len);
 void add_bootloader_randomness(const void *buf, size_t len);
@@ -69,6 +76,8 @@ bool rng_is_initialized(void);
 int wait_for_random_bytes(void);
 int register_random_ready_notifier(struct notifier_block *nb);
 int unregister_random_ready_notifier(struct notifier_block *nb);
+int add_random_ready_callback(struct random_ready_callback *rdy);
+void del_random_ready_callback(struct random_ready_callback *rdy);
 
 /* Calls wait_for_random_bytes() and then calls get_random_bytes(buf, nbytes).
  * Returns the result of the call to wait_for_random_bytes. */

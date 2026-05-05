@@ -12,6 +12,7 @@
 #include <linux/kthread.h>
 #include <linux/lrng.h>
 #include <linux/random.h>
+#include <linux/slab.h>
 
 #include "lrng_es_aux.h"
 #include "lrng_es_irq.h"
@@ -249,6 +250,78 @@ int register_random_ready_notifier(struct notifier_block *nb)
 	return err;
 }
 EXPORT_SYMBOL(register_random_ready_notifier);
+
+struct random_ready_cb_adapter {
+	struct list_head list;
+	struct notifier_block nb;
+	struct random_ready_callback *rdy;
+};
+
+static LIST_HEAD(random_ready_cb_adapters);
+static DEFINE_SPINLOCK(random_ready_cb_lock);
+
+static int random_ready_cb(struct notifier_block *nb, unsigned long unused,
+			   void *unused2)
+{
+	struct random_ready_cb_adapter *adapter;
+
+	adapter = container_of(nb, struct random_ready_cb_adapter, nb);
+	adapter->rdy->func(adapter->rdy);
+	return NOTIFY_DONE;
+}
+
+int add_random_ready_callback(struct random_ready_callback *rdy)
+{
+	struct random_ready_cb_adapter *adapter;
+	unsigned long flags;
+	int ret;
+
+	if (!rdy || !rdy->func)
+		return -EINVAL;
+
+	adapter = kzalloc(sizeof(*adapter), GFP_KERNEL);
+	if (!adapter)
+		return -ENOMEM;
+
+	adapter->rdy = rdy;
+	adapter->nb.notifier_call = random_ready_cb;
+
+	ret = register_random_ready_notifier(&adapter->nb);
+	if (ret) {
+		kfree(adapter);
+		return ret;
+	}
+
+	spin_lock_irqsave(&random_ready_cb_lock, flags);
+	list_add(&adapter->list, &random_ready_cb_adapters);
+	spin_unlock_irqrestore(&random_ready_cb_lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL(add_random_ready_callback);
+
+void del_random_ready_callback(struct random_ready_callback *rdy)
+{
+	struct random_ready_cb_adapter *adapter, *tmp;
+	unsigned long flags;
+
+	if (!rdy)
+		return;
+
+	spin_lock_irqsave(&random_ready_cb_lock, flags);
+	list_for_each_entry_safe(adapter, tmp, &random_ready_cb_adapters, list) {
+		if (adapter->rdy != rdy)
+			continue;
+		list_del(&adapter->list);
+		spin_unlock_irqrestore(&random_ready_cb_lock, flags);
+
+		unregister_random_ready_notifier(&adapter->nb);
+		kfree(adapter);
+		return;
+	}
+	spin_unlock_irqrestore(&random_ready_cb_lock, flags);
+}
+EXPORT_SYMBOL(del_random_ready_callback);
 
 #if IS_ENABLED(CONFIG_VMGENID)
 static BLOCKING_NOTIFIER_HEAD(lrng_vmfork_chain);
