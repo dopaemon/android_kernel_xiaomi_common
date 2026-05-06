@@ -526,7 +526,7 @@ jobs:
                olddefconfig
 
           run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-KSU.log" \
-            make -k -j"$BUILD_JOBS" \
+            make -j"$BUILD_JOBS" \
               LLVM=1 \
               ARCH=arm64 \
               CROSS_COMPILE="aarch64-linux-gnu-" \
@@ -686,7 +686,7 @@ jobs:
                olddefconfig
 
           run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-NonKSU.log" \
-            make -k -j"$BUILD_JOBS" \
+            make -j"$BUILD_JOBS" \
               LLVM=1 \
               ARCH=arm64 \
               CROSS_COMPILE="aarch64-linux-gnu-" \
