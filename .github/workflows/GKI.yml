@@ -243,6 +243,7 @@ jobs:
         run: |
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
           echo "BUILD_DATE=$(TZ=Asia/Ho_Chi_Minh date +'%Y-%m%d-%H%M')" >> $GITHUB_ENV
+          echo "NOW=$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
           sudo apt-mark hold firefox
           sudo apt-mark hold libc-bin
           sudo apt purge man-db
@@ -731,6 +732,14 @@ jobs:
           files: DoraCore*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send data
+        uses: BorisTestov/tg_sender_action@latest
+        env:
+          TG_SENDER_TG_CHAT_ID: ${{ secrets.TG_SENDER_TG_CHAT_ID }}
+          TG_SENDER_TG_BOT_TOKEN: ${{ secrets.TG_SENDER_TG_BOT_TOKEN }}
+          TG_SENDER_PAYLOAD_MESSAGE: "**DoraCore Kernel | CI/CD**\n\n- Device: ${{ matrix.device }}\n- Build Time: ${{ NOW }}"
+          TG_SENDER_PAYLOAD_FILE_PATH: $GITHUB_WORKSPACE/DoraCore*.zip
 
       - name: Generate CCACHE
         if: (github.event.inputs.BUILDING_CCACHE == 'Enable' && github.event.inputs.BUILD_TARGET != 'Both')
