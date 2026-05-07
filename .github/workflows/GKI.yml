@@ -329,7 +329,7 @@ jobs:
       - name: Clone Clang if cache missed
         if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
-          git clone -b android12-release --single-branch --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
+          git clone -b main-kernel --single-branch --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
           # git clone -b ${{ github.event.inputs.CLANG_BRANCH }} --depth=1 --single-branch ${{ github.event.inputs.CLANG_PREBUILT }} $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
           # git clone -b 21 \
               # --single-branch \
@@ -338,7 +338,8 @@ jobs:
               # https://gitlab.com/clangsantoni/zyc_clang.git \
               # $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
           # mkdir -p $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
-          # cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/
+          cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
+          ln -sf clang-r584948 clang-r416183b
           # aria2c -s16 -x16 -k1M https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
           # tar -xvf Clang-22.0.0git-20250928.tar.gz
           # rm -rf Clang-22.0.0git-20250928.tar.gz
