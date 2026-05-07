@@ -745,7 +745,7 @@ jobs:
           TG_SENDER_TG_CHAT_ID: ${{ secrets.TG_SENDER_TG_CHAT_ID }}
           TG_SENDER_TG_BOT_TOKEN: ${{ secrets.TG_SENDER_TG_BOT_TOKEN }}
           TG_SENDER_PAYLOAD_MESSAGE: "**DoraCore Kernel | CI/CD**\n\n- Device: ${{ matrix.device }}\n- Build Time: ${NOW}"
-          TG_SENDER_PAYLOAD_FILE_PATH: $GITHUB_WORKSPACE/DoraCore*.zip
+          TG_SENDER_PAYLOAD_FILE_PATH: ${FULL_DIR}
 
       - name: Generate CCACHE
         if: (github.event.inputs.BUILDING_CCACHE == 'Enable' && github.event.inputs.BUILD_TARGET != 'Both')
