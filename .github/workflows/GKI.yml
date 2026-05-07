@@ -551,7 +551,7 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
              zip -r9 "$ZIP_NAME" *
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
-             FULL_DIR="$(pwd)/${ZIP_NAME}"
+             FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
              echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
           else
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
@@ -710,7 +710,7 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
              zip -r9 "$ZIP_NAME" *
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
-             FULL_DIR="$(pwd)/${ZIP_NAME}"
+             FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
              echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
           else
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
@@ -725,7 +725,7 @@ jobs:
           cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
           zip -r9 "$ZIP_NAME" *
           mv "$ZIP_NAME" $GITHUB_WORKSPACE/
-          FULL_DIR="$(pwd)/${ZIP_NAME}"
+          FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
           echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
 
       - name: Upload to GitHub Release
@@ -749,7 +749,7 @@ jobs:
             <br/>
             • Device: ${{ matrix.device }}
             • Tag: ${{ needs.create_release.outputs.tag }}
-            • Time: ${{ env.NOW }}
+            • Build Time: ${{ env.NOW }}
           TG_SENDER_PAYLOAD_PARSE_MODE: HTML
           TG_SENDER_PAYLOAD_FILE_PATH: ${{ env.FULL_DIR }}
 
