@@ -551,6 +551,8 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
              zip -r9 "$ZIP_NAME" *
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+             FULL_DIR="$(pwd)/${ZIP_NAME}"
+             echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
           else
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
              cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-kernelsu
@@ -708,6 +710,8 @@ jobs:
              cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
              zip -r9 "$ZIP_NAME" *
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+             FULL_DIR="$(pwd)/${ZIP_NAME}"
+             echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
           else
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
              cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-standard
@@ -721,6 +725,8 @@ jobs:
           cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
           zip -r9 "$ZIP_NAME" *
           mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+          FULL_DIR="$(pwd)/${ZIP_NAME}"
+          echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
