@@ -746,7 +746,7 @@ jobs:
           TG_SENDER_TG_BOT_TOKEN: ${{ secrets.TG_SENDER_TG_BOT_TOKEN }}
           TG_SENDER_PAYLOAD_MESSAGE: |
             <b>DoraCore Kernel | CI/CD</b>
-            <br/>
+
             • Device: ${{ matrix.device }}
             • Tag: ${{ needs.create_release.outputs.tag }}
             • Build Time: ${{ env.NOW }}
