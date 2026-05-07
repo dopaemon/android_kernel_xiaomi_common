@@ -2700,6 +2700,7 @@ unsigned long schedutil_cpu_util(int cpu, unsigned long util_cfs,
 				 struct task_struct *p);
 
 #endif /* CONFIG_CPU_FREQ_GOV_SCHEDUTIL */
+#endif
 
 #ifdef CONFIG_HAVE_SCHED_AVG_IRQ
 static inline unsigned long cpu_util_irq(struct rq *rq)
