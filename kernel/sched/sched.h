@@ -2753,6 +2753,8 @@ static inline bool sched_energy_enabled(void) { return false; }
 
 #endif /* CONFIG_ENERGY_MODEL && CONFIG_CPU_FREQ_GOV_SCHEDUTIL || CONFIG_CPU_FREQ_GOV_SCHEDHORIZON */
 
+#endif /* CONFIG_SMP */
+
 #ifdef CONFIG_MEMBARRIER
 /*
  * The scheduler provides memory barriers required by membarrier between:
