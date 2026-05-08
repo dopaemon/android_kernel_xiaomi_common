@@ -853,7 +853,6 @@ jobs:
               Image
 
       - name: Clear OUTPUT Folder
-        uses:
         run: |
           rm -rf $GITHUB_WORKSPACE/android-kernel/out
 
