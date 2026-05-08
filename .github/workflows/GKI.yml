@@ -351,6 +351,10 @@ jobs:
 
       - name: Setup Enviroment
         run: |
+          PWDIR=$(pwd)
+          cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
+          ln -sf clang-r584948 clang-r416183b
+          cd $PWDIR
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
           # echo 'PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"' >> $GITHUB_ENV
@@ -397,11 +401,6 @@ jobs:
             echo "CCACHE Infomation:"
             ccache -sv
           fi
-
-      - name: Setup Clang Linker
-        run: |
-          cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
-          ln -sf clang-r584948 clang-r416183b
 
       - name: Build Selected Devices KSU
         if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
