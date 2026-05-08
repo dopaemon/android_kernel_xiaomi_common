@@ -555,9 +555,11 @@ jobs:
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
              FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
              echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
+             rm -rf $GITHUB_WORKSPACE/android-kernel/out
           else
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
              cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-kernelsu
+             rm -rf $GITHUB_WORKSPACE/android-kernel/out
           fi
 
       - name: Build Selected Devices NonKSU
@@ -714,9 +716,11 @@ jobs:
              mv "$ZIP_NAME" $GITHUB_WORKSPACE/
              FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
              echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
+             rm -rf $GITHUB_WORKSPACE/android-kernel/out
           else
              cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
              cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-standard
+             rm -rf $GITHUB_WORKSPACE/android-kernel/out
           fi
 
       - name: Create Flashable Both Image
@@ -847,6 +851,11 @@ jobs:
               O=$GITHUB_WORKSPACE/android-kernel/out \
               HOSTLD=ld.lld \
               Image
+
+      - name: Clear OUTPUT Folder
+        uses:
+        run: |
+          rm -rf $GITHUB_WORKSPACE/android-kernel/out
 
       - name: Upload CCACHE Logs to artifact
         uses: actions/upload-artifact@v5
