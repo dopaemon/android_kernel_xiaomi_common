@@ -321,7 +321,7 @@ jobs:
         id: cache-clang
         uses: actions/cache@v4
         with:
-          path: android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
+          path: android-kernel/prebuilts-master/clang/host/linux-x86
           key: clang-${{ github.event.inputs.KERNEL_BRANCH }}
           restore-keys: |
             clang-
@@ -329,7 +329,11 @@ jobs:
       - name: Clone Clang if cache missed
         if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
-          git clone -b main-kernel --single-branch --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
+          git clone -b main-kernel \
+                    --single-branch \
+                    --depth=1 \
+                    https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+                    $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
           # git clone -b ${{ github.event.inputs.CLANG_BRANCH }} --depth=1 --single-branch ${{ github.event.inputs.CLANG_PREBUILT }} $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b
           # git clone -b 21 \
               # --single-branch \
@@ -354,7 +358,7 @@ jobs:
           PWDIR=$(pwd)
           cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
           rm -rf clang-r416183b
-          ln -sf clang-r584948 clang-r416183b
+          ln -sfn clang-r584948 clang-r416183b
           cd $PWDIR
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
           export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
