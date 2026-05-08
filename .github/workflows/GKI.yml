@@ -353,6 +353,7 @@ jobs:
         run: |
           PWDIR=$(pwd)
           cd $GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86
+          rm -rf clang-r416183b
           ln -sf clang-r584948 clang-r416183b
           cd $PWDIR
           export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
