@@ -24,7 +24,6 @@ struct sugov_tunables {
 	int 			    nefficient_freq;
 	u64 			    *up_delay;
 	int 			    nup_delay;
-	int 			    current_step;
 };
 
 struct sugov_policy {
@@ -39,6 +38,7 @@ struct sugov_policy {
 	unsigned int		next_freq;
 	unsigned int		cached_raw_freq;
 	u64	 		first_hp_request_time;
+	int			current_step;
 
 	/* The next fields are only needed if fast switch cannot be used: */
 	struct			irq_work irq_work;
@@ -84,35 +84,49 @@ static inline int match_nearest_efficient_step(int freq, int maxstep, int *freq_
 
 static inline void do_freq_limit(struct sugov_policy *sg_policy, unsigned int *freq, u64 time)
 {
-	if (*freq > sg_policy->tunables->efficient_freq[sg_policy->tunables->current_step] && !sg_policy->first_hp_request_time) {
+	int max_step;
+	int step;
+	struct sugov_tunables *tunables = sg_policy->tunables;
+
+	if (!tunables->nefficient_freq || !tunables->nup_delay)
+		return;
+	if (!tunables->efficient_freq[0])
+		return;
+
+	max_step = min(tunables->nefficient_freq, tunables->nup_delay) - 1;
+	step = clamp(sg_policy->current_step, 0, max_step);
+	sg_policy->current_step = step;
+
+	if (*freq > tunables->efficient_freq[step] && !sg_policy->first_hp_request_time) {
 		/* First request */
-		*freq = sg_policy->tunables->efficient_freq[sg_policy->tunables->current_step];
+		*freq = tunables->efficient_freq[step];
 		sg_policy->first_hp_request_time = time;
 		return;
 	}
 	
-	if (*freq < sg_policy->tunables->efficient_freq[sg_policy->tunables->current_step]) {
+	if (*freq < tunables->efficient_freq[step]) {
 		/* It's already under current efficient frequency */
 		/* Goto a lower one */
-		sg_policy->tunables->current_step = match_nearest_efficient_step(*freq, sg_policy->tunables->nefficient_freq, sg_policy->tunables->efficient_freq);
+		sg_policy->current_step = min(
+			match_nearest_efficient_step(*freq, tunables->nefficient_freq, tunables->efficient_freq),
+			max_step);
 		sg_policy->first_hp_request_time = 0;
 		return;
 	} 
 	
 	if ((sg_policy->first_hp_request_time 
-		&& time < sg_policy->first_hp_request_time + sg_policy->tunables->up_delay[sg_policy->tunables->current_step])){
+		&& time < sg_policy->first_hp_request_time + tunables->up_delay[step])){
 		/* Restrict it */
-		*freq = sg_policy->tunables->efficient_freq[sg_policy->tunables->current_step];
+		*freq = tunables->efficient_freq[step];
 		return;
 	} 
 	
-	if (sg_policy->tunables->current_step + 1 <= sg_policy->tunables->nefficient_freq - 1
-			&& sg_policy->tunables->current_step + 1 <= sg_policy->tunables->nup_delay - 1) {
+	if (step + 1 <= max_step) {
 		/* Unlock a higher efficient frequency */
-		sg_policy->tunables->current_step++;
+		sg_policy->current_step = step + 1;
 		sg_policy->first_hp_request_time = time;
-		if (*freq > sg_policy->tunables->efficient_freq[sg_policy->tunables->current_step])
-			*freq = sg_policy->tunables->efficient_freq[sg_policy->tunables->current_step];
+		if (*freq > tunables->efficient_freq[sg_policy->current_step])
+			*freq = tunables->efficient_freq[sg_policy->current_step];
 		return;
 	}
 }
@@ -544,7 +558,6 @@ static u64 *resolve_data_delay (const char *buf, int *num_ret,size_t count)
 	const char *cp;
 	u64 *output;
 	int num = 1, i;
-	pr_err("Started");
 
 	cp = buf;
 	while ((cp = strpbrk(cp + 1, " ")))
@@ -554,11 +567,9 @@ static u64 *resolve_data_delay (const char *buf, int *num_ret,size_t count)
 	
 	cp = buf;
 	i = 0;
-	pr_err("Before while");
 	while (i < num && cp-buf < count) {
 		if (sscanf(cp, "%llu", &output[i]) == 1) {
 			output[i] = output[i] * NSEC_PER_MSEC;
-			pr_info("Got: %llu", output[i]);
 			i++;
 		} else {
 			goto err_kfree;
@@ -620,9 +631,13 @@ static ssize_t efficient_freq_show(struct gov_attr_set *attr_set, char *buf)
 	ssize_t ret = 0;
 
 	for (i = 0; i < tunables->nefficient_freq; i++)
-		ret += sprintf(buf + ret, "%llu%s", tunables->efficient_freq[i], " ");
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%u ",
+				 tunables->efficient_freq[i]);
 
-	sprintf(buf + ret - 1, "\n");
+	if (ret)
+		buf[ret - 1] = '\n';
+	else
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "\n");
 
 	return ret;
 }
@@ -634,9 +649,13 @@ static ssize_t up_delay_show(struct gov_attr_set *attr_set, char *buf)
 	ssize_t ret = 0;
 
 	for (i = 0; i < tunables->nup_delay; i++)
-		ret += sprintf(buf + ret, "%u%s", tunables->up_delay[i] / NSEC_PER_MSEC, " ");
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%llu ",
+				 tunables->up_delay[i] / NSEC_PER_MSEC);
 
-	sprintf(buf + ret - 1, "\n");
+	if (ret)
+		buf[ret - 1] = '\n';
+	else
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "\n");
 
 	return ret;
 }
@@ -645,18 +664,24 @@ static ssize_t efficient_freq_store(struct gov_attr_set *attr_set,
 					const char *buf, size_t count)
 {
 	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
+	struct sugov_policy *sg_policy;
 	int new_num;
 	unsigned int *new_efficient_freq = NULL, *old;
 
 	new_efficient_freq = resolve_data_freq(buf, &new_num, count);
 
-	if (new_efficient_freq) {
-		old = tunables->efficient_freq;
-		tunables->efficient_freq = new_efficient_freq;
-		tunables->nefficient_freq = new_num;
-		tunables->current_step = 0;
-		if (old != default_efficient_freq)
-			kfree(old);
+	if (!new_efficient_freq)
+		return -EINVAL;
+
+	old = tunables->efficient_freq;
+	tunables->efficient_freq = new_efficient_freq;
+	tunables->nefficient_freq = new_num;
+	if (old != default_efficient_freq)
+		kfree(old);
+
+	list_for_each_entry(sg_policy, &attr_set->policy_list, tunables_hook) {
+		sg_policy->current_step = 0;
+		sg_policy->first_hp_request_time = 0;
 	}
 
 	return count;
@@ -666,18 +691,24 @@ static ssize_t up_delay_store(struct gov_attr_set *attr_set,
 					const char *buf, size_t count)
 {
 	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
+	struct sugov_policy *sg_policy;
 	int new_num;
 	u64 *new_up_delay = NULL, *old;
 
 	new_up_delay = resolve_data_delay(buf, &new_num, count);
 
-	if (new_up_delay) {
-		old = tunables->up_delay;
-		tunables->up_delay = new_up_delay;
-		tunables->nup_delay = new_num;
-		tunables->current_step = 0;
-		if (old != default_up_delay)
-			kfree(old);
+	if (!new_up_delay)
+		return -EINVAL;
+
+	old = tunables->up_delay;
+	tunables->up_delay = new_up_delay;
+	tunables->nup_delay = new_num;
+	if (old != default_up_delay)
+		kfree(old);
+
+	list_for_each_entry(sg_policy, &attr_set->policy_list, tunables_hook) {
+		sg_policy->current_step = 0;
+		sg_policy->first_hp_request_time = 0;
 	}
 
 	return count;
@@ -923,6 +954,8 @@ static int sugov_start(struct cpufreq_policy *policy)
 	sg_policy->work_in_progress		= false;
 	sg_policy->limits_changed		= false;
 	sg_policy->cached_raw_freq		= 0;
+	sg_policy->first_hp_request_time	= 0;
+	sg_policy->current_step		= 0;
 
 	sg_policy->need_freq_update = cpufreq_driver_test_flags(CPUFREQ_NEED_UPDATE_LIMITS);
 
