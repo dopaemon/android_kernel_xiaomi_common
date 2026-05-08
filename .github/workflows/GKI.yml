@@ -743,6 +743,7 @@ jobs:
 
       - name: Send Telegram
         uses: BorisTestov/tg_sender_action@latest
+        continue-on-error: true
         env:
           TG_SENDER_TG_CHAT_ID: ${{ secrets.TG_SENDER_TG_CHAT_ID }}
           TG_SENDER_TG_BOT_TOKEN: ${{ secrets.TG_SENDER_TG_BOT_TOKEN }}
