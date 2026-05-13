@@ -23,6 +23,10 @@ extern bool kgsl_sharedmem_noretry_flag;
 #define KGSL_CACHE_OP_FLUSH     0x02
 #define KGSL_CACHE_OP_CLEAN     0x03
 
+#define TEST_FLAG(_bit, _val) ((atomic_read(_val) & (_bit)) != 0)
+#define SET_FLAG(_bit, _val) atomic_or((int)(_bit), (_val))
+#define CLEAR_FLAG(_bit, _val) atomic_and(~(int)(_bit), (_val))
+
 void kgsl_sharedmem_free(struct kgsl_memdesc *memdesc);
 
 int kgsl_sharedmem_readl(const struct kgsl_memdesc *memdesc,
@@ -281,7 +285,7 @@ int kgsl_memdesc_sg_dma(struct kgsl_memdesc *memdesc,
  */
 static inline bool kgsl_memdesc_is_global(const struct kgsl_memdesc *memdesc)
 {
-	return memdesc && (memdesc->priv & KGSL_MEMDESC_GLOBAL);
+	return memdesc && (TEST_FLAG(KGSL_MEMDESC_GLOBAL, &memdesc->priv));
 }
 
 /*
@@ -292,7 +296,7 @@ static inline bool kgsl_memdesc_is_global(const struct kgsl_memdesc *memdesc)
  */
 static inline bool kgsl_memdesc_is_secured(const struct kgsl_memdesc *memdesc)
 {
-	return memdesc && (memdesc->priv & KGSL_MEMDESC_SECURE);
+	return memdesc && (TEST_FLAG(KGSL_MEMDESC_SECURE, &memdesc->priv));
 }
 
 /*
@@ -303,7 +307,7 @@ static inline bool kgsl_memdesc_is_secured(const struct kgsl_memdesc *memdesc)
  */
 static inline bool kgsl_memdesc_is_reclaimed(const struct kgsl_memdesc *memdesc)
 {
-	return memdesc && (memdesc->priv & KGSL_MEMDESC_RECLAIMED);
+	return memdesc && (TEST_FLAG(KGSL_MEMDESC_RECLAIMED, &memdesc->priv));
 }
 
 /*
@@ -330,7 +334,7 @@ kgsl_memdesc_use_cpu_map(const struct kgsl_memdesc *memdesc)
 static inline uint64_t
 kgsl_memdesc_footprint(const struct kgsl_memdesc *memdesc)
 {
-	if (!(memdesc->priv & KGSL_MEMDESC_GUARD_PAGE))
+	if (!(TEST_FLAG(KGSL_MEMDESC_GUARD_PAGE, &memdesc->priv)))
 		return memdesc->size;
 
 	return PAGE_ALIGN(memdesc->size + PAGE_SIZE);

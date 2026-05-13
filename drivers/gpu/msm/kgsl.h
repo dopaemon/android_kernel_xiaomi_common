@@ -270,7 +270,7 @@ struct kgsl_memdesc {
 	uint64_t gpuaddr;
 	phys_addr_t physaddr;
 	uint64_t size;
-	unsigned int priv;
+	atomic_t priv;
 	struct sg_table *sgt;
 	const struct kgsl_memdesc_ops *ops;
 	uint64_t flags;
