@@ -102,6 +102,10 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 #define cass_eq(a, b) ({ res = (a) == (b); })
 	long res;
 
+	/* Prefer higher-capacity CPUs before energy-saving heuristics. */
+	if (cass_cmp(a->cap_max, b->cap_max))
+		goto done;
+
 	/* Prefer the CPU that's not overloaded */
 	if (cass_cmp(b->eff_util / b->cap_max, a->eff_util / a->cap_max))
 		goto done;
@@ -117,8 +121,8 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 		     fits_capacity(p_util, b->cap_max)))
 		goto done;
 
-	/* Prefer the CPU that isn't the single fastest one in the system */
-	if (cass_cmp(cass_prime_cpu(b), cass_prime_cpu(a)))
+	/* Prefer the single fastest CPU when candidates are otherwise close. */
+	if (cass_cmp(cass_prime_cpu(a), cass_prime_cpu(b)))
 		goto done;
 
 	/* Prefer the CPU with lower relative utilization */
