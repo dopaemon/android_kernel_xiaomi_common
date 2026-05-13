@@ -54,10 +54,10 @@ DECLARE_PER_CPU(unsigned long, gov_last_util);
 
 /* Migration margins */
 unsigned int sched_capacity_margin_up[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1078 /* ~5% margin */
+			[0 ... WALT_NR_CPUS-1] = 1126 /* ~9% margin */
 };
 unsigned int sched_capacity_margin_down[WALT_NR_CPUS] = {
-			[0 ... WALT_NR_CPUS-1] = 1205 /* ~15% margin */
+			[0 ... WALT_NR_CPUS-1] = 1280 /* ~20% margin */
 };
 
 static inline bool

@@ -45,8 +45,8 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_stat_runtime);
  * (CFS  default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
  */
 #ifdef CONFIG_SCHED_BORE
-unsigned int sysctl_sched_latency			= 24000000ULL;
-static unsigned int normalized_sysctl_sched_latency	= 24000000ULL;
+unsigned int sysctl_sched_latency			= 12000000ULL;
+static unsigned int normalized_sysctl_sched_latency	= 12000000ULL;
 #else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_latency			= 6000000ULL;
 static unsigned int normalized_sysctl_sched_latency	= 6000000ULL;
@@ -78,8 +78,8 @@ enum sched_tunable_scaling sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_L
  * (CFS  default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
 #ifdef CONFIG_SCHED_BORE
-unsigned int sysctl_sched_min_granularity			= 3000000ULL;
-static unsigned int normalized_sysctl_sched_min_granularity	= 3000000ULL;
+unsigned int sysctl_sched_min_granularity			= 1500000ULL;
+static unsigned int normalized_sysctl_sched_min_granularity	= 1500000ULL;
 #else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_min_granularity			= 750000ULL;
 static unsigned int normalized_sysctl_sched_min_granularity	= 750000ULL;
@@ -108,8 +108,8 @@ unsigned int sysctl_sched_child_runs_first __read_mostly = 1;
  * (CFS  default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
 #ifdef CONFIG_SCHED_BORE
-unsigned int sysctl_sched_wakeup_granularity			= 4000000UL;
-static unsigned int normalized_sysctl_sched_wakeup_granularity	= 4000000UL;
+unsigned int sysctl_sched_wakeup_granularity			= 1500000UL;
+static unsigned int normalized_sysctl_sched_wakeup_granularity	= 1500000UL;
 #else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_wakeup_granularity			= 1000000UL;
 static unsigned int normalized_sysctl_sched_wakeup_granularity	= 1000000UL;
@@ -120,12 +120,12 @@ const_debug unsigned int sysctl_sched_migration_cost	= 0UL;
 #ifdef CONFIG_SCHED_BORE
 u8   __read_mostly sched_bore                   = 1;
 u8   __read_mostly sched_burst_exclude_kthreads = 1;
-u8   __read_mostly sched_burst_smoothness_long  = 1;
-u8   __read_mostly sched_burst_smoothness_short = 0;
-u8   __read_mostly sched_burst_fork_atavistic   = 2;
-u8   __read_mostly sched_burst_penalty_offset   = 24;
-uint __read_mostly sched_burst_penalty_scale    = 1536;
-uint __read_mostly sched_burst_cache_lifetime   = 60000000;
+u8   __read_mostly sched_burst_smoothness_long  = 0;
+u8   __read_mostly sched_burst_smoothness_short = 1;
+u8   __read_mostly sched_burst_fork_atavistic   = 3;
+u8   __read_mostly sched_burst_penalty_offset   = 28;
+uint __read_mostly sched_burst_penalty_scale    = 1024;
+uint __read_mostly sched_burst_cache_lifetime   = 30000000;
 #endif // CONFIG_SCHED_BORE
 
 int sched_thermal_decay_shift;
