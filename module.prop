@@ -1,7 +1,6 @@
-# id 只能填 字母 数字 半角符号
-id=Module-Template
-name=模块模板
-version=v1
-versionCode=1
-author=Petit Abba
-description=一个简短的描述
+id=doracore_tuner
+name=DoraCore Kernel Tuner
+version=v3.0.0
+versionCode=300
+author=Dopaemon
+description=Extreme SM8450/SM8475 WALT/uclamp/zstd zram performance profile
