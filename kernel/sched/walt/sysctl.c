@@ -39,39 +39,45 @@ unsigned int sysctl_sched_util_busy_hyst_enable_cpus;
 unsigned int sysctl_sched_util_busy_hyst_cpu[WALT_NR_CPUS];
 unsigned int sysctl_sched_util_busy_hyst_cpu_util[WALT_NR_CPUS];
 unsigned int sysctl_sched_boost;
-unsigned int sysctl_sched_wake_up_idle[2];
-unsigned int sysctl_input_boost_ms;
-unsigned int sysctl_input_boost_freq[8];
-unsigned int sysctl_sched_boost_on_input;
+unsigned int sysctl_sched_wake_up_idle[2] = { 1, 1 };
+unsigned int sysctl_input_boost_ms = 120;
+unsigned int sysctl_input_boost_freq[8] = {
+	1209600, 1209600, 1209600, 1209600,
+	1574400, 1574400, 1574400, 1766400
+};
+unsigned int sysctl_sched_boost_on_input = 3;
 int sysctl_cluster_arr[3][15];
-unsigned int sysctl_powerkey_input_boost_ms;
-unsigned int sysctl_powerkey_input_boost_freq[8];
-unsigned int sysctl_powerkey_sched_boost_on_input;
+unsigned int sysctl_powerkey_input_boost_ms = 500;
+unsigned int sysctl_powerkey_input_boost_freq[8] = {
+	1209600, 1209600, 1209600, 1209600,
+	1574400, 1574400, 1574400, 1766400
+};
+unsigned int sysctl_powerkey_sched_boost_on_input = 3;
 
 /* sysctl nodes accesed by other files */
-unsigned int __read_mostly sysctl_sched_coloc_downmigrate_ns;
-unsigned int __read_mostly sysctl_sched_group_downmigrate_pct;
-unsigned int __read_mostly sysctl_sched_group_upmigrate_pct;
+unsigned int __read_mostly sysctl_sched_coloc_downmigrate_ns = 100000000;
+unsigned int __read_mostly sysctl_sched_group_downmigrate_pct = 95;
+unsigned int __read_mostly sysctl_sched_group_upmigrate_pct = 100;
 unsigned int __read_mostly sysctl_sched_window_stats_policy;
 unsigned int sysctl_sched_ravg_window_nr_ticks;
 unsigned int sysctl_sched_walt_rotate_big_tasks;
 unsigned int sysctl_sched_task_unfilter_period;
 unsigned int __read_mostly sysctl_sched_asym_cap_sibling_freq_match_pct;
-unsigned int sysctl_walt_low_latency_task_threshold; /* disabled by default */
+unsigned int sysctl_walt_low_latency_task_threshold = 1024;
 unsigned int sysctl_sched_conservative_pl;
 unsigned int sysctl_sched_min_task_util_for_boost = 16;
 unsigned int sysctl_sched_min_task_util_for_uclamp = 16;
 unsigned int sysctl_sched_min_task_util_for_colocation = 16;
 unsigned int sysctl_sched_many_wakeup_threshold = WALT_MANY_WAKEUP_DEFAULT;
 const int sched_user_hint_max = 1000;
-unsigned int sysctl_walt_rtg_cfs_boost_prio = 99; /* disabled by default */
+unsigned int sysctl_walt_rtg_cfs_boost_prio = 110;
 unsigned int sysctl_sched_sync_hint_enable = 1;
 unsigned int sysctl_sched_bug_on_rt_throttle;
 unsigned int sysctl_panic_on_walt_bug;
 unsigned int sysctl_sched_suppress_region2;
 unsigned int sysctl_sched_skip_sp_newly_idle_lb = 1;
 unsigned int sysctl_sched_hyst_min_coloc_ns = 80000000;
-unsigned int sysctl_sched_asymcap_boost;
+unsigned int sysctl_sched_asymcap_boost = 1;
 
 struct cluster_freq_relation cluster_arr[3][5];
 /* range is [1 .. INT_MAX] */

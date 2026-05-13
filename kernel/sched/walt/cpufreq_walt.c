@@ -78,7 +78,7 @@ DEFINE_PER_CPU(struct waltgov_callback *, waltgov_cb_data);
 static DEFINE_PER_CPU(struct waltgov_cpu, waltgov_cpu);
 static DEFINE_PER_CPU(struct waltgov_tunables *, cached_tunables);
 
-#define DEFAULT_TARGET_LOAD (0)
+#define DEFAULT_TARGET_LOAD (25)
 static int default_target_loads[] = {DEFAULT_TARGET_LOAD};
 
 /************************ Governor internals ***********************/
@@ -269,10 +269,10 @@ static unsigned long waltgov_get_util(struct waltgov_cpu *wg_cpu)
 }
 
 #define NL_RATIO 75
-#define DEFAULT_HISPEED_LOAD 90
-#define DEFAULT_CPU0_RTG_BOOST_FREQ 1000000
-#define DEFAULT_CPU4_RTG_BOOST_FREQ 768000
-#define DEFAULT_CPU7_RTG_BOOST_FREQ 0
+#define DEFAULT_HISPEED_LOAD 75
+#define DEFAULT_CPU0_RTG_BOOST_FREQ 1209600
+#define DEFAULT_CPU4_RTG_BOOST_FREQ 1574400
+#define DEFAULT_CPU7_RTG_BOOST_FREQ 1766400
 
 static int find_target_boost(unsigned long util, struct waltgov_policy *wg_policy,
 				unsigned long *min_util)
