@@ -198,7 +198,7 @@ struct scan_control {
 /*
  * From 0 .. 200.  Higher means more swappy.
  */
-int vm_swappiness = 100;
+int vm_swappiness = 120;
 int vm_kcompressd = 24;
 bool sysctl_workingset_protection __read_mostly = true;
 u8 sysctl_anon_min_ratio __read_mostly = CONFIG_ANON_MIN_RATIO;
