@@ -102,33 +102,18 @@ jobs:
         env:
           BUILD_DEVICE: ${{ github.event.inputs.BUILD_DEVICE }}
         run: |
-          if [ "$BUILD_DEVICE" = "mayfly" ]; then
-            matrix='["mayfly"]'
-          elif [ "$BUILD_DEVICE" = "cupid" ]; then
-            matrix='["cupid"]'
-          elif [ "$BUILD_DEVICE" = "zeus" ]; then
-            matrix='["zeus"]'
-          elif [ "$BUILD_DEVICE" = "unicorn" ]; then
-            matrix='["unicorn"]'
-          elif [ "$BUILD_DEVICE" = "diting" ]; then
-            matrix='["diting"]'
-          elif [ "$BUILD_DEVICE" = "marble" ]; then
-            matrix='["marble"]'
-          elif [ "$BUILD_DEVICE" = "mondrian" ]; then
-            matrix='["mondrian"]'
-          elif [ "$BUILD_DEVICE" = "thor" ]; then
-            matrix='["thor"]'
-          elif [ "$BUILD_DEVICE" = "zizhan" ]; then
-            matrix='["zizhan"]'
-          elif [ "$BUILD_DEVICE" = "ziyi" ]; then
-            matrix='["ziyi"]'
-          elif [ "$BUILD_DEVICE" = "ingres" ]; then
-            matrix='["ingres"]'
-          elif [ "$BUILD_DEVICE" = "gki" ]; then
-            matrix='["gki"]'
-          elif [ "$BUILD_DEVICE" = "all" ]; then
-            matrix='["mayfly", "cupid", "unicorn", "zeus", "diting", "marble", "mondrian", "thor", "zizhan", "ziyi", "ingres", "gki"]'
-          fi
+          case "$BUILD_DEVICE" in
+            all)
+              matrix='["mayfly", "cupid", "unicorn", "zeus", "diting", "marble", "mondrian", "thor", "zizhan", "ziyi", "ingres", "gki"]'
+              ;;
+            mayfly|cupid|unicorn|zeus|diting|marble|mondrian|thor|zizhan|ziyi|ingres|gki)
+              matrix="[\"$BUILD_DEVICE\"]"
+              ;;
+            *)
+              echo "Unsupported BUILD_DEVICE: $BUILD_DEVICE" >&2
+              exit 1
+              ;;
+          esac
 
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
@@ -407,18 +392,23 @@ jobs:
             ccache -sv
           fi
 
-      - name: Build Selected Devices KSU
-        if: (github.event.inputs.BUILD_TARGET == 'KSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
+      - name: Build Selected Device Variants
+        if: github.event.inputs.KERNEL_BRANCH == 'Rebase'
         run: |
           set -euo pipefail
           DEVICE="${{ matrix.device }}"
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
-          ZIP_NAME=""
           BUILD_JOBS="$(nproc --all)"
           if [ "$BUILD_JOBS" -gt 4 ]; then
              BUILD_JOBS=4
           fi
-          rm -rf $GITHUB_WORKSPACE/android-kernel/out
+
+          case "$TARGET" in
+            KSU) VARIANTS="KSU" ;;
+            NonKSU) VARIANTS="NonKSU" ;;
+            Both) VARIANTS="KSU NonKSU" ;;
+            *) echo "Unsupported BUILD_TARGET: $TARGET" >&2; exit 1 ;;
+          esac
 
           log_resource_snapshot() {
             local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
@@ -476,272 +466,137 @@ jobs:
             return "$MAKE_RC"
           }
 
+          build_variant() {
+            local variant="$1"
+            local ksu_config image_name zip_name
 
-          export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-KSU-ccache.log"
-          export CCACHE_COMPILERCHECK="none"
-          export CCACHE_BASEDIR="${{ github.workspace }}"
-          export CCACHE_NOHASHDIR="true"
-          export CCACHE_HARDLINK="true"
-          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
-          export CCACHE_MAXSIZE="3G"
-          export KERNEL_USE_CCACHE=1
+            case "$variant" in
+              KSU)
+                ksu_config=y
+                image_name=Image-kernelsu
+                ;;
+              NonKSU)
+                ksu_config=n
+                image_name=Image-standard
+                ;;
+              *) echo "Unsupported variant: $variant" >&2; exit 1 ;;
+            esac
 
-          export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
-          export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
+            rm -rf "$GITHUB_WORKSPACE/android-kernel/out"
+            export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-$variant-ccache.log"
+            export CCACHE_COMPILERCHECK="none"
+            export CCACHE_BASEDIR="${{ github.workspace }}"
+            export CCACHE_NOHASHDIR="true"
+            export CCACHE_HARDLINK="true"
+            export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+            export CCACHE_MAXSIZE="3G"
+            export KERNEL_USE_CCACHE=1
 
-          unset DTC
-          export DTC="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin/dtc"
+            export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+            export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
 
-          cd $GITHUB_WORKSPACE/android-kernel
-          cd ./common/
-          git add -vA
-          git reset --hard HEAD
-          rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
-          echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
+            unset DTC
+            export DTC="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin/dtc"
 
-          rm ./android/abi_gki_protected_exports_* || true
+            cd "$GITHUB_WORKSPACE/android-kernel/common/"
+            git add -vA
+            git reset --hard HEAD
+            rm -rf "$GITHUB_WORKSPACE/android-kernel/out/android12-5.10"
+            echo "CONFIG_KSU=$ksu_config" >> arch/arm64/configs/gki_defconfig
+            echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
 
-          if [ "$DEVICE" != "gki" ]; then
-             cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
-             cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
-             cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> arch/arm64/configs/gki_defconfig
-             cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
-          fi
+            rm ./android/abi_gki_protected_exports_* || true
 
-          export DTC=$(pwd)/scripts/dtc/dtc
-
-          make -j"$BUILD_JOBS" \
-               LLVM=1 \
-               ARCH=arm64 \
-               CROSS_COMPILE="aarch64-linux-gnu-" \
-               CC="ccache clang" \
-               O=$GITHUB_WORKSPACE/android-kernel/out \
-               LLVM_IAS=1 \
-               LD="ld.lld" \
-               HOSTLD="ld.lld" \
-               DTC_EXT=dtc \
-               gki_defconfig
-
-          if [ -x scripts/config ]; then
-             scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
-               -d LTO_CLANG_THIN \
-               -e LTO_CLANG_FULL
-          fi
-
-          make -j"$BUILD_JOBS" \
-               LLVM=1 \
-               ARCH=arm64 \
-               CROSS_COMPILE="aarch64-linux-gnu-" \
-               O=$GITHUB_WORKSPACE/android-kernel/out \
-               LLVM_IAS=1 \
-               olddefconfig
-
-          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-KSU.log" \
-            make -j"$BUILD_JOBS" \
-              LLVM=1 \
-              ARCH=arm64 \
-              CROSS_COMPILE="aarch64-linux-gnu-" \
-              CC="ccache clang" \
-              LD="ld.lld" \
-              HOSTLD="ld.lld" \
-              O=$GITHUB_WORKSPACE/android-kernel/out \
-              LLVM_IAS=1 \
-              DTC_EXT=dtc \
-              DTC_FLAGS="-Wno-all" \
-              Image
-
-          [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
-
-          cd $GITHUB_WORKSPACE/android-kernel
-          cd ./common/
-
-          if [ "$TARGET" != "Both" ]; then
-             ZIP_NAME="DoraCore-${DEVICE}-KSU-5.10-A12-${BUILD_DATE}.zip"
-             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
-             zip -r9 "$ZIP_NAME" *
-             mv "$ZIP_NAME" $GITHUB_WORKSPACE/
-             FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
-             echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
-             rm -rf $GITHUB_WORKSPACE/android-kernel/out
-          else
-             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-kernelsu
-             rm -rf $GITHUB_WORKSPACE/android-kernel/out
-          fi
-
-      - name: Build Selected Devices NonKSU
-        if: (github.event.inputs.BUILD_TARGET == 'NonKSU' || github.event.inputs.BUILD_TARGET == 'Both') && github.event.inputs.KERNEL_BRANCH == 'Rebase'
-        run: |
-          set -euo pipefail
-          DEVICE="${{ matrix.device }}"
-          TARGET="${{ github.event.inputs.BUILD_TARGET }}"
-          ZIP_NAME=""
-          BUILD_JOBS="$(nproc --all)"
-          if [ "$BUILD_JOBS" -gt 4 ]; then
-             BUILD_JOBS=4
-          fi
-          rm -rf $GITHUB_WORKSPACE/android-kernel/out
-
-          log_resource_snapshot() {
-            local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
-            local swap_total_kb swap_free_kb swap_used_kb swap_used_mib swap_total_mib swap_used_pct
-            local disk_usage
-
-            mem_total_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
-            mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
-            mem_used_kb=$((mem_total_kb - mem_avail_kb))
-            mem_used_mib=$((mem_used_kb / 1024))
-            mem_total_mib=$((mem_total_kb / 1024))
-            mem_used_pct=$((100 * mem_used_kb / mem_total_kb))
-
-            swap_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
-            swap_free_kb=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
-            if [ "$swap_total_kb" -gt 0 ]; then
-              swap_used_kb=$((swap_total_kb - swap_free_kb))
-              swap_used_mib=$((swap_used_kb / 1024))
-              swap_total_mib=$((swap_total_kb / 1024))
-              swap_used_pct=$((100 * swap_used_kb / swap_total_kb))
-            else
-              swap_used_mib=0
-              swap_total_mib=0
-              swap_used_pct=0
+            if [ "$DEVICE" != "gki" ]; then
+               cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
+               cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
+               cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> arch/arm64/configs/gki_defconfig
+               cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
             fi
 
-            disk_usage=$(df -P -BG "$GITHUB_WORKSPACE" | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
-            printf '[monitor] %s | RAM %s/%s MiB (%s%%) | SWAP %s/%s MiB (%s%%) | DISK %s\n' \
-              "$(date +'%F %T')" \
-              "$mem_used_mib" "$mem_total_mib" "$mem_used_pct" \
-              "$swap_used_mib" "$swap_total_mib" "$swap_used_pct" \
-              "$disk_usage"
-          }
+            export DTC=$(pwd)/scripts/dtc/dtc
 
-          run_make_keepalive() {
-            local log_file="$1"
-            shift
-
-            "$@" 2>&1 | tee "$log_file" &
-            MAKE_PID=$!
-
-            log_resource_snapshot
-
-            while kill -0 "$MAKE_PID" 2>/dev/null; do
-              log_resource_snapshot
-              sleep 30
-            done &
-            KEEPALIVE_PID=$!
-
-            wait "$MAKE_PID"
-            MAKE_RC=$?
-            kill "$KEEPALIVE_PID" 2>/dev/null || true
-            wait "$KEEPALIVE_PID" 2>/dev/null || true
-
-            return "$MAKE_RC"
-          }
-
-
-          export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-NonKSU-ccache.log"
-          export CCACHE_COMPILERCHECK="none"
-          export CCACHE_BASEDIR="${{ github.workspace }}"
-          export CCACHE_NOHASHDIR="true"
-          export CCACHE_HARDLINK="true"
-          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
-          export CCACHE_MAXSIZE="3G"
-          export KERNEL_USE_CCACHE=1
-
-          export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
-          export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
-
-          unset DTC
-          export DTC="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin/dtc"
-
-          cd $GITHUB_WORKSPACE/android-kernel
-          cd ./common/
-          git add -vA
-          git reset --hard HEAD
-          rm -rf $GITHUB_WORKSPACE/android-kernel/out/android12-5.10
-          echo "CONFIG_KSU=n" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_BUILD_WITH_CCACHE=y" >> arch/arm64/configs/gki_defconfig
-
-          rm ./android/abi_gki_protected_exports_* || true
-
-          if [ "$DEVICE" != "gki" ]; then
-             cat arch/arm64/configs/vendor/waipio_GKI.config >> arch/arm64/configs/gki_defconfig
-             cat arch/arm64/configs/vendor/xiaomi_GKI.config >> arch/arm64/configs/gki_defconfig
-             cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> arch/arm64/configs/gki_defconfig
-             cat arch/arm64/configs/vendor/debugfs.config >> arch/arm64/configs/gki_defconfig
-          fi
-
-          export DTC=$(pwd)/scripts/dtc/dtc
-
-          make -j"$BUILD_JOBS" \
-               LLVM=1 \
-               ARCH=arm64 \
-               CROSS_COMPILE="aarch64-linux-gnu-" \
-               CC="ccache clang" \
-               O=$GITHUB_WORKSPACE/android-kernel/out \
-               LLVM_IAS=1 \
-               LD="ld.lld" \
-               HOSTLD="ld.lld" \
-               DTC_EXT=dtc \
-               gki_defconfig
-
-          if [ -x scripts/config ]; then
-             scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
-               -d LTO_CLANG_THIN \
-               -e LTO_CLANG_FULL
-          fi
-
-          make -j"$BUILD_JOBS" \
-               LLVM=1 \
-               ARCH=arm64 \
-               CROSS_COMPILE="aarch64-linux-gnu-" \
-               O=$GITHUB_WORKSPACE/android-kernel/out \
-               LLVM_IAS=1 \
-               olddefconfig
-
-          run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-NonKSU.log" \
             make -j"$BUILD_JOBS" \
-              LLVM=1 \
-              ARCH=arm64 \
-              CROSS_COMPILE="aarch64-linux-gnu-" \
-              CC="ccache clang" \
-              LD="ld.lld" \
-              HOSTLD="ld.lld" \
-              O=$GITHUB_WORKSPACE/android-kernel/out \
-              LLVM_IAS=1 \
-              DTC_EXT=dtc \
-              DTC_FLAGS="-Wno-all" \
-              Image
+                 LLVM=1 \
+                 ARCH=arm64 \
+                 CROSS_COMPILE="aarch64-linux-gnu-" \
+                 CC="ccache clang" \
+                 O=$GITHUB_WORKSPACE/android-kernel/out \
+                 LLVM_IAS=1 \
+                 LD="ld.lld" \
+                 HOSTLD="ld.lld" \
+                 DTC_EXT=dtc \
+                 gki_defconfig
 
-          [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || { exit 1; }
+            if [ -x scripts/config ]; then
+               scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out/.config" \
+                 -d LTO_CLANG_THIN \
+                 -e LTO_CLANG_FULL
+            fi
 
-          if [ "$TARGET" != "Both" ]; then
-             ZIP_NAME="DoraCore-${DEVICE}-NonKSU-5.10-A12-${BUILD_DATE}.zip"
-             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image
+            make -j"$BUILD_JOBS" \
+                 LLVM=1 \
+                 ARCH=arm64 \
+                 CROSS_COMPILE="aarch64-linux-gnu-" \
+                 O=$GITHUB_WORKSPACE/android-kernel/out \
+                 LLVM_IAS=1 \
+                 olddefconfig
+
+            run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out/build-$DEVICE-$variant.log" \
+              make -j"$BUILD_JOBS" \
+                LLVM=1 \
+                ARCH=arm64 \
+                CROSS_COMPILE="aarch64-linux-gnu-" \
+                CC="ccache clang" \
+                LD="ld.lld" \
+                HOSTLD="ld.lld" \
+                O=$GITHUB_WORKSPACE/android-kernel/out \
+                LLVM_IAS=1 \
+                DTC_EXT=dtc \
+                DTC_FLAGS="-Wno-all" \
+                Image
+
+            [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || exit 1
+
+            cd "$GITHUB_WORKSPACE/android-kernel/AnyKernel3"
+            if [ "$TARGET" = "Both" ]; then
+               cp -r "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" "./$image_name"
+            else
+               zip_name="DoraCore-${DEVICE}-${variant}-5.10-A12-${BUILD_DATE}.zip"
+               cp -r "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ./Image
+               zip -r9 "$zip_name" *
+               mv "$zip_name" "$GITHUB_WORKSPACE/"
+               FULL_DIR="$GITHUB_WORKSPACE/${zip_name}"
+               echo "FULL_DIR=${FULL_DIR}" >> "$GITHUB_ENV"
+               rm -f ./Image
+            fi
+
+            rm -rf "$GITHUB_WORKSPACE/android-kernel/out"
+          }
+
+          for variant in $VARIANTS; do
+            build_variant "$variant"
+          done
+
+          if [ "$TARGET" = "Both" ]; then
+             ZIP_NAME="DoraCore-${DEVICE}-5.10-A12-${BUILD_DATE}.zip"
+             cd "$GITHUB_WORKSPACE/android-kernel/AnyKernel3"
              zip -r9 "$ZIP_NAME" *
-             mv "$ZIP_NAME" $GITHUB_WORKSPACE/
+             mv "$ZIP_NAME" "$GITHUB_WORKSPACE/"
              FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
-             echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
-             rm -rf $GITHUB_WORKSPACE/android-kernel/out
-          else
-             cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-             cp -r $GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image ./Image-standard
-             rm -rf $GITHUB_WORKSPACE/android-kernel/out
+             echo "FULL_DIR=${FULL_DIR}" >> "$GITHUB_ENV"
           fi
 
-      - name: Create Flashable Both Image
-        if: github.event.inputs.BUILD_TARGET == 'Both' && github.event.inputs.KERNEL_BRANCH != 'lindroid'
+      - name: Package Magisk Modules
         run: |
-          DEVICE="${{ matrix.device }}"
-          ZIP_NAME="DoraCore-${DEVICE}-5.10-A12-${BUILD_DATE}.zip"
-          cd $GITHUB_WORKSPACE/android-kernel/AnyKernel3
-          zip -r9 "$ZIP_NAME" *
-          mv "$ZIP_NAME" $GITHUB_WORKSPACE/
-          FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
-          echo "FULL_DIR=${FULL_DIR}" >> $GITHUB_ENV
+          set -euo pipefail
+          MODULE_DIR="$GITHUB_WORKSPACE/magisk-modules"
+          MODULE_ZIP="DoraCore-Magisk-Modules-${BUILD_DATE}.zip"
+          rm -rf "$MODULE_DIR"
+          git clone -b modules --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git "$MODULE_DIR"
+          cd "$MODULE_DIR"
+          rm -rf .git .github
+          zip -r9 "$GITHUB_WORKSPACE/$MODULE_ZIP" .
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
