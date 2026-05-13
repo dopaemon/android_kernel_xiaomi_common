@@ -58,6 +58,13 @@
 			qcom,display-topology = <1 1 1>;
 			qcom,default-topology-index = <0>;
 		};
+		/*156 Hz*/
+		timing@3{
+			qcom,mdss-dsi-panel-phy-timings = [00 1D 07 07 17 22 07
+				07 08 02 04 00 19 0C];
+			qcom,display-topology = <1 1 1>;
+			qcom,default-topology-index = <0>;
+		};
 		/*90 Hz*/
 		timing@2{
 			qcom,mdss-dsi-panel-phy-timings = [00 1D 07 07 17 22 07
