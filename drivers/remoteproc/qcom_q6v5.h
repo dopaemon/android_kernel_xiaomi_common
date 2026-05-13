@@ -43,8 +43,12 @@ struct qcom_q6v5 {
 };
 
 int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
-		   struct rproc *rproc, int crash_reason, int crash_stack,
-		unsigned int smem_host_id, void (*handover)(struct qcom_q6v5 *q6v5));
+		   struct rproc *rproc, int crash_reason,
+		   void (*handover)(struct qcom_q6v5 *q6v5));
+int qcom_q6v5_init_ext(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
+		       struct rproc *rproc, int crash_reason, int crash_stack,
+		       unsigned int smem_host_id,
+		       void (*handover)(struct qcom_q6v5 *q6v5));
 void qcom_q6v5_register_ssr_subdev(struct qcom_q6v5 *q6v5, struct rproc_subdev *ssr_subdev);
 int qcom_q6v5_prepare(struct qcom_q6v5 *q6v5);
 int qcom_q6v5_unprepare(struct qcom_q6v5 *q6v5);

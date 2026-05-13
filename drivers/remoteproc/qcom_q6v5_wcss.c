@@ -565,7 +565,7 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 	if (ret)
 		goto free_rproc;
 
-	ret = qcom_q6v5_init(&wcss->q6v5, pdev, rproc, WCSS_CRASH_REASON, 0, 0, NULL);
+	ret = qcom_q6v5_init_ext(&wcss->q6v5, pdev, rproc, WCSS_CRASH_REASON, 0, 0, NULL);
 	if (ret)
 		goto free_rproc;
 

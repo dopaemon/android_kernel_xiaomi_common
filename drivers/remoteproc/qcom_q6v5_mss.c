@@ -1807,7 +1807,7 @@ static int q6v5_probe(struct platform_device *pdev)
 	qproc->need_mem_protection = desc->need_mem_protection;
 	qproc->has_mba_logs = desc->has_mba_logs;
 
-	ret = qcom_q6v5_init(&qproc->q6v5, pdev, rproc, MPSS_CRASH_REASON_SMEM,
+	ret = qcom_q6v5_init_ext(&qproc->q6v5, pdev, rproc, MPSS_CRASH_REASON_SMEM,
 		0, 0, qcom_msa_handover);
 	if (ret)
 		goto detach_proxy_pds;

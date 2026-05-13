@@ -472,9 +472,11 @@ EXPORT_SYMBOL_GPL(qcom_q6v5_panic);
  *
  * Return: 0 on success, negative errno on failure
  */
-int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
-		struct rproc *rproc, int crash_reason, int crash_stack, unsigned int smem_host_id,
-		   void (*handover)(struct qcom_q6v5 *q6v5))
+static int __qcom_q6v5_init(struct qcom_q6v5 *q6v5,
+			struct platform_device *pdev, struct rproc *rproc,
+			int crash_reason, int crash_stack,
+			unsigned int smem_host_id,
+			void (*handover)(struct qcom_q6v5 *q6v5))
 {
 	int ret;
 
@@ -568,7 +570,24 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 #endif
 	return 0;
 }
+
+int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
+		   struct rproc *rproc, int crash_reason,
+		   void (*handover)(struct qcom_q6v5 *q6v5))
+{
+	return __qcom_q6v5_init(q6v5, pdev, rproc, crash_reason, 0, 0,
+				handover);
+}
 EXPORT_SYMBOL_GPL(qcom_q6v5_init);
+
+int qcom_q6v5_init_ext(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
+		       struct rproc *rproc, int crash_reason, int crash_stack,
+		       unsigned int smem_host_id,
+		       void (*handover)(struct qcom_q6v5 *q6v5))
+{
+	return __qcom_q6v5_init(q6v5, pdev, rproc, crash_reason, crash_stack,
+				smem_host_id, handover);
+}
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Qualcomm Peripheral Image Loader for Q6V5");

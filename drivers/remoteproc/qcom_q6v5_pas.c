@@ -817,7 +817,7 @@ static int adsp_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(adsp->qmp))
 		goto detach_proxy_pds;
 
-	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem,
+	ret = qcom_q6v5_init_ext(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem,
 	 desc->crash_reason_stack, desc->smem_host_id,  qcom_pas_handover);
 	if (ret)
 		goto detach_proxy_pds;
