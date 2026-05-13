@@ -4,6 +4,7 @@
  */
 
 #include "walt.h"
+#include "dora.h"
 
 static int neg_three = -3;
 static int three = 3;
@@ -16,6 +17,7 @@ static int __maybe_unused four = 4;
 static int __maybe_unused six = 6;
 static int one_hundred = 100;
 static int one_thousand = 1000;
+static int ten_twenty_four = 1024;
 
 /*
  * CFS task prio range is [100 ... 139]
@@ -826,6 +828,78 @@ struct ctl_table walt_table[] = {
 		.proc_handler	= proc_douintvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &two_hundred_fifty_five,
+	},
+	{
+		.procname	= "sched_dora_enable",
+		.data		= &sysctl_sched_dora_enable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "sched_dora_mode",
+		.data		= &sysctl_sched_dora_mode,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &two,
+	},
+	{
+		.procname	= "sched_dora_input_ms",
+		.data		= &sysctl_sched_dora_input_ms,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &one_hundred_thousand,
+	},
+	{
+		.procname	= "sched_dora_wake_ms",
+		.data		= &sysctl_sched_dora_wake_ms,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &one_hundred_thousand,
+	},
+	{
+		.procname	= "sched_dora_uclamp_min",
+		.data		= &sysctl_sched_dora_uclamp_min,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &ten_twenty_four,
+	},
+	{
+		.procname	= "sched_dora_prefer_big",
+		.data		= &sysctl_sched_dora_prefer_big,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "sched_dora_freq_floor",
+		.data		= &sysctl_sched_dora_freq_floor,
+		.maxlen		= sizeof(unsigned int) * WALT_NR_CPUS,
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_dora_debug",
+		.data		= &sysctl_sched_dora_debug,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 	{
 		.procname	= "input_boost",

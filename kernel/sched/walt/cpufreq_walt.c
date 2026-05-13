@@ -13,6 +13,7 @@
 #include <trace/events/power.h>
 
 #include "walt.h"
+#include "dora.h"
 #include "trace.h"
 
 struct waltgov_tunables {
@@ -240,6 +241,8 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 			freq = wg_policy->tunables->adaptive_high_freq;
 	}
 
+	freq = dora_adjust_freq(wg_cpu->cpu, freq);
+
 	trace_waltgov_next_freq(policy->cpu, util, max, raw_freq, freq, policy->min, policy->max,
 				wg_policy->cached_raw_freq, wg_policy->need_freq_update);
 
@@ -331,6 +334,8 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 			pl = mult_frac(pl, TARGET_LOAD, 100);
 		*util = max(*util, pl);
 	}
+
+	*util = dora_adjust_util(wg_cpu->cpu, *util, *max);
 }
 
 static inline unsigned long target_util(struct waltgov_policy *wg_policy,
