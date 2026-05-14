@@ -111,10 +111,15 @@ jobs:
         shell: bash
         env:
           BUILD_DEVICE: ${{ github.event.inputs.BUILD_DEVICE }}
+          BUILD_DTBO: ${{ github.event.inputs.BUILD_DTBO }}
         run: |
           case "$BUILD_DEVICE" in
             all)
-              matrix='["mayfly", "cupid", "unicorn", "zeus", "diting", "marble", "mondrian", "thor", "zizhan", "ziyi", "ingres", "gki"]'
+              if [ "$BUILD_DTBO" = "Disable" ]; then
+                matrix='["mayfly", "cupid", "unicorn", "zeus", "diting", "marble", "mondrian", "thor", "zizhan", "ziyi", "ingres", "gki"]'
+              else
+                matrix='["mayfly", "cupid", "unicorn", "zeus", "diting", "marble", "mondrian", "thor", "zizhan", "ziyi"]'
+              fi
               ;;
             mayfly|cupid|unicorn|zeus|diting|marble|mondrian|thor|zizhan|ziyi|ingres|gki)
               matrix="[\"$BUILD_DEVICE\"]"
@@ -554,11 +559,14 @@ jobs:
                 LLVM_IAS=1 \
                 DTC_EXT=dtc \
                 DTC_FLAGS="-Wno-all" \
-                "$dtbo_target"
+                dtbs
 
             mkdir -p "$GITHUB_WORKSPACE/android-kernel/dtbo"
-            find "$GITHUB_WORKSPACE/android-kernel/out-dtbo" -name "*.dtbo" -print -exec cp {} "$GITHUB_WORKSPACE/android-kernel/dtbo/" \;
-            [ -n "$(find "$GITHUB_WORKSPACE/android-kernel/dtbo" -name "*.dtbo" -print -quit)" ] || exit 1
+            find "$GITHUB_WORKSPACE/android-kernel/out-dtbo" -name "$dtbo_target" -print -exec cp {} "$GITHUB_WORKSPACE/android-kernel/dtbo/" \;
+            [ -f "$GITHUB_WORKSPACE/android-kernel/dtbo/$dtbo_target" ] || exit 1
+            if [ "$DEVICE" = "mayfly" ]; then
+              find "$GITHUB_WORKSPACE/android-kernel/out-dtbo" -name "mayfly-sde-display-mtp-overlay.dtbo" -print -exec cp {} "$GITHUB_WORKSPACE/android-kernel/dtbo/" \;
+            fi
             mkdtimg create "$GITHUB_WORKSPACE/android-kernel/dtbo.img" --page_size=4096 "$GITHUB_WORKSPACE/android-kernel/dtbo"/*.dtbo
           }
 
@@ -702,6 +710,8 @@ jobs:
              DTBO_ZIP="DoraCore-${DEVICE}-DTBO-5.10-A12-${BUILD_DATE}.zip"
              cd "$GITHUB_WORKSPACE/android-kernel"
              zip -r9 "$GITHUB_WORKSPACE/$DTBO_ZIP" dtbo.img
+             FULL_DIR="$GITHUB_WORKSPACE/${DTBO_ZIP}"
+             echo "FULL_DIR=${FULL_DIR}" >> "$GITHUB_ENV"
           fi
 
           if [ "$TARGET" = "Both" ] && [ "$DTBO_MODE" != "Build DTBO Only" ]; then
