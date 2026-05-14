@@ -7,34 +7,180 @@ on:
         description: 'Kernel branch'
         required: true
         default: 'Rebase'
+        type: choice
+        options:
+        - Rebase
       KERNEL_GIT:
         description: 'Kernel source git'
         required: true
         default: 'https://github.com/dopaemon/android_kernel_xiaomi_common.git'
+      USING_CCACHE:
+        description: 'Using CCACHE'
+        required: true
+        default: 'Enable'
+        type: choice
+        options:
+        - Enable
+        - Disable
 
 jobs:
   kmi:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    permissions:
+      contents: read
 
     steps:
-      - name: Checkout CI repo (master)
+      - name: Checkout CI repo
         uses: actions/checkout@v6
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            bc bison flex cpio curl file git jq \
-            libelf-dev libssl-dev pahole rsync unzip xz-utils zstd
+      - name: Free Disk Space
+        uses: endersonmenezes/free-disk-space@v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: true
+          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+          remove_packages_one_command: true
+          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+          rm_cmd: "rmz"
+          rmz_version: "3.1.1"
+          testing: true
 
-      - name: Prepare kernel tree
+      - name: Setup Swap Space
+        uses: thejerrybao/setup-swap-space@v1
+        with:
+          swap-space-path: /swapfile
+          swap-size-gb: 32
+          remove-existing-swap-files: true
+
+      - name: Tune Swap Aggressiveness
         run: |
           set -euo pipefail
-          mkdir -p android-kernel
-          git clone -b "${{ github.event.inputs.KERNEL_BRANCH }}" --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" android-kernel/common
-          git clone -b build --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" android-kernel/build
-          git clone -b build-tools --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" android-kernel/build-tools
+          sudo sysctl -w vm.swappiness=200
+          sudo sysctl -w vm.page-cluster=0
+          sudo swapoff /swapfile || true
+          sudo swapon -p 32767 /swapfile
+          swapon --show --bytes
+
+      - name: Build Environment
+        run: |
+          set -euo pipefail
+          sudo apt-mark hold firefox
+          sudo apt-mark hold libc-bin
+          sudo apt purge man-db
+          sudo rm -rf /var/lib/man-db/auto-update
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            curl bison flex make binutils git perl gcc g++ python3 \
+            python-is-python3 bc libssl-dev libelf-dev dwarves pahole \
+            cpio file jq rsync unzip xz-utils zstd ccache \
+            binutils-aarch64-linux-gnu tar which wget zip
+
+          sudo wget -O /usr/bin/repo http://commondatastorage.googleapis.com/git-repo-downloads/repo
+          sudo chmod +x /usr/bin/repo
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+
+          mkdir -p "$GITHUB_WORKSPACE/android-kernel"
+          cd "$GITHUB_WORKSPACE/android-kernel"
+          repo init --depth=1 --u "${{ github.event.inputs.KERNEL_GIT }}" -b manifest
+          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+          git clone -b build --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" build
+          rm -rf .git .github .repo common
+          rm -rf ./build/_setup_env.sh
+          wget -O ./build/_setup_env.sh https://raw.githubusercontent.com/dopaemon/android_kernel_xiaomi_common/refs/heads/master/.github/scripts/_setup_env.sh
+          chmod +x ./build/_setup_env.sh
+
+          rm -rf "$GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools"
+          rm -rf "$GITHUB_WORKSPACE/android-kernel/prebuilts/kernel-build-tools"
+          cd "$GITHUB_WORKSPACE/android-kernel/prebuilts"
+          git clone -b build-tools --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" "$GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools"
+          git clone -b build-tools --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" "$GITHUB_WORKSPACE/android-kernel/prebuilts/kernel-build-tools"
+
+      - name: Cache Kernel
+        if: github.event.inputs.USING_CCACHE == 'Enable'
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: android-kernel/common
+          key: kmi-kernel-${{ github.event.inputs.KERNEL_BRANCH }}
+          restore-keys: |
+            kmi-kernel-
+            kernel-
+
+      - name: Clone Kernel if cache missed
+        if: steps.cache-kernel.outputs.cache-hit != 'true'
+        run: |
+          git clone -b "${{ github.event.inputs.KERNEL_BRANCH }}" \
+            --recurse-submodules \
+            -j$(nproc --all) \
+            --single-branch \
+            --no-tags \
+            "${{ github.event.inputs.KERNEL_GIT }}" \
+            android-kernel/common
+
+      - name: Sync Kernel if cache complete
+        if: steps.cache-kernel.outputs.cache-hit == 'true'
+        run: |
+          cd android-kernel/common
+          git fetch origin "${{ github.event.inputs.KERNEL_BRANCH }}"
+          git reset --hard FETCH_HEAD
+          git submodule update --init --recursive
+
+      - name: Cache Clang
+        if: github.event.inputs.USING_CCACHE == 'Enable'
+        id: cache-clang
+        uses: actions/cache@v4
+        with:
+          path: android-kernel/prebuilts-master/clang/host/linux-x86
+          key: kmi-clang-${{ github.event.inputs.KERNEL_BRANCH }}
+          restore-keys: |
+            kmi-clang-
+            clang-
+
+      - name: Clone Clang if cache missed
+        if: steps.cache-clang.outputs.cache-hit != 'true'
+        run: |
+          git clone -b main-kernel \
+            --single-branch \
+            --depth=1 \
+            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+            "$GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86"
+
+      - name: Setup Toolchain
+        run: |
+          set -euo pipefail
+          PWDIR=$(pwd)
+          cd "$GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86"
+          rm -rf clang-r416183b
+          ln -sfn clang-r584948 clang-r416183b
+          cd "$PWDIR"
+          echo "$GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/android-kernel/prebuilts/kernel-build-tools/linux-x86/bin" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin/clang" --version | head -n 1
+          "$GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin/ld.lld" --version | head -n 1
+
+      - name: Setup CCACHE
+        run: |
+          set -euo pipefail
+          CCACHE_DIR="$GITHUB_WORKSPACE/ccache"
+          mkdir -p "$CCACHE_DIR"
+          sudo chmod 7777 "$CCACHE_DIR"
+          echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          ccache --set-config=cache_dir="$CCACHE_DIR"
+          ccache --set-config=max_size=5G
+          ccache --set-config=sloppiness=time_macros,include_file_ctime,include_file_mtime,file_stat_matches
+          ccache --set-config=hash_dir=false
+          ccache -s
 
       - name: Run strict KMI check
         env:
@@ -47,5 +193,26 @@ jobs:
           SKIP_MRPROPER: '1'
           HERMETIC_TOOLCHAIN: '0'
           DISABLE_HERMETIC_SYSROOT: '1'
+          HOSTCC: gcc
+          HOSTCXX: g++
+          CCACHE_DIR: ${{ env.CCACHE_DIR }}
+          KERNEL_USE_CCACHE: '1'
         run: |
+          set -euo pipefail
+          export PATH="$GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/android-kernel/prebuilts/build-tools/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/android-kernel/prebuilts/kernel-build-tools/linux-x86/bin:$PATH"
           bash tools/ci/kmi_check.sh
+
+      - name: Upload KMI artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: kmi-check-artifacts
+          path: |
+            android-kernel/out/**/abi*
+            android-kernel/out/**/*.log
+            android-kernel/out/**/Module.symvers
+            android-kernel/out/**/vmlinux
+            ${{ github.workspace }}/*.log
+          if-no-files-found: ignore
