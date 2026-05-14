@@ -274,20 +274,6 @@ jobs:
           git clone -b build-tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/android-kernel/prebuilts/build-tools
           git clone -b build-tools --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git ${{ github.workspace }}/android-kernel/prebuilts/kernel-build-tools
 
-      - name: Get SM8450 Trees
-        run: |
-          git clone -b sm8450-devicetrees \
-              --single-branch \
-              --depth=1 \
-              https://github.com/dopaemon/android_kernel_xiaomi_common.git \
-              $GITHUB_WORKSPACE/android-kernel/sm8450-devicetrees
-
-          git clone -b lineage-23.0 \
-              --single-branch \
-              --depth=1 \
-              https://github.com/dopaemon/android_kernel_xiaomi_sm8450-modules.git \
-              $GITHUB_WORKSPACE/android-kernel/sm8450-modules
-
       - name: Cache Kernel
         if: github.event.inputs.USING_CCACHE == 'Enable'
         id: cache-kernel
@@ -311,10 +297,20 @@ jobs:
           git reset --hard FETCH_HEAD
           git submodule update --init --recursive
 
-      - name: Link Device Trees
+      - name: Get SM8450 Trees
         run: |
-          ln -sfn $GITHUB_WORKSPACE/android-kernel/sm8450-devicetrees \
-              $GITHUB_WORKSPACE/android-kernel/common/arch/arm64/boot/dts/vendor
+          rm -rf ${{ github.workspace }}/android-kernel/arch/arm64/boot/dts/vendor
+          git clone -b sm8450-devicetrees \
+              --single-branch \
+              --depth=1 \
+              https://github.com/dopaemon/android_kernel_xiaomi_common.git \
+              ${{ github.workspace }}/android-kernel/arch/arm64/boot/dts/vendor
+
+          git clone -b lineage-23.0 \
+              --single-branch \
+              --depth=1 \
+              https://github.com/dopaemon/android_kernel_xiaomi_sm8450-modules.git \
+              $GITHUB_WORKSPACE/android-kernel/sm8450-modules
 
       - name: Cache Clang
         if: github.event.inputs.USING_CCACHE == 'Enable'
