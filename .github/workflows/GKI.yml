@@ -299,12 +299,12 @@ jobs:
 
       - name: Get SM8450 Trees
         run: |
-          rm -rf ${{ github.workspace }}/android-kernel/arch/arm64/boot/dts/vendor
+          rm -rf ${{ github.workspace }}/android-kernel/common/arch/arm64/boot/dts/vendor
           git clone -b sm8450-devicetrees \
               --single-branch \
               --depth=1 \
               https://github.com/dopaemon/android_kernel_xiaomi_common.git \
-              ${{ github.workspace }}/android-kernel/arch/arm64/boot/dts/vendor
+              ${{ github.workspace }}/android-kernel/common/arch/arm64/boot/dts/vendor
 
           git clone -b lineage-23.0 \
               --single-branch \
@@ -492,16 +492,16 @@ jobs:
 
             case "$DEVICE" in
               mayfly|unicorn|thor|mondrian|zizhan|diting)
-                dtbo_target="vendor/qcom/$DEVICE-sm8475-pm8008-overlay.dtbo"
+                dtbo_target="qcom/$DEVICE-sm8475-pm8008-overlay.dtbo"
                 ;;
               cupid|zeus)
-                dtbo_target="vendor/qcom/$DEVICE-sm8450-pm8008-overlay.dtbo"
+                dtbo_target="qcom/$DEVICE-sm8450-pm8008-overlay.dtbo"
                 ;;
               marble)
-                dtbo_target="vendor/qcom/$DEVICE-sm7475-pm8008-overlay.dtbo"
+                dtbo_target="qcom/$DEVICE-sm7475-pm8008-overlay.dtbo"
                 ;;
               ziyi)
-                dtbo_target="vendor/qcom/$DEVICE-sm7450-overlay.dtbo"
+                dtbo_target="qcom/$DEVICE-sm7450-overlay.dtbo"
                 ;;
               *) echo "DTBO build unsupported for device: $DEVICE" >&2; exit 1 ;;
             esac
