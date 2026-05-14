@@ -46,6 +46,16 @@ on:
         - NonKSU
         - KSU
         - Both
+      BUILD_DTBO:
+        description: 'DTBO Build Mode'
+        required: true
+        default: 'Disable'
+        type: choice
+        options:
+        - Disable
+        - Build DTBO
+        - Build Kernel with DTBO
+        - Build DTBO Only
       USING_CCACHE:
         description: 'Using CCACHE'
         required: true
@@ -266,10 +276,10 @@ jobs:
 
       - name: Get SM8450 Trees
         run: |
-          git clone -b lineage-23.0 \
+          git clone -b sm8450-devicetrees \
               --single-branch \
               --depth=1 \
-              https://github.com/dopaemon/android_kernel_xiaomi_sm8450-devicetrees.git \
+              https://github.com/dopaemon/android_kernel_xiaomi_common.git \
               $GITHUB_WORKSPACE/android-kernel/sm8450-devicetrees
 
           git clone -b lineage-23.0 \
@@ -300,6 +310,11 @@ jobs:
           git fetch origin Rebase
           git reset --hard FETCH_HEAD
           git submodule update --init --recursive
+
+      - name: Link Device Trees
+        run: |
+          ln -sfn $GITHUB_WORKSPACE/android-kernel/sm8450-devicetrees \
+              $GITHUB_WORKSPACE/android-kernel/common/arch/arm64/boot/dts/vendor
 
       - name: Cache Clang
         if: github.event.inputs.USING_CCACHE == 'Enable'
@@ -398,6 +413,7 @@ jobs:
           set -euo pipefail
           DEVICE="${{ matrix.device }}"
           TARGET="${{ github.event.inputs.BUILD_TARGET }}"
+          DTBO_MODE="${{ github.event.inputs.BUILD_DTBO }}"
           BUILD_JOBS="$(nproc --all)"
           if [ "$BUILD_JOBS" -gt 4 ]; then
              BUILD_JOBS=4
@@ -409,6 +425,15 @@ jobs:
             Both) VARIANTS="KSU NonKSU" ;;
             *) echo "Unsupported BUILD_TARGET: $TARGET" >&2; exit 1 ;;
           esac
+
+          case "$DTBO_MODE" in
+            Disable|"Build DTBO"|"Build Kernel with DTBO"|"Build DTBO Only") ;;
+            *) echo "Unsupported BUILD_DTBO: $DTBO_MODE" >&2; exit 1 ;;
+          esac
+
+          if [ "$DTBO_MODE" = "Build DTBO Only" ]; then
+            VARIANTS="DTBO"
+          fi
 
           log_resource_snapshot() {
             local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
@@ -464,6 +489,90 @@ jobs:
             wait "$KEEPALIVE_PID" 2>/dev/null || true
 
             return "$MAKE_RC"
+          }
+
+          build_dtbo() {
+            local dtbo_target="qcom/$DEVICE-sm8475-pm8008-overlay.dtbo"
+
+            case "$DEVICE" in
+              mayfly|unicorn|thor|mondrian|zizhan|diting)
+                dtbo_target="vendor/qcom/$DEVICE-sm8475-pm8008-overlay.dtbo"
+                ;;
+              cupid|zeus)
+                dtbo_target="vendor/qcom/$DEVICE-sm8450-pm8008-overlay.dtbo"
+                ;;
+              marble)
+                dtbo_target="vendor/qcom/$DEVICE-sm7475-pm8008-overlay.dtbo"
+                ;;
+              ziyi)
+                dtbo_target="vendor/qcom/$DEVICE-sm7450-overlay.dtbo"
+                ;;
+              *) echo "DTBO build unsupported for device: $DEVICE" >&2; exit 1 ;;
+            esac
+
+            rm -rf "$GITHUB_WORKSPACE/android-kernel/out-dtbo"
+            export PATH="${{ github.workspace }}/android-kernel/prebuilts-master/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+            export PATH="${{ github.workspace }}/android-kernel/prebuilts/build-tools/bin:$PATH"
+            export DTC="${{ github.workspace }}/android-kernel/common/scripts/dtc/dtc"
+
+            cd "$GITHUB_WORKSPACE/android-kernel/common/"
+            make -j"$BUILD_JOBS" \
+                 LLVM=1 \
+                 ARCH=arm64 \
+                 CROSS_COMPILE="aarch64-linux-gnu-" \
+                 CC="ccache clang" \
+                 O=$GITHUB_WORKSPACE/android-kernel/out-dtbo \
+                 LLVM_IAS=1 \
+                 LD="ld.lld" \
+                 HOSTLD="ld.lld" \
+                 DTC_EXT=dtc \
+                 gki_defconfig
+
+            cat arch/arm64/configs/vendor/waipio_GKI.config >> "$GITHUB_WORKSPACE/android-kernel/out-dtbo/.config"
+            cat arch/arm64/configs/vendor/xiaomi_GKI.config >> "$GITHUB_WORKSPACE/android-kernel/out-dtbo/.config"
+            cat arch/arm64/configs/vendor/"$DEVICE"_GKI.config >> "$GITHUB_WORKSPACE/android-kernel/out-dtbo/.config"
+            scripts/config --file "$GITHUB_WORKSPACE/android-kernel/out-dtbo/.config" \
+              -e BUILD_ARM64_DT_OVERLAY \
+              -e ARCH_WAIPIO \
+              -e ARCH_CAPE \
+              -e ARCH_DIWALI \
+              -d ARCH_QTI_VM
+
+            make -j"$BUILD_JOBS" \
+                 LLVM=1 \
+                 ARCH=arm64 \
+                 CROSS_COMPILE="aarch64-linux-gnu-" \
+                 O=$GITHUB_WORKSPACE/android-kernel/out-dtbo \
+                 LLVM_IAS=1 \
+                 olddefconfig
+
+            run_make_keepalive "$GITHUB_WORKSPACE/android-kernel/out-dtbo/build-$DEVICE-dtbo.log" \
+              make -j"$BUILD_JOBS" \
+                LLVM=1 \
+                ARCH=arm64 \
+                CROSS_COMPILE="aarch64-linux-gnu-" \
+                CC="ccache clang" \
+                LD="ld.lld" \
+                HOSTLD="ld.lld" \
+                O=$GITHUB_WORKSPACE/android-kernel/out-dtbo \
+                LLVM_IAS=1 \
+                DTC_EXT=dtc \
+                DTC_FLAGS="-Wno-all" \
+                "$dtbo_target"
+
+            mkdir -p "$GITHUB_WORKSPACE/android-kernel/dtbo"
+            find "$GITHUB_WORKSPACE/android-kernel/out-dtbo" -name "*.dtbo" -print -exec cp {} "$GITHUB_WORKSPACE/android-kernel/dtbo/" \;
+            [ -n "$(find "$GITHUB_WORKSPACE/android-kernel/dtbo" -name "*.dtbo" -print -quit)" ] || exit 1
+            mkdtimg create "$GITHUB_WORKSPACE/android-kernel/dtbo.img" --page_size=4096 "$GITHUB_WORKSPACE/android-kernel/dtbo"/*.dtbo
+          }
+
+          package_dtbo_only() {
+            build_dtbo
+            DTBO_ZIP="DoraCore-${DEVICE}-DTBO-5.10-A12-${BUILD_DATE}.zip"
+            cd "$GITHUB_WORKSPACE/android-kernel"
+            zip -r9 "$GITHUB_WORKSPACE/$DTBO_ZIP" dtbo.img
+            FULL_DIR="$GITHUB_WORKSPACE/${DTBO_ZIP}"
+            echo "FULL_DIR=${FULL_DIR}" >> "$GITHUB_ENV"
           }
 
           build_variant() {
@@ -558,27 +667,48 @@ jobs:
 
             [ -f "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ] || exit 1
 
+            if [ "$DTBO_MODE" = "Build Kernel with DTBO" ]; then
+               build_dtbo
+            fi
+
             cd "$GITHUB_WORKSPACE/android-kernel/AnyKernel3"
             if [ "$TARGET" = "Both" ]; then
                cp -r "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" "./$image_name"
+               if [ "$DTBO_MODE" = "Build Kernel with DTBO" ]; then
+                  cp -r "$GITHUB_WORKSPACE/android-kernel/dtbo.img" ./dtbo.img
+               fi
             else
                zip_name="DoraCore-${DEVICE}-${variant}-5.10-A12-${BUILD_DATE}.zip"
                cp -r "$GITHUB_WORKSPACE/android-kernel/out/arch/arm64/boot/Image" ./Image
+               if [ "$DTBO_MODE" = "Build Kernel with DTBO" ]; then
+                  cp -r "$GITHUB_WORKSPACE/android-kernel/dtbo.img" ./dtbo.img
+               fi
                zip -r9 "$zip_name" *
                mv "$zip_name" "$GITHUB_WORKSPACE/"
                FULL_DIR="$GITHUB_WORKSPACE/${zip_name}"
                echo "FULL_DIR=${FULL_DIR}" >> "$GITHUB_ENV"
-               rm -f ./Image
+               rm -f ./Image ./dtbo.img
             fi
 
             rm -rf "$GITHUB_WORKSPACE/android-kernel/out"
           }
 
           for variant in $VARIANTS; do
-            build_variant "$variant"
+            if [ "$variant" = "DTBO" ]; then
+               package_dtbo_only
+            else
+               build_variant "$variant"
+            fi
           done
 
-          if [ "$TARGET" = "Both" ]; then
+          if [ "$DTBO_MODE" = "Build DTBO" ]; then
+             build_dtbo
+             DTBO_ZIP="DoraCore-${DEVICE}-DTBO-5.10-A12-${BUILD_DATE}.zip"
+             cd "$GITHUB_WORKSPACE/android-kernel"
+             zip -r9 "$GITHUB_WORKSPACE/$DTBO_ZIP" dtbo.img
+          fi
+
+          if [ "$TARGET" = "Both" ] && [ "$DTBO_MODE" != "Build DTBO Only" ]; then
              ZIP_NAME="DoraCore-${DEVICE}-5.10-A12-${BUILD_DATE}.zip"
              cd "$GITHUB_WORKSPACE/android-kernel/AnyKernel3"
              zip -r9 "$ZIP_NAME" *
