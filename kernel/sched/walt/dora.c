@@ -14,9 +14,9 @@
 
 unsigned int sysctl_sched_dora_enable = 1;
 unsigned int sysctl_sched_dora_mode = 2;
-unsigned int sysctl_sched_dora_input_ms = 64;
-unsigned int sysctl_sched_dora_wake_ms = 16;
-unsigned int sysctl_sched_dora_uclamp_min = 512;
+unsigned int sysctl_sched_dora_input_ms = 120;
+unsigned int sysctl_sched_dora_wake_ms = 32;
+unsigned int sysctl_sched_dora_uclamp_min = 768;
 unsigned int sysctl_sched_dora_prefer_big = 1;
 unsigned int sysctl_sched_dora_freq_floor[WALT_NR_CPUS] = {
 	1209600, 1209600, 1209600, 1209600,
@@ -130,32 +130,37 @@ static bool dora_cpu_boosted(int cpu)
 	return time_before(jiffies, expires);
 }
 
+static void dora_boost_allowed_cpus(struct task_struct *p, unsigned int msec)
+{
+	int cpu;
+
+	for_each_cpu(cpu, p->cpus_ptr)
+		dora_boost_cpu(cpu, msec);
+}
+
 static bool dora_task_interactive(struct task_struct *p)
 {
 	if (rt_task(p) || dl_task(p))
 		return true;
 
-	return walt_low_latency_task(p) || task_rtg_high_prio(p);
+	return task_nice(p) <= 0;
 }
 
-static int dora_best_cpu(struct task_struct *p, int base_cpu)
+static int dora_best_cpu(struct task_struct *p, int prev_cpu)
 {
 	unsigned long best_cap = 0;
-	unsigned long best_util = ULONG_MAX;
-	int best_cpu = base_cpu;
+	int best_cpu = prev_cpu;
 	int cpu;
 
 	for_each_cpu(cpu, p->cpus_ptr) {
-		unsigned long cap, util;
+		unsigned long cap;
 
 		if (!cpu_active(cpu))
 			continue;
 
 		cap = capacity_orig_of(cpu);
-		util = cpu_util(cpu);
-		if (cap > best_cap || (cap == best_cap && util < best_util)) {
+		if (cap >= best_cap) {
 			best_cap = cap;
-			best_util = util;
 			best_cpu = cpu;
 		}
 	}
@@ -175,11 +180,8 @@ static void dora_select_task_rq_fair(void *unused, struct task_struct *p,
 	if (!dora_task_interactive(p))
 		return;
 
-	cpu = dora_best_cpu(p, *new_cpu);
+	cpu = dora_best_cpu(p, prev_cpu);
 	if (cpu < 0 || cpu == *new_cpu)
-		return;
-
-	if (capacity_orig_of(*new_cpu) >= capacity_orig_of(cpu))
 		return;
 
 	*new_cpu = cpu;
@@ -192,8 +194,19 @@ static void dora_try_to_wake_up(void *unused, struct task_struct *p)
 	if (!dora_enabled() || !dora_task_interactive(p))
 		return;
 
-	dora_boost_cpu(task_cpu(p), dora_active_ms());
+	dora_boost_allowed_cpus(p, dora_active_ms());
 	atomic64_inc(&dora_wake_boosts);
+}
+
+static void dora_scheduler_tick(void *unused, struct rq *rq)
+{
+	int cpu = cpu_of(rq);
+
+	if (!dora_enabled())
+		return;
+
+	if (rq->nr_running > 1)
+		dora_boost_cpu(cpu, READ_ONCE(sysctl_sched_dora_wake_ms));
 }
 
 unsigned long dora_adjust_util(int cpu, unsigned long util, unsigned long max)
@@ -229,6 +242,7 @@ void dora_init(void)
 	register_trace_android_rvh_select_task_rq_fair(dora_select_task_rq_fair,
 							 NULL);
 	register_trace_android_rvh_try_to_wake_up(dora_try_to_wake_up, NULL);
+	register_trace_android_vh_scheduler_tick(dora_scheduler_tick, NULL);
 
 	pr_info("initialized enable=%u mode=%u uclamp_min=%u input_ms=%u wake_ms=%u\n",
 		READ_ONCE(sysctl_sched_dora_enable),
