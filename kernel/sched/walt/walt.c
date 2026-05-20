@@ -21,7 +21,6 @@
 #include <trace/events/power.h>
 
 #include "walt.h"
-#include "dora.h"
 #include "trace.h"
 
 const char *task_event_names[] = {
@@ -4573,7 +4572,6 @@ static void walt_init(struct work_struct *work)
 	walt_rt_init();
 	walt_cfs_init();
 	walt_pause_init();
-	dora_init();
 
 	stop_machine(walt_init_stop_handler, NULL, NULL);
 
