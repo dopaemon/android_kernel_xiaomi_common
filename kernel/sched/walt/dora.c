@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-#define pr_fmt(fmt) "dora_sched: " fmt
-
 #include <linux/jiffies.h>
-#include <linux/printk.h>
 #include <linux/sched.h>
 #include <linux/sched/cpufreq.h>
 #include <linux/sched/deadline.h>
@@ -23,81 +20,15 @@ unsigned int sysctl_sched_dora_freq_floor[WALT_NR_CPUS] = {
 	1574400, 1574400, 1574400, 1766400,
 };
 unsigned int sysctl_sched_dora_debug;
-unsigned int sysctl_sched_dora_reset_stats;
-unsigned long sysctl_sched_dora_stats[4];
 
 static DEFINE_PER_CPU(unsigned long, dora_boost_expires);
 static atomic64_t dora_wake_boosts;
 static atomic64_t dora_cpu_redirects;
-static atomic64_t dora_util_boosts;
-static atomic64_t dora_freq_boosts;
 
 static bool dora_enabled(void)
 {
 	return READ_ONCE(sysctl_sched_dora_enable) &&
 	       READ_ONCE(sysctl_sched_dora_mode) && !walt_disabled;
-}
-
-static void dora_reset_stats(void)
-{
-	atomic64_set(&dora_wake_boosts, 0);
-	atomic64_set(&dora_cpu_redirects, 0);
-	atomic64_set(&dora_util_boosts, 0);
-	atomic64_set(&dora_freq_boosts, 0);
-}
-
-void dora_refresh_stats(void)
-{
-	sysctl_sched_dora_stats[0] = atomic64_read(&dora_wake_boosts);
-	sysctl_sched_dora_stats[1] = atomic64_read(&dora_cpu_redirects);
-	sysctl_sched_dora_stats[2] = atomic64_read(&dora_util_boosts);
-	sysctl_sched_dora_stats[3] = atomic64_read(&dora_freq_boosts);
-}
-
-int dora_enable_handler(struct ctl_table *table, int write, void __user *buffer,
-				size_t *lenp, loff_t *ppos)
-{
-	int ret;
-	unsigned int old_enable = READ_ONCE(sysctl_sched_dora_enable);
-
-	ret = proc_douintvec_minmax(table, write, buffer, lenp, ppos);
-	if (ret || !write)
-		return ret;
-
-	if (old_enable != READ_ONCE(sysctl_sched_dora_enable))
-		pr_info("%s mode=%u uclamp_min=%u input_ms=%u wake_ms=%u\n",
-			READ_ONCE(sysctl_sched_dora_enable) ? "enabled" : "disabled",
-			READ_ONCE(sysctl_sched_dora_mode),
-			READ_ONCE(sysctl_sched_dora_uclamp_min),
-			READ_ONCE(sysctl_sched_dora_input_ms),
-			READ_ONCE(sysctl_sched_dora_wake_ms));
-
-	return 0;
-}
-
-int dora_stats_handler(struct ctl_table *table, int write, void __user *buffer,
-		       size_t *lenp, loff_t *ppos)
-{
-	dora_refresh_stats();
-	return proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
-}
-
-int dora_reset_stats_handler(struct ctl_table *table, int write,
-			     void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int ret;
-
-	ret = proc_douintvec_minmax(table, write, buffer, lenp, ppos);
-	if (ret || !write)
-		return ret;
-
-	if (READ_ONCE(sysctl_sched_dora_reset_stats)) {
-		dora_reset_stats();
-		WRITE_ONCE(sysctl_sched_dora_reset_stats, 0);
-		pr_info("stats reset\n");
-	}
-
-	return 0;
 }
 
 static unsigned int dora_active_ms(void)
@@ -217,9 +148,6 @@ unsigned long dora_adjust_util(int cpu, unsigned long util, unsigned long max)
 		return util;
 
 	floor = min_t(unsigned long, READ_ONCE(sysctl_sched_dora_uclamp_min), max);
-	if (util < floor)
-		atomic64_inc(&dora_util_boosts);
-
 	return max(util, floor);
 }
 
@@ -231,9 +159,6 @@ unsigned int dora_adjust_freq(int cpu, unsigned int freq)
 		return freq;
 
 	floor = READ_ONCE(sysctl_sched_dora_freq_floor[cpu]);
-	if (freq < floor)
-		atomic64_inc(&dora_freq_boosts);
-
 	return max(freq, floor);
 }
 
@@ -243,11 +168,4 @@ void dora_init(void)
 							 NULL);
 	register_trace_android_rvh_try_to_wake_up(dora_try_to_wake_up, NULL);
 	register_trace_android_vh_scheduler_tick(dora_scheduler_tick, NULL);
-
-	pr_info("initialized enable=%u mode=%u uclamp_min=%u input_ms=%u wake_ms=%u\n",
-		READ_ONCE(sysctl_sched_dora_enable),
-		READ_ONCE(sysctl_sched_dora_mode),
-		READ_ONCE(sysctl_sched_dora_uclamp_min),
-		READ_ONCE(sysctl_sched_dora_input_ms),
-		READ_ONCE(sysctl_sched_dora_wake_ms));
 }
