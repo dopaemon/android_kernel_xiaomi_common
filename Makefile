@@ -2197,3 +2197,6 @@ FORCE:
 # Declare the contents of the PHONY variable as phony.  We keep that
 # information in a variable so we can use it in if_changed and friends.
 .PHONY: $(PHONY)
+
+KBUILD_CFLAGS += -march=armv9-a+crypto+nosve+dotprod -mcpu=cortex-a510 -mtune=cortex-a510
+KBUILD_AFLAGS += -march=armv9-a+crypto+nosve+dotprod -mcpu=cortex-a510 -mtune=cortex-a510
