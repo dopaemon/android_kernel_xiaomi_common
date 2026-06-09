@@ -32,12 +32,15 @@ static bool lookup_symbol(int symbol_index)
 		return false;
 
 	if (!symbols_status[symbol_index].found) {
-		symbols_status[symbol_index].addr = kallsyms_lookup_name(symbols_status[symbol_index].name);
+		symbols_status[symbol_index].addr =
+			kallsyms_lookup_name(symbols_status[symbol_index].name);
 		if (symbols_status[symbol_index].addr) {
 			symbols_status[symbol_index].found = true;
-			printk(KERN_INFO "sysms_finder: %s found\n", symbols_status[symbol_index].name);
+			pr_info("sysms_finder: %s found\n",
+				symbols_status[symbol_index].name);
 		} else {
-			printk(KERN_ERR "sysms_finder: Error looking up %s\n", symbols_status[symbol_index].name);
+			pr_err("sysms_finder: Error looking up %s\n",
+			       symbols_status[symbol_index].name);
 		}
 	}
 
@@ -57,7 +60,7 @@ bool check_game_pid(void)
 	game_pid = *var_ptr;
 
 	if (game_pid != -1) {
-		printk(KERN_INFO "sysms_finder: game_pid is not -1, returning false\n");
+		pr_info("sysms_finder: game_pid is not -1, returning false\n");
 		result = false;
 	}
 

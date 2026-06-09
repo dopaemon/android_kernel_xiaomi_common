@@ -83,6 +83,11 @@ static int zram_read_page(struct zram *zram, struct page *page, u32 index,
 static void zram_writeback(struct zram *zram);
 
 #ifdef CONFIG_ZRAM_WRITEBACK
+struct zram_shrinker_wrapper {
+	struct shrinker shrinker;
+	struct zram *zram;
+};
+
 static void zram_init_shrinker(struct zram *zram);
 #endif
 
@@ -2984,7 +2989,7 @@ static int zram_add(void)
 	return device_id;
 lru_fail:
 	unregister_shrinker(zram->zram_shrinker);
-	shrinker_free(zram->zram_shrinker);
+	kfree(container_of(zram->zram_shrinker, struct zram_shrinker_wrapper, shrinker));
 out_cleanup_disk:
 	put_disk(zram->disk);
 out_free_idr:
@@ -3037,13 +3042,12 @@ static int zram_remove(struct zram *zram)
 	 */
 	zram_reset_device(zram);
 
-	// 释放zram_shrinker和相关资源
 	#ifdef CONFIG_ZRAM_WRITEBACK
 	if (zram->zram_shrinker) {
-        unregister_shrinker(zram->zram_shrinker);
-        shrinker_free(zram->zram_shrinker);
-    }
-    list_lru_destroy(&zram->zram_list_lru);
+		unregister_shrinker(zram->zram_shrinker);
+		kfree(container_of(zram->zram_shrinker, struct zram_shrinker_wrapper, shrinker));
+	}
+	list_lru_destroy(&zram->zram_list_lru);
 	#endif
 
 	put_disk(zram->disk);
@@ -3353,7 +3357,9 @@ relock:
 
 static unsigned long zram_shrinker_count(struct shrinker *shrinker, struct shrink_control *sc)
 {
-	struct zram *zram = shrinker->private_data;
+	struct zram_shrinker_wrapper *w =
+		container_of(shrinker, struct zram_shrinker_wrapper, shrinker);
+	struct zram *zram = w->zram;
 	unsigned long nr_stored, nr_backing, nr_freeable;
 
 	/* Only enable shrinker when writeback is enabled */
@@ -3393,7 +3399,9 @@ static unsigned long zram_shrinker_count(struct shrinker *shrinker, struct shrin
 
 static unsigned long zram_shrinker_scan(struct shrinker *shrinker, struct shrink_control *sc)
 {
-	struct zram *zram = shrinker->private_data;
+	struct zram_shrinker_wrapper *w =
+		container_of(shrinker, struct zram_shrinker_wrapper, shrinker);
+	struct zram *zram = w->zram;
 	unsigned long shrink_ret;
 	unsigned long pages_written = 0;
 	struct zram_pp_ctl *ctl = NULL;
@@ -3455,21 +3463,24 @@ static unsigned long zram_shrinker_scan(struct shrinker *shrinker, struct shrink
 
 static void zram_init_shrinker(struct zram *zram)
 {
-	struct shrinker *shrinker;
+	struct zram_shrinker_wrapper *w;
 
-	shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "mm-zram");
-	if (!shrinker)
+	w = kzalloc(sizeof(*w), GFP_KERNEL);
+	if (!w)
 		return;
 
-	shrinker->count_objects = zram_shrinker_count;
-	shrinker->scan_objects = zram_shrinker_scan;
-	shrinker->batch = 768;
-	shrinker->seeks = DEFAULT_SEEKS;
-	shrinker->private_data = zram;
-	
-	zram->zram_shrinker = shrinker;
-	
-	shrinker_register(zram->zram_shrinker);
+	w->zram = zram;
+	w->shrinker.count_objects = zram_shrinker_count;
+	w->shrinker.scan_objects = zram_shrinker_scan;
+	w->shrinker.batch = 768;
+	w->shrinker.seeks = DEFAULT_SEEKS;
+
+	if (register_shrinker(&w->shrinker, "mm-zram")) {
+		kfree(w);
+		return;
+	}
+
+	zram->zram_shrinker = &w->shrinker;
 }
 #endif
 
