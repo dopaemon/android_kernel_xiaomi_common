@@ -894,6 +894,7 @@ void susfs_sus_kstat_spoof_proc_fd_seq_show(int *out_target_mnt_id, unsigned lon
 #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
 static struct st_susfs_uname my_uname = {0};
 DEFINE_STATIC_KEY_FALSE(susfs_is_uname_spoof_buffer_set);
+bool is_susfs_uname_set = false;
 static DEFINE_SEQLOCK(susfs_uname_seqlock);
 
 void susfs_set_uname(void __user **user_info) {
@@ -912,18 +913,26 @@ void susfs_set_uname(void __user **user_info) {
 	write_seqlock(&susfs_uname_seqlock);
 	if (!strcmp(info.release, "default")) {
 		strscpy(my_uname.release, utsname()->release, __NEW_UTS_LEN);
+		is_susfs_uname_set = false;
 	} else {
 		strscpy(my_uname.release, info.release, __NEW_UTS_LEN);
+		is_susfs_uname_set = true;
 	}
 	if (!strcmp(info.version, "default")) {
 		strscpy(my_uname.version, utsname()->version, __NEW_UTS_LEN);
 	} else {
 		strscpy(my_uname.version, info.version, __NEW_UTS_LEN);
+		is_susfs_uname_set = true;
 	}
 	write_sequnlock(&susfs_uname_seqlock);
 
-	if (!static_key_enabled(&susfs_is_uname_spoof_buffer_set))
-		static_branch_enable(&susfs_is_uname_spoof_buffer_set);
+	if (is_susfs_uname_set) {
+		if (!static_key_enabled(&susfs_is_uname_spoof_buffer_set))
+			static_branch_enable(&susfs_is_uname_spoof_buffer_set);
+	} else {
+		if (static_key_enabled(&susfs_is_uname_spoof_buffer_set))
+			static_branch_disable(&susfs_is_uname_spoof_buffer_set);
+	}
 
 	SUSFS_LOGI("set spoofed release: '%s', version: '%s'\n",
 				my_uname.release, my_uname.version);
