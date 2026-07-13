@@ -612,7 +612,7 @@ static struct thpsize *thpsize_create(int order, struct kobject *parent)
 	ret = kobject_init_and_add(&thpsize->kobj, &thpsize_ktype, parent,
 				   "hugepages-%lukB", size);
 	if (ret) {
-		kfree(thpsize);
+		kobject_put(&thpsize->kobj);
 		return ERR_PTR(ret);
 	}
 
