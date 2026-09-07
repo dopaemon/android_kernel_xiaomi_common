@@ -512,7 +512,6 @@ struct sched_entity {
 #else // CONFIG_SCHED_BORE
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
 #endif // CONFIG_SCHED_BORE
 };
@@ -536,7 +535,6 @@ struct sched_rt_entity {
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
 } __randomize_layout;
 
@@ -1407,7 +1405,10 @@ struct task_struct {
 #else
 	ANDROID_KABI_RESERVE(2);
 #endif
-	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_USE(3, struct {
+		/* Save user-dumpable when mm goes away */
+		unsigned	user_dumpable:1;
+		});
 	ANDROID_KABI_RESERVE(4);
 	ANDROID_KABI_RESERVE(5);
 
