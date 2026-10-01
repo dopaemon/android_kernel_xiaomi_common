@@ -4,6 +4,7 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include <linux/jiffies.h>
 #include <linux/mhi.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
@@ -59,9 +60,6 @@ static int __qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 	struct qrtr_mhi_dev *qdev = container_of(ep, struct qrtr_mhi_dev, ep);
 	int rc;
 
-	if (skb->sk)
-		sock_hold(skb->sk);
-
 	rc = wait_for_completion_interruptible(&qdev->prepared);
 	if (rc)
 		goto free_skb;
@@ -70,34 +68,62 @@ static int __qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 	if (rc)
 		goto free_skb;
 
+	if (skb->sk)
+		sock_hold(skb->sk);
+
 	rc = mhi_queue_skb(qdev->mhi_dev, DMA_TO_DEVICE, skb, skb->len,
 			   MHI_EOT);
-	if (rc && rc != -EAGAIN)
-		goto free_skb;
+	if (!rc)
+		return 0;
 
-	return rc;
-
-free_skb:
+	/* -EAGAIN leaves the skb with the caller for a retry. */
 	if (skb->sk)
 		sock_put(skb->sk);
-	kfree_skb(skb);
+	if (rc == -EAGAIN)
+		return rc;
 
+free_skb:
+	kfree_skb(skb);
 	return rc;
 }
 
 static int qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 {
 	struct qrtr_mhi_dev *qdev = container_of(ep, struct qrtr_mhi_dev, ep);
-	int rc;
+	int rc, attempts = 0;
+	long left;
 
 	do {
 		reinit_completion(&qdev->ringfull);
 		rc = __qcom_mhi_qrtr_send(ep, skb);
-		if (rc == -EAGAIN)
-			wait_for_completion(&qdev->ringfull);
+		if (rc != -EAGAIN)
+			break;
+
+		/*
+		 * Shutdown closes QRTR sockets after the modem link is gone.
+		 * An uninterruptible wait here runs inside qrtr_bcast_enqueue(),
+		 * which holds qrtr_epts_lock, so rproc_shutdown can never take
+		 * that lock and init sits on a black screen until a hard reset.
+		 */
+		if (++attempts > 8)
+			goto drop;
+		left = wait_for_completion_killable_timeout(&qdev->ringfull,
+							    msecs_to_jiffies(250));
+		if (left == 0)
+			goto drop;
+		if (left < 0) {
+			kfree_skb(skb);
+			return (int)left;
+		}
 	} while (rc == -EAGAIN);
 
 	return rc;
+
+drop:
+	dev_warn_ratelimited(qdev->dev,
+			     "drop QRTR packet, MHI ring did not drain\n");
+	kfree_skb(skb);
+	return -ETIMEDOUT;
 }
 
 static void qrtr_mhi_of_parse(struct mhi_device *mhi_dev,
