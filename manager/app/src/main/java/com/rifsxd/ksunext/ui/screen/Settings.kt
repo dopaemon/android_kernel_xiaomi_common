@@ -19,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -62,6 +63,7 @@ import com.rifsxd.ksunext.Natives
 import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.ui.component.*
 import com.rifsxd.ksunext.ui.util.*
+import com.rifsxd.ksunext.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -471,6 +473,99 @@ private fun SecurityCard(
     navigator: DestinationsNavigator,
     loadingDialog: LoadingDialogHandle
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val isGkiKernel = remember { getKernelVersion().isGKI() }
+    var susfsAlreadySupported by remember { mutableStateOf(false) }
+    var susfsLoadInProgress by remember { mutableStateOf(false) }
+    var showSusfsLoadSheet by remember { mutableStateOf(false) }
+    var autoLoadSusfs by rememberSaveable { mutableStateOf(false) }
+    var autoLoadStateLoaded by remember { mutableStateOf(false) }
+    var autoLoadUpdating by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        autoLoadSusfs = runCatching { getSusfsAutoLoadEnabled() }.getOrDefault(false)
+        autoLoadStateLoaded = true
+    }
+    LaunchedEffect(isGkiKernel) {
+        if (isGkiKernel) {
+            susfsAlreadySupported = withContext(Dispatchers.IO) {
+                runCatching { getSuSFS().trim() == "Supported" }.getOrDefault(false)
+            }
+        }
+    }
+
+    val persistAutoLoad: (Boolean, String?) -> Unit = { enabled, kmi ->
+        if (!autoLoadUpdating) {
+            autoLoadUpdating = true
+            scope.launch {
+                val updated = withContext(Dispatchers.IO) {
+                    runCatching { setSusfsAutoLoadEnabled(enabled, kmi) }.getOrDefault(false)
+                }
+                autoLoadUpdating = false
+                if (updated) {
+                    autoLoadSusfs = enabled
+                    Toast.makeText(
+                        context,
+                        if (enabled) R.string.susfs_auto_load_enabled
+                        else R.string.susfs_auto_load_disabled,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(context, R.string.susfs_auto_load_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    val selectAutoLoadKmiDialog = rememberSelectKmiDialog { selectedKmi ->
+        if (selectedKmi != null) {
+            persistAutoLoad(true, selectedKmi)
+        }
+    }
+    val onAutoLoadChanged: (Boolean) -> Unit = { enabled ->
+        if (enabled) {
+            autoLoadUpdating = true
+            scope.launch {
+                val detectedKmi = withContext(Dispatchers.IO) {
+                    runCatching { getCurrentKmi().trim() }
+                        .getOrNull()
+                        ?.takeIf { it.matches(Regex("[A-Za-z0-9._-]+")) }
+                }
+                autoLoadUpdating = false
+                if (detectedKmi == null) {
+                    showSusfsLoadSheet = false
+                    selectAutoLoadKmiDialog.show()
+                } else {
+                    persistAutoLoad(true, detectedKmi)
+                }
+            }
+        } else {
+            persistAutoLoad(false, null)
+        }
+    }
+
+    val startSusfsLoad: (String?) -> Unit = { selectedKmi ->
+        susfsLoadInProgress = true
+        scope.launch {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching { loadSusfsGuardLkm(selectedKmi) }.getOrDefault(false)
+            }
+            susfsLoadInProgress = false
+            if (loaded) {
+                susfsAlreadySupported = true
+            }
+            showSusfsLoadSheet = false
+            Toast.makeText(
+                context,
+                if (loaded) R.string.susfs_load_success else R.string.susfs_load_failed,
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+    val selectSusfsKmiDialog = rememberSelectKmiDialog { selectedKmi ->
+        selectedKmi?.let(startSusfsLoad)
+    }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -492,6 +587,27 @@ private fun SecurityCard(
                 if (setSelinuxEnforce(shouldEnforce)) {
                     isSelinuxPermissive = !shouldEnforce
                 }
+            }
+
+            if (isGkiKernel) {
+                ListItem(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = !susfsLoadInProgress) { showSusfsLoadSheet = true },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    leadingContent = { Icon(Icons.Filled.Memory, null) },
+                    headlineContent = {
+                        Text(
+                            text = stringResource(R.string.susfs_load_action),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.susfs_load_summary))
+                    }
+                )
             }
 
             ListItem(
@@ -550,6 +666,100 @@ private fun SecurityCard(
                     navigator = navigator,
                     withLoading = { loadingDialog.withLoading(it) },
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                )
+            }
+        }
+    }
+
+    if (showSusfsLoadSheet) {
+        SusfsLoadBottomSheet(
+            loading = susfsLoadInProgress,
+            susfsAlreadySupported = susfsAlreadySupported,
+            autoLoadEnabled = autoLoadSusfs,
+            autoLoadUpdating = autoLoadUpdating || !autoLoadStateLoaded,
+            onAutoLoadChanged = onAutoLoadChanged,
+            onDismiss = { showSusfsLoadSheet = false },
+            onLoad = {
+                if (susfsLoadInProgress) return@SusfsLoadBottomSheet
+                susfsLoadInProgress = true
+                scope.launch {
+                    val kmi = runCatching { getCurrentKmi().trim() }.getOrDefault("")
+                    if (kmi.isBlank()) {
+                        susfsLoadInProgress = false
+                        selectSusfsKmiDialog.show()
+                    } else {
+                        startSusfsLoad(null)
+                    }
+                }
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SusfsLoadBottomSheet(
+    loading: Boolean,
+    susfsAlreadySupported: Boolean,
+    autoLoadEnabled: Boolean,
+    autoLoadUpdating: Boolean,
+    onAutoLoadChanged: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onLoad: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.susfs_load_action),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = stringResource(R.string.susfs_load_summary),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            ListItem(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = autoLoadEnabled,
+                        enabled = !autoLoadUpdating,
+                        role = Role.Switch,
+                        onValueChange = onAutoLoadChanged
+                    ),
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                headlineContent = { Text(stringResource(R.string.susfs_auto_load)) },
+                supportingContent = { Text(stringResource(R.string.susfs_auto_load_summary)) },
+                trailingContent = {
+                    Switch(
+                        checked = autoLoadEnabled,
+                        enabled = !autoLoadUpdating,
+                        onCheckedChange = null
+                    )
+                }
+            )
+            Button(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(if (susfsAlreadySupported) 0.55f else 1f),
+                enabled = !loading && !susfsAlreadySupported,
+                onClick = onLoad
+            ) {
+                Text(
+                    stringResource(
+                        when {
+                            loading -> R.string.susfs_load_in_progress
+                            susfsAlreadySupported -> R.string.susfs_already_loaded
+                            else -> R.string.susfs_load_button
+                        }
+                    )
                 )
             }
         }

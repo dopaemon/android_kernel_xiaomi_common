@@ -122,7 +122,9 @@ fun InstallScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    val currentKmi by produceState(initialValue = "") { value = getCurrentKmi() }
+    val currentKmi by produceState(initialValue = "") {
+        value = runCatching { getCurrentKmi().trim() }.getOrDefault("")
+    }
 
     val selectKmiDialog = rememberSelectKmiDialog { kmi ->
         kmi?.let {

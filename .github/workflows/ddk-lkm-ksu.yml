@@ -84,7 +84,7 @@ jobs:
     - name: Upload kernelsu.ko artifact
       uses: actions/upload-artifact@v7
       with:
-        name: aarch64-${{ inputs.kmi }}-lkm
+        name: aarch64-${{ inputs.kmi }}-ksu-lkm
         path: /github/workspace/out/aarch64/${{ inputs.kmi }}_kernelsu.ko
 
     - name: Build kernelsu.ko for x64
@@ -165,5 +165,5 @@ jobs:
     - name: Upload x64 kernelsu.ko artifact
       uses: actions/upload-artifact@v7
       with:
-        name: x86_64-${{ inputs.kmi }}-lkm
+        name: x86_64-${{ inputs.kmi }}-ksu-lkm
         path: /github/workspace/out/x86_64/${{ inputs.kmi }}_kernelsu.ko

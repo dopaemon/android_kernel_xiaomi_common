@@ -539,6 +539,39 @@ suspend fun getSupportedKmis(): List<String> = withContext(Dispatchers.IO) {
     out.filter { it.isNotBlank() }.map { it.trim() }
 }
 
+fun loadSusfsGuardLkm(kmi: String? = null): Boolean {
+    val args = buildString {
+        append("susfs load")
+        if (kmi != null) {
+            require(kmi.matches(Regex("[A-Za-z0-9._-]+"))) { "Invalid KMI: $kmi" }
+            append(" --kmi ")
+            append(kmi)
+        }
+    }
+    return execKsud(args, newShell = true, globalMnt = true)
+}
+
+suspend fun getSusfsAutoLoadEnabled(): Boolean = withContext(Dispatchers.IO) {
+    val shell = createRootShell(true)
+    val result = shell.newJob()
+        .add("${getKsuDaemonPath()} susfs autoload status")
+        .to(ArrayList<String>(), null)
+        .exec()
+    result.isSuccess && result.out.any { it.trim() == "enabled" }
+}
+
+fun setSusfsAutoLoadEnabled(enabled: Boolean, fallbackKmi: String? = null): Boolean {
+    val args = if (enabled) {
+        require(fallbackKmi != null && fallbackKmi.matches(Regex("[A-Za-z0-9._-]+"))) {
+            "A valid KMI is required to enable SUSFS auto-load"
+        }
+        "susfs autoload enable --kmi $fallbackKmi"
+    } else {
+        "susfs autoload disable"
+    }
+    return execKsud(args, newShell = true, globalMnt = true)
+}
+
 suspend fun isAbDevice(): Boolean = withContext(Dispatchers.IO) {
     val cmd = "boot-info is-ab-device"
     ShellUtils.fastCmd("${getKsuDaemonPath()} $cmd").trim().toBoolean()
