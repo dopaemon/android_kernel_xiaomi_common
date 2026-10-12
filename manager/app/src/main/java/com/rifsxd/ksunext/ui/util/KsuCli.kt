@@ -772,3 +772,11 @@ fun setRisk(enabled: Boolean): Boolean {
         )
     }.getOrDefault(false)
 }
+
+fun nonRootShell(command: String): Boolean {
+    val process = ProcessBuilder("sh", "-c", command)
+        .redirectErrorStream(true)
+        .start()
+    process.inputStream.bufferedReader().readText()
+    return process.waitFor() == 0
+}
