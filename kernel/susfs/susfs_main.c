@@ -159,6 +159,13 @@ static int __init susfs_init(void)
     SUSFS_LOGI("init v%s\n", SUSFS_LKM_VERSION);
     ksu_init_symbol_resolver();
 
+    /* Dead man's switch: refuse loading if in-built SuSFS is present */
+    if (find_kernel_symbol_exact("susfs_is_inode_sus_path") ||
+        find_kernel_symbol_exact("susfs_sus_kstat_spoof_generic_fillattr")) {
+        pr_err("susfs_guard_lkm: in-built SuSFS is already active in kernel; refusing to load\n");
+        return -EEXIST;
+    }
+
     /* Now that kallsyms lookups work, check the addresses themselves: see imports_guard.c. */
     if (susfs_imports_crosscheck())
         return -EINVAL;
