@@ -18,7 +18,7 @@ const RISK_CACHE_PATH: &str = concatcp!(defs::CACHE_DIR, "risk.json");
 const MAX_SCAN_BYTES_PER_FILE: u64 = 8 * 1024 * 1024;
 
 const RISK_CONFIG_MODULE_ID: &str = "internal.ksud.risk";
-const RISK_CONFIG_KEY: &str = "enabled";
+const RISK_CONFIG_KEY: &str = "risk.enabled";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]

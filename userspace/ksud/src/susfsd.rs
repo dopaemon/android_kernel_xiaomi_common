@@ -1,6 +1,4 @@
 use std::ffi::{CStr, CString};
-use std::fs;
-use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow, ensure};
 use libc::{syscall, SYS_reboot, c_char};
 use log::{info, warn};
@@ -18,14 +16,13 @@ const SUSFS_MAX_VERSION_BUFSIZE: usize = 16;
 const SUSFS_MAX_VARIANT_BUFSIZE: usize = 16;
 
 const ERR_CMD_NOT_SUPPORTED: i32 = 126;
+const AUTOLOAD_CONFIG_MODULE_ID: &str = "internal.ksud.susfsd";
+const AUTOLOAD_ENABLED_CONFIG_KEY: &str = "autoload.enabled";
+const AUTOLOAD_FALLBACK_KMI_CONFIG_KEY: &str = "autoload.fallback_kmi";
 
 struct AutoLoadConfig {
     enabled: bool,
     fallback_kmi: Option<String>,
-}
-
-fn autoload_config_path() -> PathBuf {
-    PathBuf::from(crate::defs::WORKING_DIR).join("susfs_autoload.conf")
 }
 
 fn validate_kmi(kmi: &str) -> Result<()> {
@@ -41,30 +38,26 @@ fn validate_kmi(kmi: &str) -> Result<()> {
 }
 
 fn read_autoload_config() -> Result<AutoLoadConfig> {
-    let content = match fs::read_to_string(autoload_config_path()) {
-        Ok(content) => content,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(AutoLoadConfig {
-                enabled: false,
-                fallback_kmi: None,
-            });
-        }
-        Err(error) => return Err(error.into()),
-    };
-
-    let mut config = AutoLoadConfig {
-        enabled: false,
-        fallback_kmi: None,
-    };
-    for line in content.lines() {
-        if line == "enabled=1" {
-            config.enabled = true;
-        } else if let Some(kmi) = line.strip_prefix("fallback_kmi=") {
-            validate_kmi(kmi)?;
-            config.fallback_kmi = Some(kmi.to_owned());
-        }
+    let enabled = crate::module_config::get_config_value(
+        AUTOLOAD_CONFIG_MODULE_ID,
+        AUTOLOAD_ENABLED_CONFIG_KEY,
+        crate::module_config::ConfigType::Persist,
+    )?;
+    let fallback_kmi = crate::module_config::get_config_value(
+        AUTOLOAD_CONFIG_MODULE_ID,
+        AUTOLOAD_FALLBACK_KMI_CONFIG_KEY,
+        crate::module_config::ConfigType::Persist,
+    )?;
+    if let Some(kmi) = &fallback_kmi {
+        validate_kmi(kmi)?;
     }
-    Ok(config)
+
+    Ok(AutoLoadConfig {
+        enabled: enabled
+            .as_deref()
+            .is_some_and(crate::module_config::parse_bool_config),
+        fallback_kmi,
+    })
 }
 
 pub fn autoload_enabled() -> Result<bool> {
@@ -72,13 +65,14 @@ pub fn autoload_enabled() -> Result<bool> {
 }
 
 pub fn set_autoload(enabled: bool, kmi: Option<&str>) -> Result<()> {
-    let path = autoload_config_path();
     if !enabled {
-        match fs::remove_file(&path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error).context("Failed to disable SUSFS auto-load"),
-        }
+        crate::module_config::set_config_value(
+            AUTOLOAD_CONFIG_MODULE_ID,
+            AUTOLOAD_ENABLED_CONFIG_KEY,
+            "false",
+            crate::module_config::ConfigType::Persist,
+        )
+        .context("Failed to disable SUSFS auto-load")?;
         println!("SUSFS auto-load disabled");
         return Ok(());
     }
@@ -99,15 +93,20 @@ pub fn set_autoload(enabled: bool, kmi: Option<&str>) -> Result<()> {
     crate::assets::get_asset_data(&asset_name)
         .with_context(|| format!("SUSFS guard asset is unavailable for KMI {kmi}"))?;
 
-    fs::create_dir_all(crate::defs::WORKING_DIR)
-        .context("Failed to create KernelSU working directory")?;
-    let temporary_path = path.with_extension("conf.tmp");
-    fs::write(&temporary_path, format!("enabled=1\nfallback_kmi={kmi}\n"))
-        .context("Failed to write SUSFS auto-load config")?;
-    if let Err(error) = fs::rename(&temporary_path, &path) {
-        let _ = fs::remove_file(&temporary_path);
-        return Err(error).context("Failed to save SUSFS auto-load config");
-    }
+    crate::module_config::set_config_value(
+        AUTOLOAD_CONFIG_MODULE_ID,
+        AUTOLOAD_FALLBACK_KMI_CONFIG_KEY,
+        &kmi,
+        crate::module_config::ConfigType::Persist,
+    )
+    .context("Failed to save SUSFS auto-load config")?;
+    crate::module_config::set_config_value(
+        AUTOLOAD_CONFIG_MODULE_ID,
+        AUTOLOAD_ENABLED_CONFIG_KEY,
+        "true",
+        crate::module_config::ConfigType::Persist,
+    )
+    .context("Failed to save SUSFS auto-load config")?;
 
     println!("SUSFS auto-load enabled (KMI fallback: {kmi})");
     Ok(())
