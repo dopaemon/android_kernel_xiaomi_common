@@ -197,6 +197,13 @@ pub fn load(kmi: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+pub fn unload() -> Result<()> {
+    rustix::system::delete_module(c"susfs_guard_lkm", 0)
+        .context("Failed to unload SUSFS guard LKM")?;
+    println!("Unloaded SUSFS guard LKM");
+    Ok(())
+}
+
 #[repr(C)]
 struct SusfsVersion {
     version: [u8; SUSFS_MAX_VERSION_BUFSIZE],

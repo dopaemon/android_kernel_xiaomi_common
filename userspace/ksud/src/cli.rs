@@ -520,6 +520,8 @@ enum SusfsAction {
         #[arg(long)]
         kmi: Option<String>,
     },
+    /// Unload the SUSFS guard LKM
+    Unload,
     /// Configure automatic SUSFS LKM loading during post-fs-data
     Autoload {
         #[command(subcommand)]
@@ -847,6 +849,7 @@ pub fn run() -> Result<()> {
 
         Commands::Susfs { command } => match command {
             SusfsAction::Load { kmi } => crate::susfsd::load(kmi.as_deref()),
+            SusfsAction::Unload => crate::susfsd::unload(),
             SusfsAction::Autoload { command } => match command {
                 SusfsAutoloadAction::Enable { kmi } => {
                     susfsd::set_autoload(true, kmi.as_deref())

@@ -477,6 +477,7 @@ private fun SecurityCard(
     val scope = rememberCoroutineScope()
     val isGkiKernel = remember { getKernelVersion().isGKI() }
     var susfsAlreadySupported by remember { mutableStateOf(false) }
+    var susfsGuardLkmLoaded by remember { mutableStateOf(false) }
     var susfsLoadInProgress by remember { mutableStateOf(false) }
     var showSusfsLoadSheet by remember { mutableStateOf(false) }
     var autoLoadSusfs by rememberSaveable { mutableStateOf(false) }
@@ -488,9 +489,13 @@ private fun SecurityCard(
     }
     LaunchedEffect(isGkiKernel) {
         if (isGkiKernel) {
-            susfsAlreadySupported = withContext(Dispatchers.IO) {
-                runCatching { getSuSFS().trim() == "Supported" }.getOrDefault(false)
+            val state = withContext(Dispatchers.IO) {
+                val supported = runCatching { getSuSFS().trim() == "Supported" }.getOrDefault(false)
+                val lkmLoaded = runCatching { isSusfsGuardLkmLoaded() }.getOrDefault(false)
+                supported to lkmLoaded
             }
+            susfsAlreadySupported = state.first
+            susfsGuardLkmLoaded = state.second
         }
     }
 
@@ -553,6 +558,7 @@ private fun SecurityCard(
             susfsLoadInProgress = false
             if (loaded) {
                 susfsAlreadySupported = true
+                susfsGuardLkmLoaded = true
             }
             showSusfsLoadSheet = false
             Toast.makeText(
@@ -564,6 +570,29 @@ private fun SecurityCard(
     }
     val selectSusfsKmiDialog = rememberSelectKmiDialog { selectedKmi ->
         selectedKmi?.let(startSusfsLoad)
+    }
+    val unloadSusfs: () -> Unit = {
+        if (!susfsLoadInProgress) {
+            susfsLoadInProgress = true
+            scope.launch {
+                val unloaded = withContext(Dispatchers.IO) {
+                    runCatching { unloadSusfsGuardLkm() }.getOrDefault(false)
+                }
+                susfsLoadInProgress = false
+                if (unloaded) {
+                    susfsGuardLkmLoaded = false
+                    susfsAlreadySupported = withContext(Dispatchers.IO) {
+                        runCatching { getSuSFS().trim() == "Supported" }.getOrDefault(false)
+                    }
+                }
+                showSusfsLoadSheet = false
+                Toast.makeText(
+                    context,
+                    if (unloaded) R.string.susfs_unload_success else R.string.susfs_unload_failed,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -691,7 +720,9 @@ private fun SecurityCard(
                         startSusfsLoad(null)
                     }
                 }
-            }
+            },
+            onUnload = unloadSusfs,
+            susfsGuardLkmLoaded = susfsGuardLkmLoaded
         )
     }
 }
@@ -705,7 +736,9 @@ private fun SusfsLoadBottomSheet(
     autoLoadUpdating: Boolean,
     onAutoLoadChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
-    onLoad: () -> Unit
+    onLoad: () -> Unit,
+    onUnload: () -> Unit,
+    susfsGuardLkmLoaded: Boolean
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -749,15 +782,17 @@ private fun SusfsLoadBottomSheet(
             Button(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .alpha(if (susfsAlreadySupported) 0.55f else 1f),
-                enabled = !loading && !susfsAlreadySupported,
-                onClick = onLoad
+                    .alpha(if (susfsAlreadySupported && !susfsGuardLkmLoaded) 0.55f else 1f),
+                enabled = !loading && (susfsGuardLkmLoaded || !susfsAlreadySupported),
+                onClick = if (susfsGuardLkmLoaded) onUnload else onLoad
             ) {
                 Text(
                     stringResource(
                         when {
+                            loading && susfsGuardLkmLoaded -> R.string.susfs_unload_in_progress
                             loading -> R.string.susfs_load_in_progress
-                            susfsAlreadySupported -> R.string.susfs_already_loaded
+                            susfsGuardLkmLoaded -> R.string.susfs_unload_button
+                            susfsAlreadySupported -> R.string.susfs_builtin_loaded
                             else -> R.string.susfs_load_button
                         }
                     )

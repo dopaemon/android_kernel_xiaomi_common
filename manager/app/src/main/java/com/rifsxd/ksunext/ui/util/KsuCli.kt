@@ -552,6 +552,16 @@ fun loadSusfsGuardLkm(kmi: String? = null): Boolean {
     return execKsud(args, newShell = true, globalMnt = true)
 }
 
+fun unloadSusfsGuardLkm(): Boolean =
+    execKsud("susfs unload", newShell = true, globalMnt = true)
+
+suspend fun isSusfsGuardLkmLoaded(): Boolean = withContext(Dispatchers.IO) {
+    createRootShell(true).newJob()
+        .add("test -d /sys/module/susfs_guard_lkm")
+        .exec()
+        .isSuccess
+}
+
 suspend fun getSusfsAutoLoadEnabled(): Boolean = withContext(Dispatchers.IO) {
     val shell = createRootShell(true)
     val result = shell.newJob()

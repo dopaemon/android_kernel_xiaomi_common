@@ -195,7 +195,9 @@
     <string name="susfs_load_action">Load SUSFS LKM</string>
     <string name="susfs_load_button">Load</string>
     <string name="susfs_load_in_progress">Loading SUSFS LKM</string>
-    <string name="susfs_already_loaded">SUSFS already loaded</string>
+    <string name="susfs_builtin_loaded">SUSFS is built into the kernel</string>
+    <string name="susfs_unload_button">Unload</string>
+    <string name="susfs_unload_in_progress">Unloading SUSFS LKM</string>
     <string name="susfs_load_summary">Load the SUSFS guard kernel module.</string>
     <string name="susfs_load_summary_loading">Loading the SUSFS guard module.</string>
     <string name="susfs_auto_load">Enable auto load</string>
@@ -205,6 +207,8 @@
     <string name="susfs_auto_load_failed">Failed to update SUSFS auto-load</string>
     <string name="susfs_load_success">SUSFS LKM loaded</string>
     <string name="susfs_load_failed">Failed to load SUSFS LKM</string>
+    <string name="susfs_unload_success">SUSFS LKM unloaded</string>
+    <string name="susfs_unload_failed">Failed to unload SUSFS LKM</string>
     <string name="settings_uninstall">Uninstall</string>
     <string name="settings_uninstall_temporary">Uninstall temporarily</string>
     <string name="settings_uninstall_permanent">Uninstall permanently</string>
