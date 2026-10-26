@@ -223,7 +223,7 @@ jobs:
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           mkdir -p $GITHUB_WORKSPACE/android-kernel && cd $GITHUB_WORKSPACE/android-kernel
-          repo init --depth=1 --u ${{ github.event.inputs.KERNEL_GIT }} -b manifest
+          repo init --depth=1 -u "${{ github.event.inputs.KERNEL_GIT }}" -b manifest
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
           git clone -b build --single-branch --depth=1 https://github.com/dopaemon/android_kernel_xiaomi_common.git build
           rm -rf .git .github .repo common

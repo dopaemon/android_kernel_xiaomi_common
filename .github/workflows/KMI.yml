@@ -87,7 +87,7 @@ jobs:
 
           mkdir -p "$GITHUB_WORKSPACE/android-kernel"
           cd "$GITHUB_WORKSPACE/android-kernel"
-          repo init --depth=1 --u "${{ github.event.inputs.KERNEL_GIT }}" -b manifest
+          repo init --depth=1 -u "${{ github.event.inputs.KERNEL_GIT }}" -b manifest
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
           git clone -b build --single-branch --depth=1 "${{ github.event.inputs.KERNEL_GIT }}" build
           rm -rf .git .github .repo common
