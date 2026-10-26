@@ -207,20 +207,17 @@ jobs:
           rmz_version: "3.1.1"
           testing: true
 
-      - name: Setup Swap Space
-        uses: thejerrybao/setup-swap-space@v1
-        with:
-          swap-space-path: /swapfile
-          swap-size-gb: 32
-          remove-existing-swap-files: true
-
-      - name: Tune Swap Aggressiveness
+      - name: Setup & Tune Swap Space
         run: |
           set -euo pipefail
+          sudo swapoff -a || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 32G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=32768
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon -p 32767 /swapfile
           sudo sysctl -w vm.swappiness=200
           sudo sysctl -w vm.page-cluster=0
-          sudo swapoff /swapfile || true
-          sudo swapon -p 32767 /swapfile
           echo "===== Swap Tuning ====="
           cat /proc/sys/vm/swappiness
           cat /proc/sys/vm/page-cluster
@@ -746,20 +743,26 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Telegram
-        uses: BorisTestov/tg_sender_action@latest
         continue-on-error: true
         env:
           TG_SENDER_TG_CHAT_ID: ${{ secrets.TG_SENDER_TG_CHAT_ID }}
           TG_SENDER_TG_BOT_TOKEN: ${{ secrets.TG_SENDER_TG_BOT_TOKEN }}
-          TG_SENDER_PAYLOAD_MESSAGE: |
-            <b>DoraCore Kernel | CI/CD</b>
-
-            • Device: ${{ matrix.device }}
-            • Tag: ${{ needs.create_release.outputs.tag }}
-            • Build Time: ${{ env.NOW }}
-          TG_SENDER_PAYLOAD_PARSE_MODE: HTML
-          TG_SENDER_PAYLOAD_FILE_PATH: ${{ env.FULL_DIR }}
-
+        run: |
+          if [ -n "${TG_SENDER_TG_BOT_TOKEN:-}" ] && [ -n "${TG_SENDER_TG_CHAT_ID:-}" ]; then
+            caption=$(printf "<b>DoraCore Kernel | CI/CD</b>\n\n• Device: %s\n• Tag: %s\n• Build Time: %s" "${{ matrix.device }}" "${{ needs.create_release.outputs.tag }}" "${{ env.NOW }}")
+            if [ -n "${FULL_DIR:-}" ] && [ -f "$FULL_DIR" ]; then
+              curl -s -F "chat_id=${TG_SENDER_TG_CHAT_ID}" \
+                   -F "caption=${caption}" \
+                   -F "parse_mode=HTML" \
+                   -F "document=@${FULL_DIR}" \
+                   "https://api.telegram.org/bot${TG_SENDER_TG_BOT_TOKEN}/sendDocument" || true
+            else
+              curl -s -F "chat_id=${TG_SENDER_TG_CHAT_ID}" \
+                   -F "text=${caption}" \
+                   -F "parse_mode=HTML" \
+                   "https://api.telegram.org/bot${TG_SENDER_TG_BOT_TOKEN}/sendMessage" || true
+            fi
+          fi
       - name: Generate CCACHE
         if: (github.event.inputs.BUILDING_CCACHE == 'Enable' && github.event.inputs.BUILD_TARGET != 'Both')
         run: |
