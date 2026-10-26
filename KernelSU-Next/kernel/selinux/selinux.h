@@ -12,6 +12,7 @@
 #define KSU_FILE_CONTEXT "u:object_r:" KERNEL_SU_FILE ":s0"
 #define ZYGOTE_CONTEXT "u:r:zygote:s0"
 #define INIT_CONTEXT "u:r:init:s0"
+#define ADBD_CONTEXT "u:r:adbd:s0"
 
 void setup_selinux(const char *, struct cred *);
 
@@ -29,11 +30,15 @@ bool is_zygote(const struct cred *cred);
 
 bool is_init(const struct cred *cred);
 
+bool is_adbd(const struct cred *cred);
+
 void apply_kernelsu_rules();
 
 int handle_sepolicy(void __user *user_data, u64 data_len);
 
 void setup_ksu_cred();
+
+void escape_to_root_for_adb_root();
 
 extern u32 ksu_file_sid;
 

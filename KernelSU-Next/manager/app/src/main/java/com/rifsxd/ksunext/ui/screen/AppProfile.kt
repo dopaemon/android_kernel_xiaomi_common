@@ -19,6 +19,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.LocalScrollState
 import com.rifsxd.ksunext.ui.rememberScrollConnection
 import androidx.compose.ui.platform.LocalDensity
@@ -79,16 +80,18 @@ fun AppProfileScreen(
     val suNotAllowed = stringResource(R.string.su_not_allowed).format(appInfo.label)
 
     val packageName = appInfo.packageName
-    val initialProfile = Natives.getAppProfile(packageName, appInfo.uid)
+    val profileKey = appInfo.profileKey
+    val initialProfile = Natives.getAppProfile(profileKey, appInfo.uid)
     if (initialProfile.allowSu) {
-        initialProfile.rules = getSepolicy(packageName)
+        initialProfile.rules = getSepolicy(profileKey)
     }
     var profile by rememberSaveable {
         mutableStateOf(initialProfile)
     }
 
     val scrollState = LocalScrollState.current
-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarEnabled = LocalNavBarEnabled.current
+    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
 
     Scaffold(
@@ -152,7 +155,7 @@ fun AppProfileScreen(
                         snackBarHost.showSnackbar(failToUpdateAppProfile.format(appInfo.uid))
                     } else {
                         profile = it
-                        viewModel.updateAppProfile(packageName, it)
+                        viewModel.updateAppProfile(profileKey, it)
                     }
                 }
             },

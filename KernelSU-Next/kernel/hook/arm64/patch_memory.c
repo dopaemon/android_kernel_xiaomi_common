@@ -99,10 +99,10 @@ fail:
         unsigned long __end = __start + (sz);                                  \
         dcache_clean_inval_poc(__start, __end);                                \
     })
-#define ksu_flush_icache(start, end) caches_clean_inval_pou
+#define ksu_flush_icache(start, end) caches_clean_inval_pou(start, end)
 #else
 #define ksu_flush_dcache(start, sz) __flush_dcache_area((void *)start, sz)
-#define ksu_flush_icache(start, end) __flush_icache_range
+#define ksu_flush_icache(start, end) __flush_icache_range(start, end)
 #endif
 
 struct patch_text_info {
@@ -201,6 +201,41 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
     };
 
     return stop_machine(ksu_patch_text_cb, &info, cpu_online_mask);
+}
+
+/*
+ * Scan the memory region [start, start+size) for a BL instruction whose
+ * branch target equals `target`.  Returns the address of the first matching
+ * instruction, or NULL if none is found.
+ *
+ * AArch64 BL encoding: bits[31:26] = 0b100101, bits[25:0] = imm26.
+ * Branch target = PC + SignExtend(imm26, 26) * 4.
+ */
+void *scan_call_to(void *start, size_t size, void *target)
+{
+    const uint32_t *insn = (const uint32_t *)start;
+    size_t count = size / sizeof(uint32_t);
+    size_t i;
+
+    for (i = 0; i < count; i++) {
+        int32_t imm26;
+        void *branch_target;
+
+        /* Check BL opcode: bits[31:26] == 0b100101 */
+        if ((insn[i] & 0xFC000000U) != 0x94000000U)
+            continue;
+
+        /* Sign-extend the 26-bit immediate to 32 bits */
+        imm26 = (int32_t)((insn[i] & 0x03FFFFFFU) << 6) >> 6;
+
+        /* Branch target = PC + imm26 * 4 */
+        branch_target = (void *)((uintptr_t)(&insn[i]) + ((int64_t)imm26 << 2));
+
+        if (branch_target == target)
+            return (void *)&insn[i];
+    }
+
+    return NULL;
 }
 
 #endif /* __aarch64__ */

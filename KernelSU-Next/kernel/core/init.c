@@ -13,15 +13,27 @@
 #include "klog.h" // IWYU pragma: keep
 #include "manager/manager_observer.h"
 #include "manager/throne_tracker.h"
+
 #include "runtime/ksud.h"
 #include "runtime/ksud_boot.h"
 #include "supercall/supercall.h"
 #include "ksu.h"
 #include "infra/file_wrapper.h"
 #include "selinux/selinux.h"
-
 #include "hook/setuid_hook.h"
 #include "feature/sucompat.h"
+#include "feature/adb_root.h"
+#include "feature/selinux_hide.h"
+#include "feature/shell_su_adb_only.h"
+#include "feature/sulog.h"
+
+#if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
+#include <asm/cpufeature.h>
+#include <linux/version.h>
+#ifndef X86_FEATURE_INDIRECT_SAFE
+#error "FATAL: Your kernel is missing the indirect syscall bypass patches!"
+#endif
+#endif
 
 // workaround for A12-5.10 kernel
 // Some third-party kernel (e.g. linegaeOS) uses wrong toolchain, which supports
@@ -62,8 +74,50 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 
 struct cred *ksu_cred;
 
+#ifdef CONFIG_KSU_DEBUG
+bool allow_shell = true;
+#else
+bool allow_shell = false;
+#endif
+module_param(allow_shell, bool, 0);
+
+bool ksu_no_custom_rc = false;
+module_param_named(norc, ksu_no_custom_rc, bool, 0);
+
+#ifdef MODULE
+bool ksu_bundled = false;
+module_param_named(bundled, ksu_bundled, bool, 0);
+#endif
+bool ksu_late_loaded = false;
+
 int __init kernelsu_init(void)
 {
+#ifdef KSU_MANAGER_PACKAGE
+	pr_info("welcome to KernelSU version " __stringify(KERNEL_SU_VERSION) ", package name " KSU_MANAGER_PACKAGE "\n");
+#else
+	pr_info("welcome to KernelSU version " __stringify(KERNEL_SU_VERSION) "\n");
+#endif
+#if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
+	// If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
+	if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
+		pr_alert("*************************************************************");
+		pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
+		pr_alert("**                                                         **");
+		pr_alert("**            X86_FEATURE_INDIRECT_SAFE not enabled!       **");
+		pr_alert("**      KernelSU will abort initialization to prevent      **");
+		pr_alert("**                       kernel panic.                     **");
+		pr_alert("**                                                         **");
+		pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
+		pr_alert("*************************************************************");
+		return -ENOSYS;
+	}
+#endif
+
+#ifdef MODULE
+	ksu_late_loaded = (current->pid != 1);
+#else
+	ksu_late_loaded = false;
+#endif
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert("*************************************************************");
 	pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
@@ -73,15 +127,26 @@ int __init kernelsu_init(void)
 	pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
 	pr_alert("*************************************************************");
 #endif
+	if (allow_shell) {
+		pr_alert("shell is allowed at init!");
+	}
 
-    ksu_cred = prepare_creds();
-    if (!ksu_cred) {
-        pr_err("prepare cred failed!\n");
-    }
+	ksu_cred = prepare_creds();
+	if (!ksu_cred) {
+		pr_err("prepare cred failed!\n");
+		return -ENOSYS;
+	}
+
 
 	ksu_feature_init();
+	ksu_sulog_init();
+	ksu_adb_root_init();
+	ksu_lsm_hook_init();
+	ksu_selinux_hide_init();
+	ksu_shell_su_adb_only_init();
 
 	ksu_supercalls_init();
+	ksu_app_profile_init();
 
     ksu_sucompat_init();
 
@@ -116,11 +181,15 @@ void __exit kernelsu_exit(void)
 
 	ksu_allowlist_exit();
 
+	ksu_shell_su_adb_only_exit();
+	ksu_selinux_hide_exit();
+
+	ksu_adb_root_exit();
+	ksu_sulog_exit();
 	ksu_feature_exit();
 
-	if (ksu_cred) {
-		put_cred(ksu_cred);
-	}
+
+	put_cred(ksu_cred);
 }
 
 #if NEED_OWN_STACKPROTECTOR

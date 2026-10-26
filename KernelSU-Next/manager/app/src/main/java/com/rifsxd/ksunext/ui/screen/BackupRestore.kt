@@ -31,6 +31,7 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
 import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.ksuApp
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.LocalScrollState
 import com.rifsxd.ksunext.ui.component.rememberLoadingDialog
 import com.rifsxd.ksunext.ui.rememberScrollConnection
@@ -122,7 +123,7 @@ private suspend fun restoreModulesFromUri(uri: Uri): Boolean = withContext(Dispa
         return@withContext false
     }
 
-    val extractCmd = "$BUSYBOX tar -xpf '$tmpPath' -C /data/adb/modules_update"
+    val extractCmd = "mkdir -p '/data/adb/modules_update' && $BUSYBOX tar -xpf '$tmpPath' -C /data/adb/modules_update"
     val result = ShellUtils.fastCmdResult(extractCmd)
 
     SuFile(tmpPath).delete()
@@ -165,7 +166,8 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
     val snackBarHost = LocalSnackbarHost.current
 
     val scrollState = LocalScrollState.current
-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarEnabled = LocalNavBarEnabled.current
+    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
 
     Scaffold(

@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.LocalScrollState
 import com.rifsxd.ksunext.ui.rememberScrollConnection
 import androidx.compose.ui.res.stringResource
@@ -86,6 +87,8 @@ private const val KEY_NON_FREE_ENABLED = "non_free_enabled"
 private const val DEFAULT_JSON_URL = "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next-Modules-Repo/refs/heads/main/modules.json"
 private const val NON_FREE_JSON_URL = "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next-Modules-Repo/refs/heads/main/non_free_modules.json"
 private const val URL_SEPARATOR = "|||"
+private const val NET_CONNECT_TIMEOUT_MS = 15_000
+private const val NET_READ_TIMEOUT_MS = 15_000
 
 private fun getModuleRepoPrefs(context: Context): SharedPreferences {
     return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -138,7 +141,9 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
     val isManager = Natives.isManager
     val ksuVersion = if (isManager) Natives.version else null
     val scrollState = LocalScrollState.current
-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarEnabled = LocalNavBarEnabled.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
 
     var jsonUrls by remember { mutableStateOf(loadJsonUrls(context)) }
@@ -158,6 +163,8 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
     val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     var sortAToZ by remember { mutableStateOf(prefs.getBoolean("module_sort_a_to_z", true)) }
     var sortZToA by remember { mutableStateOf(prefs.getBoolean("module_sort_z_to_a", false)) }
+    var sortStarsLowToHigh by remember { mutableStateOf(prefs.getBoolean("module_sort_stars_low_to_high", false)) }
+    var sortStarsHighToLow by remember { mutableStateOf(prefs.getBoolean("module_sort_stars_high_to_low", false)) }
 
     DownloadListener(context) { uri ->
         downloadedUri = uri
@@ -171,6 +178,8 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
         return withContext(Dispatchers.IO) {
             try {
                 val conn = URL(jsonUrl).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = NET_CONNECT_TIMEOUT_MS
+                conn.readTimeout = NET_READ_TIMEOUT_MS
                 conn.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
                 val text = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
                 conn.disconnect()
@@ -216,7 +225,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                 .filter { module -> seen.add("${module.name}||${module.repoUrl}") }
 
             if (visibleModules.isEmpty()) {
-                moduleState = ModuleRepoState.Error("No modules found across all repositories")
+                moduleState = ModuleRepoState.Error(context.getString(R.string.repo_no_modules))
                 return
             }
 
@@ -256,7 +265,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                 }
             }
         } catch (e: Exception) {
-            moduleState = ModuleRepoState.Error(e.message ?: "Unknown error")
+            moduleState = ModuleRepoState.Error(e.message ?: context.getString(R.string.unknown_error))
         }
     }
 
@@ -329,7 +338,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                                         showAddEditDialog = true
                                     }
                                 ) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Edit")
+                                    Icon(Icons.Default.Edit, contentDescription = null)
                                 }
                                 // Prevent deletion of the last remaining repo
                                 IconButton(
@@ -340,7 +349,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                                     },
                                     enabled = jsonUrls.size > 1
                                 ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Remove")
+                                    Icon(Icons.Default.Delete, contentDescription = null)
                                 }
                             }
                             if (index < jsonUrls.lastIndex) {
@@ -389,11 +398,11 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                 showAddEditDialog = false
                 pendingUrl = ""
             },
-            title = { Text(if (editingIndex == null) "Add Repository" else "Edit Repository") },
+            title = { Text(stringResource(if (editingIndex == null) R.string.add_repository else R.string.repo_edit_title)) },
             text = {
                 Column {
                     Text(
-                        text = "Enter the module repository JSON URL:",
+                        text = stringResource(R.string.repo_enter_json_url),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -422,7 +431,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                         }
                     }
                 ) {
-                    Text(if (editingIndex == null) "Add" else "Apply")
+                    Text(stringResource(if (editingIndex == null) R.string.add_repository else R.string.repo_apply))
                 }
             },
             dismissButton = {
@@ -432,7 +441,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                         pendingUrl = ""
                     }
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -456,7 +465,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                     IconButton(onClick = { showRepoManagerDialog = true }) {
                         Icon(
                             imageVector = Icons.Filled.Edit,
-                            contentDescription = "Manage Repositories"
+                            contentDescription = null
                         )
                     }
                     IconButton(onClick = { navigator.navigate(MetaModuleScreenDestination) }) {
@@ -491,8 +500,12 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                                 onClick = {
                                     sortAToZ = !sortAToZ
                                     sortZToA = false
+                                    sortStarsLowToHigh = false
+                                    sortStarsHighToLow = false
                                     prefs.edit().putBoolean("module_sort_a_to_z", sortAToZ).apply()
                                     prefs.edit().putBoolean("module_sort_z_to_a", false).apply()
+                                    prefs.edit().putBoolean("module_sort_stars_low_to_high", false).apply()
+                                    prefs.edit().putBoolean("module_sort_stars_high_to_low", false).apply()
                                 }
                             )
 
@@ -506,8 +519,49 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                                 onClick = {
                                     sortZToA = !sortZToA
                                     sortAToZ = false
+                                    sortStarsLowToHigh = false
+                                    sortStarsHighToLow = false
                                     prefs.edit().putBoolean("module_sort_z_to_a", sortZToA).apply()
                                     prefs.edit().putBoolean("module_sort_a_to_z", false).apply()
+                                    prefs.edit().putBoolean("module_sort_stars_low_to_high", false).apply()
+                                    prefs.edit().putBoolean("module_sort_stars_high_to_low", false).apply()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(stringResource(R.string.module_sort_stars_low_to_high))
+                                },
+                                trailingIcon = {
+                                    Checkbox(checked = sortStarsLowToHigh, onCheckedChange = null)
+                                },
+                                onClick = {
+                                    sortStarsLowToHigh = !sortStarsLowToHigh
+                                    sortStarsHighToLow = false
+                                    sortAToZ = false
+                                    sortZToA = false
+                                    prefs.edit().putBoolean("module_sort_stars_low_to_high", sortStarsLowToHigh).apply()
+                                    prefs.edit().putBoolean("module_sort_stars_high_to_low", false).apply()
+                                    prefs.edit().putBoolean("module_sort_a_to_z", false).apply()
+                                    prefs.edit().putBoolean("module_sort_z_to_a", false).apply()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(stringResource(R.string.module_sort_stars_high_to_low))
+                                },
+                                trailingIcon = {
+                                    Checkbox(checked = sortStarsHighToLow, onCheckedChange = null)
+                                },
+                                onClick = {
+                                    sortStarsHighToLow = !sortStarsHighToLow
+                                    sortStarsLowToHigh = false
+                                    sortAToZ = false
+                                    sortZToA = false
+                                    prefs.edit().putBoolean("module_sort_stars_high_to_low", sortStarsHighToLow).apply()
+                                    prefs.edit().putBoolean("module_sort_stars_low_to_high", false).apply()
+                                    prefs.edit().putBoolean("module_sort_a_to_z", false).apply()
+                                    prefs.edit().putBoolean("module_sort_z_to_a", false).apply()
                                 }
                             )
                         }
@@ -544,6 +598,8 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                 val sortedModules = when {
                     sortAToZ -> filteredModules.sortedBy { it.name.lowercase() }
                     sortZToA -> filteredModules.sortedByDescending { it.name.lowercase() }
+                    sortStarsLowToHigh -> filteredModules.sortedWith(compareBy { if (it.stars < 0) Int.MAX_VALUE else it.stars })
+                    sortStarsHighToLow -> filteredModules.sortedWith(compareByDescending { if (it.stars < 0) Int.MIN_VALUE else it.stars })
                     else -> filteredModules
                 }
 
@@ -555,6 +611,7 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                         .padding(paddingValues),
                     isRefreshing = isRefreshing,
                     onRefresh = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         scope.launch {
                             moduleState = ModuleRepoState.Loading
                             loadModules()
@@ -601,10 +658,10 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
                                                 context,
                                                 selectedModule.downloadUrl,
                                                 fileName,
-                                                "Downloading ${selectedModule.name}"
+                                                context.getString(R.string.repo_download_progress, selectedModule.name)
                                             )
                                         } catch (e: Exception) {
-                                            snackBarHost.showSnackbar("Error downloading module: ${e.message}")
+                                            snackBarHost.showSnackbar(context.getString(R.string.repo_download_error, e.message.orEmpty()))
                                             downloadingModuleName = null
                                         }
                                     }
@@ -720,10 +777,37 @@ private fun ModuleRepoCard(
                     .fillMaxWidth()
                     .padding(22.dp, 18.dp, 22.dp, 12.dp)
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = module.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "by ${module.author}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Text(
+                    text = module.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
                 val hasLicense = module.license.isNotEmpty()
                 val hasStars = !module.isLoading && module.stars >= 0
 
                 if (hasLicense || hasStars) {
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -774,33 +858,7 @@ private fun ModuleRepoCard(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = module.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "by ${module.author}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Text(
-                    text = module.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
 
                 Row(
                     modifier = Modifier
@@ -837,7 +895,7 @@ private fun ModuleRepoCard(
                         } else {
                             Icon(
                                 imageVector = Icons.Default.CloudDownload,
-                                contentDescription = "Download",
+                                contentDescription = null,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -878,10 +936,10 @@ private fun TopBar(
         },
         actions = {
             IconButton(onClick = onManageRepos) {
-                Icon(Icons.Filled.Edit, contentDescription = "Manage Repositories")
+                Icon(Icons.Filled.Edit, contentDescription = null)
             }
             IconButton(onClick = onMetaModuleClick) {
-                Icon(Icons.Filled.SettingsSuggest, contentDescription = stringResource(id = R.string.module_repo_screen))
+                Icon(Icons.Filled.SettingsSuggest, contentDescription = null)
             }
         },
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
@@ -894,6 +952,8 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfoModuleRe
         try {
             val stars = try {
                 val htmlConn = URL(repoUrl).openConnection() as java.net.HttpURLConnection
+                htmlConn.connectTimeout = NET_CONNECT_TIMEOUT_MS
+                htmlConn.readTimeout = NET_READ_TIMEOUT_MS
                 htmlConn.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
                 htmlConn.setRequestProperty("Accept", "text/html")
                 val html = BufferedReader(InputStreamReader(htmlConn.inputStream)).use { it.readText() }
@@ -908,6 +968,8 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfoModuleRe
 
             val latestUrl = "$repoUrl/releases/latest"
             val connection = URL(latestUrl).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = NET_CONNECT_TIMEOUT_MS
+            connection.readTimeout = NET_READ_TIMEOUT_MS
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
 
@@ -926,6 +988,8 @@ private suspend fun fetchLatestReleaseInfo(repoUrl: String): ReleaseInfoModuleRe
 
             val releasePageUrl = "$repoUrl/releases/expanded_assets/$tagMatch"
             val pageConnection = URL(releasePageUrl).openConnection()
+            pageConnection.connectTimeout = NET_CONNECT_TIMEOUT_MS
+            pageConnection.readTimeout = NET_READ_TIMEOUT_MS
             pageConnection.setRequestProperty("User-Agent", "KernelSU-Next/${BuildConfig.VERSION_CODE}")
 
             val pageHtml = BufferedReader(InputStreamReader(pageConnection.getInputStream())).use {

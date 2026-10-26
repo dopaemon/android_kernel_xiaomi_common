@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.rifsxd.ksunext.Natives
+import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.ksuApp
 import com.rifsxd.ksunext.profile.Capabilities
 import com.rifsxd.ksunext.profile.Groups
@@ -54,6 +55,9 @@ class TemplateViewModel : ViewModel() {
         val capabilities: List<Int> = mutableListOf(),
         val context: String = Natives.KERNEL_SU_DOMAIN,
         val rules: List<String> = mutableListOf(),
+        val flags: List<Int> = mutableListOf(
+            Natives.Profile.RootProfileFlag.NO_NEW_PRIVS.ordinal // default no new privs for new template
+        )
     ) : Parcelable
 
     var isRefreshing by mutableStateOf(false)
@@ -227,6 +231,7 @@ private fun fromJSON(templateJson: JSONObject): TemplateViewModel.TemplateInfo? 
     return runCatching {
         val groupsJsonArray = templateJson.optJSONArray("groups")
         val capabilitiesJsonArray = templateJson.optJSONArray("capabilities")
+        val flagsJsonArray = templateJson.optJSONArray("flags")
         val context = templateJson.optString("context").takeIf { it.isNotEmpty() }
             ?: Natives.KERNEL_SU_DOMAIN
         val namespace = templateJson.optString("namespace").takeIf { it.isNotEmpty() }
@@ -251,7 +256,13 @@ private fun fromJSON(templateJson: JSONObject): TemplateViewModel.TemplateInfo? 
             context = context,
             rules = rulesJsonArray?.mapCatching<String, String>({ it }, {
                 Log.e(TAG, "ignore invalid rule: $it", it)
-            }).orEmpty()
+            }).orEmpty(),
+            flags = flagsJsonArray?.let {
+                getEnumOrdinals(
+                    it,
+                    Natives.Profile.RootProfileFlag::class.java
+                ).map { flag -> flag.ordinal }
+            }.orEmpty()
         )
         templateInfo
     }.onFailure {
@@ -300,6 +311,15 @@ fun TemplateViewModel.TemplateInfo.toJSON(): JSONObject {
         if (template.rules.isNotEmpty()) {
             put("rules", JSONArray(template.rules))
         }
+
+        put(
+            "flags", JSONArray(
+                Natives.Profile.RootProfileFlag.entries.filter {
+                    template.flags.contains(it.ordinal)
+                }.map {
+                    it.name
+                }
+            ))
     }
 }
 
@@ -307,8 +327,8 @@ fun TemplateViewModel.TemplateInfo.toJSON(): JSONObject {
 fun generateTemplates() {
     val templateJson = JSONObject()
     templateJson.put("id", "com.example")
-    templateJson.put("name", "Example")
-    templateJson.put("description", "This is an example template")
+    templateJson.put("name", ksuApp.getString(R.string.template_example_title))
+    templateJson.put("description", ksuApp.getString(R.string.template_example_description))
     templateJson.put("local", true)
     templateJson.put("namespace", Natives.Profile.Namespace.INHERITED.name)
     templateJson.put("uid", 0)
@@ -317,5 +337,6 @@ fun generateTemplates() {
     templateJson.put("groups", JSONArray().apply { put(Groups.INET.name) })
     templateJson.put("capabilities", JSONArray().apply { put(Capabilities.CAP_NET_RAW.name) })
     templateJson.put("context", "u:r:ksu:s0")
+    templateJson.put("flags", JSONArray().apply { put(Natives.Profile.RootProfileFlag.NO_NEW_PRIVS.name) })
     Log.i(TAG, "$templateJson")
 }

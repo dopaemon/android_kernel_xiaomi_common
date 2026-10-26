@@ -20,8 +20,8 @@ object Natives {
     // 32310: new get_allow_list ioctl
     // 33070: SET_SEPOLICY ioctl
     // 33075: add set_init_pgrp ioctl
-    // 33110: bump app profile version, migrate selinux domain
-    const val MINIMAL_SUPPORTED_KERNEL = 33110
+    // 33188: add uapi version
+    const val MINIMAL_SUPPORTED_KERNEL = 33188
 
     const val KERNEL_SU_DOMAIN = "u:r:ksu:s0"
 
@@ -44,6 +44,9 @@ object Natives {
         external get
 
     val isLkmMode: Boolean
+        external get
+
+    val isLkmBundled: Boolean
         external get
 
     val isLateLoadMode: Boolean
@@ -88,7 +91,7 @@ object Natives {
      */
     external fun getAppProfile(key: String?, uid: Int): Profile
     external fun setAppProfile(profile: Profile?): Boolean
-
+     
     /**
      * `su` compat mode can be disabled temporarily.
      *  0: disabled
@@ -108,9 +111,28 @@ object Natives {
     external fun setKernelUmountEnabled(enabled: Boolean): Boolean
 
     /**
+     * ADB root can be enabled/disabled.
+     *  0: disabled
+     *  1: enabled
+     *  negative : error
+     */
+    external fun isAdbRootEnabled(): Boolean
+    external fun setAdbRootEnabled(enabled: Boolean): Boolean
+
+    /**
+     * SELinux hide can be disabled temporarily.
+     *  0: disabled
+     *  1: enabled
+     *  negative : error
+     */
+    external fun isSelinuxHideEnabled(): Boolean
+    external fun setSelinuxHideEnabled(enabled: Boolean): Int
+
+    /**
      * Get the user name for the uid.
      */
     external fun getUserName(uid: Int): String?
+
 
     /**
      * Avc spoof can be enabled/disabled.
@@ -123,6 +145,7 @@ object Natives {
 
     external fun getSuperuserCount(): Int
 
+    private const val KSU_GET_INFO_FLAG_MANAGER = 1 shl 1
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999
 
@@ -142,9 +165,15 @@ object Natives {
             return it.umountModules
         }
     }
+    
+    val kernelUAPIVersion: Int
+        external get
 
-    fun requireNewKernel(): Boolean {
-        return version != -1 && version < MINIMAL_SUPPORTED_KERNEL
+    val managerUAPIVersion: Int
+        external get
+
+    fun isFullFeatured(): Boolean {
+        return isManager && kernelUAPIVersion == managerUAPIVersion && com.rifsxd.ksunext.ui.util.rootAvailable()
     }
 
     val KSU_WORK_DIR = "/data/adb/ksu/"
@@ -175,7 +204,17 @@ object Natives {
         val nonRootUseDefault: Boolean = true,
         val umountModules: Boolean = true,
         var rules: String = "", // this field is save in ksud!!
+
+        val flags: Long = FLAG_KSU_NO_NEW_PRIVS,
     ) : Parcelable {
+        @Keep
+        enum class RootProfileFlag(val display: String, val desc: Int) {
+            NO_NEW_PRIVS(
+                "NO_NEW_PRIVS",
+                R.string.profile_flags_desc_no_new_privs
+            )
+        }
+
         enum class Namespace {
             INHERITED,
             GLOBAL,
@@ -184,4 +223,15 @@ object Natives {
 
         constructor() : this("")
     }
+
+    const val FLAG_KSU_NO_NEW_PRIVS = 1L
 }
+
+fun List<Natives.Profile.RootProfileFlag>.toRawFlags(): Long =
+    fold(0L) { acc, flag -> acc.or(1L.shl(flag.ordinal)) }
+
+fun List<Natives.Profile.RootProfileFlag>.toOrdinalList(): List<Int> =
+    map { it.ordinal }
+
+fun Long.toRootProfileFlags(): List<Natives.Profile.RootProfileFlag> =
+    Natives.Profile.RootProfileFlag.entries.filter { 1L.shl(it.ordinal).and(this) != 0L }.toList()

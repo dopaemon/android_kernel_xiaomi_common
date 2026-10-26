@@ -3,6 +3,7 @@ use rustix::fs::{Mode, OFlags, open};
 use rustix::process::setpgid;
 use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout};
 use std::{
+    ffi::{CStr, CString, c_char, c_void},
     fs::{File, OpenOptions, create_dir_all, remove_file, write},
     io::{
         ErrorKind::{AlreadyExists, NotFound},
@@ -15,7 +16,6 @@ use std::{
 use crate::{assets, boot_patch, defs, ksucalls, module, restorecon};
 #[allow(unused_imports)]
 use std::fs::{Permissions, set_permissions};
-#[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 
 use std::path::PathBuf;
@@ -26,6 +26,17 @@ use rustix::{
     process,
     thread::{LinkNameSpaceType, move_into_link_name_space},
 };
+
+type PropertyReadCallback = unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char, u32);
+
+unsafe extern "C" {
+    fn __system_property_find(name: *const c_char) -> *const c_void;
+    fn __system_property_read_callback(
+        property_info: *const c_void,
+        callback: PropertyReadCallback,
+        cookie: *mut c_void,
+    );
+}
 
 #[macro_export]
 macro_rules! debug_select {
@@ -98,22 +109,50 @@ pub fn ensure_binary<T: AsRef<Path>>(
     }
 
     write(&path, contents)?;
-    #[cfg(unix)]
     set_permissions(&path, Permissions::from_mode(0o755))?;
     Ok(())
 }
 
-pub fn getprop(prop: &str) -> Option<String> {
-    android_properties::getprop(prop).value()
+unsafe extern "C" fn property_read_callback(
+    cookie: *mut c_void,
+    _name: *const c_char,
+    value: *const c_char,
+    _serial: u32,
+) {
+    if cookie.is_null() || value.is_null() {
+        return;
+    }
+
+    let result = unsafe { &mut *cookie.cast::<Option<String>>() };
+    let value = unsafe { CStr::from_ptr(value) };
+    *result = Some(value.to_string_lossy().into_owned());
+}
+
+pub fn getprop(name: &str) -> Option<String> {
+    let name = CString::new(name).ok()?;
+    let property_info = unsafe { __system_property_find(name.as_ptr()) };
+    if property_info.is_null() {
+        return None;
+    }
+
+    let mut value = None;
+    unsafe {
+        __system_property_read_callback(
+            property_info,
+            property_read_callback,
+            std::ptr::addr_of_mut!(value).cast(),
+        );
+    }
+    value
 }
 
 pub fn is_safe_mode() -> bool {
     let safemode = getprop("persist.sys.safemode")
-        .filter(|prop| prop == "1")
-        .is_some()
+        .as_ref()
+        .is_some_and(|prop| prop == "1")
         || getprop("ro.sys.safemode")
-            .filter(|prop| prop == "1")
-            .is_some();
+            .as_ref()
+            .is_some_and(|prop| prop == "1");
     log::info!("safemode: {safemode}");
     if safemode {
         return true;
@@ -165,8 +204,8 @@ pub fn switch_cgroups() {
     switch_cgroup("/sys/fs/cgroup", pid);
 
     if getprop("ro.config.per_app_memcg")
-        .filter(|prop| prop == "false")
-        .is_none()
+        .as_ref()
+        .is_none_or(|prop| prop != "false")
     {
         switch_cgroup("/dev/memcg/apps", pid);
     }
@@ -189,27 +228,29 @@ fn link_ksud_to_bin() -> Result<()> {
     Ok(())
 }
 
-pub fn install(magiskboot: Option<PathBuf>) -> Result<()> {
+pub fn install(libadbroot: Option<PathBuf>) -> Result<()> {
     ensure_dir_exists(defs::ADB_DIR)?;
+    let _ = std::fs::remove_file(defs::DAEMON_PATH);
     std::fs::copy(
         std::env::current_exe().with_context(|| "Failed to get self exe path")?,
         defs::DAEMON_PATH,
     )?;
-    restorecon::lsetfilecon(defs::DAEMON_PATH, restorecon::ADB_CON)?;
+    restorecon::lsetfilecon(defs::DAEMON_PATH, restorecon::KSU_CON)?;
     // install binary assets
     assets::ensure_binaries(false).with_context(|| "Failed to extract assets")?;
 
     link_ksud_to_bin()?;
 
-    if let Some(magiskboot) = magiskboot {
-        ensure_dir_exists(defs::BINARY_DIR)?;
-        let _ = std::fs::copy(magiskboot, defs::MAGISKBOOT_PATH);
+    if let Some(libadbroot) = libadbroot {
+        ensure_dir_exists(defs::LIBRARY_DIR)?;
+        let _ = std::fs::remove_file(defs::LIBADBROOT_PATH);
+        let _ = std::fs::copy(libadbroot, defs::LIBADBROOT_PATH);
     }
 
     Ok(())
 }
 
-pub fn uninstall(magiskboot_path: Option<PathBuf>) -> Result<()> {
+pub fn uninstall(package_name: &str) -> Result<()> {
     if Path::new(defs::MODULE_DIR).exists() {
         println!("- Uninstall modules..");
         module::uninstall_all_modules()?;
@@ -219,17 +260,18 @@ pub fn uninstall(magiskboot_path: Option<PathBuf>) -> Result<()> {
     std::fs::remove_dir_all(defs::WORKING_DIR).ok();
     std::fs::remove_file(defs::DAEMON_PATH).ok();
     std::fs::remove_dir_all(defs::MODULE_DIR).ok();
+    std::fs::remove_dir_all(defs::PREINIT_DIR_WATCHDOG).ok();
+    std::fs::remove_dir_all(defs::PREINIT_DIR_DEFAULT).ok();
     println!("- Restore boot image..");
     boot_patch::restore(BootRestoreArgs {
         boot: None,
         flash: true,
-        magiskboot: magiskboot_path,
         out: None,
         out_name: None,
     })?;
     println!("- Uninstall KernelSU-Next manager..");
     Command::new("pm")
-        .args(["uninstall", "com.rifsxd.ksunext"])
+        .args(["uninstall", package_name])
         .spawn()?;
     println!("- Rebooting in 5 seconds..");
     std::thread::sleep(std::time::Duration::from_secs(5));
@@ -245,14 +287,40 @@ pub fn reset_std() -> Result<()> {
     Ok(())
 }
 
-pub fn daemonize<F: FnOnce() -> Result<()>>(configure: F) -> Result<()> {
+pub fn daemonize_with<F: FnOnce() -> Result<()>>(use_init_pgrp: bool, configure: F) -> Result<()> {
+    if !create_daemon_impl(use_init_pgrp, configure)? {
+        unsafe { libc::_exit(0) }
+    }
+    Ok(())
+}
+
+pub fn daemonize(use_init_pgrp: bool) -> Result<()> {
+    daemonize_with(use_init_pgrp, || Ok(()))
+}
+
+pub fn create_daemon(use_init_pgrp: bool) -> Result<bool> {
+    create_daemon_with(use_init_pgrp, || Ok(()))
+}
+
+pub fn create_daemon_with<F: FnOnce() -> Result<()>>(
+    use_init_pgrp: bool,
+    configure: F,
+) -> Result<bool> {
+    create_daemon_impl(use_init_pgrp, configure)
+}
+
+fn create_daemon_impl<F: FnOnce() -> Result<()>>(
+    use_init_pgrp: bool,
+    configure: F,
+) -> Result<bool> {
     unsafe {
         let pid = libc::fork();
         if pid < 0 {
             bail!("fork error {}", std::io::Error::last_os_error());
         } else if pid > 0 {
+            let mut status: i32 = -1;
             loop {
-                if libc::waitpid(pid, std::ptr::null_mut(), 0) < 0 {
+                if libc::waitpid(pid, &raw mut status, 0) < 0 {
                     if *libc::__errno() != libc::EINTR {
                         libc::_exit(1);
                     }
@@ -260,23 +328,49 @@ pub fn daemonize<F: FnOnce() -> Result<()>>(configure: F) -> Result<()> {
                     break;
                 }
             }
-            libc::_exit(0);
+            if !libc::WIFEXITED(status) || libc::WEXITSTATUS(status) != 0 {
+                bail!("child exited with unexpected status {status}")
+            }
+            return Ok(false);
         }
     }
 
-    setpgid(None, None)?;
-    switch_cgroups();
-    configure()?;
-    reset_std()?;
+    let do_configure = || -> Result<()> {
+        detach_process_group(use_init_pgrp);
+        switch_cgroups();
+        configure()?;
+        reset_std()?;
 
-    unsafe {
-        let pid = libc::fork();
-        if pid < 0 {
-            bail!("fork error {}", std::io::Error::last_os_error());
-        } else if pid > 0 {
-            libc::_exit(0);
+        unsafe {
+            let pid = libc::fork();
+            if pid < 0 {
+                bail!("fork error {}", std::io::Error::last_os_error());
+            } else if pid > 0 {
+                libc::_exit(0);
+            }
+        }
+        Ok(())
+    };
+
+    if let Err(e) = do_configure() {
+        log::error!("failed to configure daemon: {e:?}");
+        unsafe {
+            libc::_exit(1);
         }
     }
 
-    Ok(())
+    Ok(true)
+}
+
+pub fn detach_process_group(use_init_pgrp: bool) {
+    if use_init_pgrp {
+        if let Err(e) = ksucalls::set_init_pgrp() {
+            log::error!("failed to switch to init group: {e:?}");
+        } else {
+            return;
+        }
+    }
+    if let Err(e2) = setpgid(None, None) {
+        log::error!("failed to set process group: {e2:?}");
+    }
 }

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use rust_embed::RustEmbed;
-use std::path::Path;
 
 #[cfg(target_os = "android")]
 mod android {
@@ -15,8 +14,8 @@ mod android {
 
     pub fn ensure_binaries(ignore_if_exist: bool) -> anyhow::Result<()> {
         for file in Asset::iter() {
-            if file == "ksuinit" || file.ends_with(".ko") {
-                // don't extract ksuinit and kernel modules
+            if file == "ksuinit" || file == "waitsys" || file.ends_with(".ko") {
+                // don't extract internal executables and kernel modules
                 continue;
             }
             let asset =
@@ -41,21 +40,31 @@ pub use android::*;
 #[folder = "bin/x86_64"]
 struct Asset;
 
-// IF NOT x86_64 ANDROID, ie. macos, linux, windows, always use aarch64
-#[cfg(not(all(target_arch = "x86_64", target_os = "android")))]
+#[cfg(all(target_arch = "aarch64", target_os = "android"))]
 #[derive(RustEmbed)]
 #[folder = "bin/aarch64"]
 struct Asset;
 
+#[cfg(all(target_arch = "riscv64", target_os = "android"))]
+#[derive(RustEmbed)]
+#[folder = "bin/riscv64"]
+struct Asset;
+
+// If not Android, ie. macos, linux, windows, include all architectures.
+#[cfg(not(target_os = "android"))]
+#[derive(RustEmbed)]
+#[folder = "bin"]
+struct Asset;
+
+#[allow(unused)]
 pub fn get_asset_data(name: &str) -> Result<std::borrow::Cow<'static, [u8]>> {
     let asset = Asset::get(name).ok_or_else(|| anyhow::anyhow!("asset not found: {name}"))?;
     Ok(asset.data)
 }
 
-pub fn copy_assets_to_file(name: &str, dst: impl AsRef<Path>) -> Result<()> {
-    let data = get_asset_data(name)?;
-    std::fs::write(dst, &*data)?;
-    Ok(())
+pub fn get_asset(name: &str) -> Result<Box<dyn AsRef<[u8]>>> {
+    let asset = Asset::get(name).ok_or_else(|| anyhow::anyhow!("asset not found: {name}"))?;
+    Ok(Box::new(asset.data))
 }
 
 pub fn list_supported_kmi() -> std::vec::Vec<std::string::String> {

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.LocalScrollState
 import com.rifsxd.ksunext.ui.rememberScrollConnection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -33,6 +34,9 @@ import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.result.ResultBackNavigator
 import com.rifsxd.ksunext.Natives
 import com.rifsxd.ksunext.R
+import com.rifsxd.ksunext.toRawFlags
+import com.rifsxd.ksunext.toRootProfileFlags
+import com.rifsxd.ksunext.toOrdinalList
 import com.rifsxd.ksunext.ui.component.profile.RootProfileConfig
 import com.rifsxd.ksunext.ui.util.deleteAppProfileTemplate
 import com.rifsxd.ksunext.ui.util.getAppProfileTemplate
@@ -73,7 +77,8 @@ fun TemplateEditorScreen(
     } else null
 
     val scrollState = LocalScrollState.current
-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarEnabled = LocalNavBarEnabled.current
+    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
 
     BackHandler {
@@ -202,7 +207,8 @@ fun TemplateEditorScreen(
                         capabilities = it.capabilities,
                         context = it.context,
                         namespace = it.namespace,
-                        rules = it.rules.split("\n")
+                        rules = it.rules.split("\n"),
+                        flags = it.flags.toRootProfileFlags().toOrdinalList()
                     ).run {
                         if (autoSave) {
                             if (!saveTemplate(this)) {
@@ -218,14 +224,23 @@ fun TemplateEditorScreen(
 }
 
 fun toNativeProfile(templateInfo: TemplateViewModel.TemplateInfo): Natives.Profile {
-    return Natives.Profile().copy(rootTemplate = templateInfo.id,
+    val allFlags = Natives.Profile.RootProfileFlag.entries
+
+    val mappedFlags = templateInfo.flags.mapNotNull { ordinal ->
+        if (ordinal in allFlags.indices) allFlags[ordinal] else null
+    }
+
+    return Natives.Profile().copy(
+        rootTemplate = templateInfo.id,
         uid = templateInfo.uid,
         gid = templateInfo.gid,
         groups = templateInfo.groups,
         capabilities = templateInfo.capabilities,
         context = templateInfo.context,
         namespace = templateInfo.namespace,
-        rules = templateInfo.rules.joinToString("\n").ifBlank { "" })
+        rules = templateInfo.rules.joinToString("\n").ifBlank { "" },
+        flags = mappedFlags.toRawFlags(),
+    )
 }
 
 fun isTemplateValid(template: TemplateViewModel.TemplateInfo): Boolean {

@@ -19,33 +19,11 @@
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
 #include "infra/su_mount_ns.h"
+#include "util.h"
 
 extern int path_mount(const char *dev_name, struct path *path,
                       const char *type_page, unsigned long flags,
                       void *data_page);
-
-#if defined(__aarch64__)
-extern long __arm64_sys_setns(const struct pt_regs *regs);
-#elif defined(__x86_64__)
-extern long __x64_sys_setns(const struct pt_regs *regs);
-#endif
-
-static long ksu_sys_setns(int fd, int flags)
-{
-    struct pt_regs regs;
-    memset(&regs, 0, sizeof(regs));
-
-    PT_REGS_PARM1(&regs) = fd;
-    PT_REGS_PARM2(&regs) = flags;
-
-#if defined(__aarch64__)
-    return __arm64_sys_setns(&regs);
-#elif defined(__x86_64__)
-    return __x64_sys_setns(&regs);
-#else
-#error "Unsupported arch"
-#endif
-}
 
 // global mode , need CAP_SYS_ADMIN and CAP_SYS_CHROOT to perform setns
 static void ksu_mnt_ns_global(void)
@@ -117,11 +95,7 @@ try_setns:
     fd_install(fd, ns_file);
     ret = ksu_sys_setns(fd, CLONE_NEWNS);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)
-    ksys_close(fd);
-#else
-    close_fd(fd);
-#endif
+    ksu_close_fd(fd);
 
     if (ret) {
         pr_warn("call setns failed: %ld\n", ret);
@@ -173,11 +147,6 @@ void setup_mount_ns(int32_t ns_mode)
     if (ns_mode != KSU_NS_GLOBAL && ns_mode != KSU_NS_INDIVIDUAL) {
         pr_warn("pid: %d ,unknown mount namespace mode: %d\n", current->pid,
                 ns_mode);
-        return;
-    }
-
-    if (!ksu_cred) {
-        pr_err("no ksu cred! skip mnt_ns magic for pid: %d.\n", current->pid);
         return;
     }
 

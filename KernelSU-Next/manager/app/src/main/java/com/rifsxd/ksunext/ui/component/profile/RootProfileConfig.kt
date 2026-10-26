@@ -27,6 +27,8 @@ import com.rifsxd.ksunext.Natives
 import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.profile.Capabilities
 import com.rifsxd.ksunext.profile.Groups
+import com.rifsxd.ksunext.toRawFlags
+import com.rifsxd.ksunext.toRootProfileFlags
 import com.rifsxd.ksunext.ui.component.rememberCustomDialog
 import com.rifsxd.ksunext.ui.util.isSepolicyValid
 
@@ -145,6 +147,19 @@ fun RootProfileConfig(
                 )
             )
         }
+
+        RootProfileFlagPanel(
+            enabled = true,
+            selected = profile.flags.toRootProfileFlags(),
+            onSelectionChange = {
+                onProfileChange(
+                    profile.copy(
+                        flags = it.toRawFlags(),
+                        rootUseDefault = false
+                    )
+                )
+            }
+        )
 
         SELinuxPanel(profile = profile, onSELinuxChange = { domain, rules ->
             onProfileChange(
@@ -308,6 +323,75 @@ fun CapsPanel(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun RootProfileFlagPanel(
+    enabled: Boolean,
+    selected: List<Natives.Profile.RootProfileFlag>,
+    onSelectionChange: (flags: List<Natives.Profile.RootProfileFlag>) -> Unit
+) {
+    val selectFlagsDialog = rememberCustomDialog { dismiss ->
+        val flags = Natives.Profile.RootProfileFlag.entries.toTypedArray().sortedBy { it.display }
+        val options = flags.map { value ->
+            ListOption(
+                titleText = value.display,
+                subtitleText = stringResource(value.desc),
+                selected = selected.contains(value),
+            )
+        }
+
+        val selection = HashSet(selected)
+        ListDialog(
+            state = rememberUseCaseState(visible = true, onFinishedRequest = {
+                onSelectionChange(selection.toList())
+            }, onCloseRequest = {
+                dismiss()
+            }),
+            header = Header.Default(
+                title = stringResource(R.string.profile_flags),
+            ),
+            selection = ListSelection.Multiple(
+                showCheckBoxes = true,
+                options = options
+            ) { indecies, _ ->
+                // Handle selection
+                selection.clear()
+                indecies.forEach { index ->
+                    val flag = flags[index]
+                    selection.add(flag)
+                }
+            }
+        )
+    }
+
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable {
+                    if (enabled) selectFlagsDialog.show()
+                }
+                .padding(16.dp)
+        ) {
+            Text(stringResource(R.string.profile_flags))
+            FlowRow {
+                selected.forEach { flag ->
+                    AssistChip(
+                        modifier = Modifier.padding(3.dp),
+                        onClick = { /*TODO*/ },
+                        label = { Text(flag.display) })
+                }
+            }
+        }
+
+    }
+}
+
 @Composable
 private fun UidPanel(uid: Int, label: String, onUidChange: (Int) -> Unit) {
 
@@ -358,6 +442,7 @@ private fun SELinuxPanel(
     profile: Natives.Profile,
     onSELinuxChange: (domain: String, rules: String) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val editSELinuxDialog = rememberCustomDialog { dismiss ->
         var domain by remember { mutableStateOf(profile.context) }
         var rules by remember { mutableStateOf(profile.rules) }
@@ -381,7 +466,7 @@ private fun SELinuxPanel(
                     // value can be a-zA-Z0-9_
                     val regex = Regex("^[a-z_]+:[a-z0-9_]+:[a-z0-9_]+(:[a-z0-9_]+)?$")
                     if (value?.matches(regex) == true) ValidationResult.Valid
-                    else ValidationResult.Invalid("Domain must be in the format of \"user:role:type:level\"")
+                    else ValidationResult.Invalid(context.getString(R.string.profile_selinux_domain_invalid))
                 }
             ),
             InputTextField(
@@ -399,7 +484,7 @@ private fun SELinuxPanel(
                 },
                 validationListener = { value ->
                     if (isSepolicyValid(value)) ValidationResult.Valid
-                    else ValidationResult.Invalid("SELinux rules is invalid!")
+                    else ValidationResult.Invalid(context.getString(R.string.profile_selinux_rules_invalid))
                 }
             )
         )

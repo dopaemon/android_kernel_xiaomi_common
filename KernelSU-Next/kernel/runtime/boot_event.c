@@ -1,9 +1,11 @@
+#include "feature/selinux_hide.h"
 #include <linux/err.h>
 #include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/printk.h>
 
 #include "policy/allowlist.h"
+#include "policy/feature.h"
 #include "klog.h" // IWYU pragma: keep
 #include "runtime/ksud_boot.h"
 #include "runtime/ksud.h"
@@ -31,7 +33,10 @@ void on_post_fs_data(void)
     ksu_load_allow_list();
     ksu_observer_init();
     // Sanity check for safe mode only needs early-boot input samples.
-    ksu_input_hook = false;
+	ksu_input_hook = false;
+	ksu_selinux_hide_handle_post_fs_data();
+	// retry forced features that failed in second stage
+	ksu_feature_apply_forced();
 }
 
 extern void ext4_unregister_sysfs(struct super_block *sb);
@@ -68,5 +73,6 @@ void on_boot_completed(void)
     ksu_boot_completed = true;
     pr_info("on_boot_completed!\n");
     track_throne(true);
+    ksu_selinux_hide_drop_backup_if_unused();
     ksu_avc_spoof_late_init();
 }

@@ -1,3 +1,6 @@
+#include "hook/patch_memory.h"
+#include "infra/symbol_resolver.h"
+#include "linux/kallsyms.h"
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
@@ -62,6 +65,17 @@ void setup_groups(struct root_profile *profile, struct cred *cred)
 
 void seccomp_filter_release(struct task_struct *tsk);
 
+// https://cs.android.com/android/_/android/kernel/common/+/5346453405bf12d7ed6003f45dd47b71744fe1be
+// Some 15-6.6 kernel have this backport while others don't have, e.g. Pixel 10
+// See also:
+// https://github.com/tiann/KernelSU/issues/3629
+#define NEED_BACKPORT_COMPAT                                                                                           \
+    LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
+
+#if NEED_BACKPORT_COMPAT
+static bool has_call_to_spin_lock = false;
+#endif
+
 static void disable_seccomp(void)
 {
     struct task_struct *fake;
@@ -93,6 +107,12 @@ static void disable_seccomp(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
     // https://github.com/torvalds/linux/commit/bfafe5efa9754ebc991750da0bcca2a6694f3ed3#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R576-R577
     fake->flags |= PF_EXITING;
+#elif NEED_BACKPORT_COMPAT
+    if (has_call_to_spin_lock) {
+        fake->flags |= PF_EXITING;
+    } else {
+        fake->sighand = NULL;
+    }
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
     // https://github.com/torvalds/linux/commit/0d8315dddd2899f519fe1ca3d4d5cdaf44ea421e#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R556-R558
     fake->sighand = NULL;
@@ -106,7 +126,7 @@ int escape_with_root_profile(void)
 {
     int ret = 0;
     struct cred *cred;
-    struct root_profile profile;
+	struct root_profile *profile = NULL;
     struct user_struct *new_user;
 
     cred = prepare_creds();
@@ -120,21 +140,25 @@ int escape_with_root_profile(void)
         goto out_abort_creds;
     }
 
-    ksu_get_root_profile(cred->uid.val, &profile);
+    if (test_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT)) {
+        pr_warn("TIF_KSU_DISABLE_ESCAPE_WITH_ROOT found, don't escape!\n");
+        goto out_abort_creds;
+    }
 
-    cred->uid.val = profile.uid;
-    cred->suid.val = profile.uid;
-    cred->euid.val = profile.uid;
-    cred->fsuid.val = profile.uid;
+    profile = ksu_get_root_profile(cred->uid.val);
 
-    cred->gid.val = profile.gid;
-    cred->fsgid.val = profile.gid;
-    cred->sgid.val = profile.gid;
-    cred->egid.val = profile.gid;
+    cred->uid.val = profile->uid;
+    cred->suid.val = profile->uid;
+    cred->euid.val = profile->uid;
+    cred->fsuid.val = profile->uid;
+
+    cred->gid.val = profile->gid;
+    cred->fsgid.val = profile->gid;
+    cred->sgid.val = profile->gid;
+    cred->egid.val = profile->gid;
     cred->securebits = 0;
 
-    BUILD_BUG_ON(sizeof(profile.capabilities.effective) !=
-                 sizeof(kernel_cap_t));
+    BUILD_BUG_ON(sizeof(profile->capabilities.effective) != sizeof(kernel_cap_t));
 
     /*
      * Mirror the kernel set*uid path: update cred->user first, then
@@ -165,27 +189,32 @@ int escape_with_root_profile(void)
     }
 #endif
 
-    // setup capabilities
-    // we need CAP_DAC_READ_SEARCH becuase `/data/adb/ksud` is not accessible for non root process
-    // we add it here but don't add it to cap_inhertiable, it would be dropped automaticly after exec!
-    u64 cap_for_ksud = profile.capabilities.effective | CAP_DAC_READ_SEARCH;
-    memcpy(&cred->cap_effective, &cap_for_ksud, sizeof(cred->cap_effective));
-    memcpy(&cred->cap_permitted, &profile.capabilities.effective,
-           sizeof(cred->cap_permitted));
-    memcpy(&cred->cap_bset, &profile.capabilities.effective,
-           sizeof(cred->cap_bset));
+    memcpy(&cred->cap_effective, &profile->capabilities.effective, sizeof(cred->cap_effective));
+    memcpy(&cred->cap_permitted, &profile->capabilities.effective, sizeof(cred->cap_permitted));
+    memcpy(&cred->cap_bset, &profile->capabilities.effective, sizeof(cred->cap_bset));
+    if (profile->uid != 0) {
+        memcpy(&cred->cap_inheritable, &profile->capabilities.effective, sizeof(cred->cap_inheritable));
+        memcpy(&cred->cap_ambient, &profile->capabilities.effective, sizeof(cred->cap_ambient));
+    }
 
-    setup_groups(&profile, cred);
-    setup_selinux(profile.selinux_domain, cred);
+    setup_groups(profile, cred);
+    setup_selinux(profile->selinux_domain, cred);
 
     commit_creds(cred);
 
     disable_seccomp();
 
-    setup_mount_ns(profile.namespaces);
+	if (profile->flags & FLAG_KSU_NO_NEW_PRIVS) {
+		set_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT);
+	}
+
+	setup_mount_ns(profile->namespaces);
+	ksu_put_root_profile(profile);
     return 0;
 
 out_abort_creds:
+    if (profile)
+        ksu_put_root_profile(profile);
     abort_creds(cred);
     return ret;
 }
@@ -202,4 +231,21 @@ int escape_to_root_for_init(void)
     commit_creds(cred);
 
     return 0;
+}
+
+void __init ksu_app_profile_init(void)
+{
+#if NEED_BACKPORT_COMPAT
+    unsigned long size = 0;
+    int ret;
+    void *raw_spin_lock_irq_sym = find_kernel_symbol_exact("_raw_spin_lock_irq");
+    void *seccomp_filter_release_sym = find_kernel_symbol_exact("seccomp_filter_release");
+    ret = kallsyms_lookup_size_offset(seccomp_filter_release_sym, &size, NULL);
+    if (!ret || !size) {
+        pr_err("failed to get size of seccomp_filter_release: %d, use 128\n", ret);
+        size = 128;
+    }
+    has_call_to_spin_lock = scan_call_to(seccomp_filter_release_sym, size, raw_spin_lock_irq_sym) != NULL;
+    pr_info("seccomp_filter_release has_call_to_spin_lock = %d\n", has_call_to_spin_lock);
+#endif
 }

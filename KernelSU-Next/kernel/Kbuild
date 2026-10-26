@@ -1,13 +1,16 @@
 kernelsu-objs := core/init.o
 
 kernelsu-objs += feature/kernel_umount.o
+kernelsu-objs += feature/module_blacklist.o
+kernelsu-objs += feature/sulog.o
 kernelsu-objs += feature/sucompat.o
 
 kernelsu-objs += hook/setuid_hook.o
+
 kernelsu-objs += extras.o
-kernelsu-objs += tiny_sulog.o
 
 kernelsu-objs += infra/file_wrapper.o
+kernelsu-objs += infra/event_queue.o
 kernelsu-objs += infra/seccomp_cache.o
 kernelsu-objs += infra/su_mount_ns.o
 kernelsu-objs += infra/symbol_resolver.o
@@ -29,9 +32,17 @@ kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/rules.o
 kernelsu-objs += selinux/sepolicy.o
 
+kernelsu-objs += sulog/event.o
+kernelsu-objs += sulog/fd.o
+
 kernelsu-objs += supercall/dispatch.o
 kernelsu-objs += supercall/perm.o
 kernelsu-objs += supercall/supercall.o
+
+kernelsu-objs += feature/adb_root.o
+
+kernelsu-objs += feature/selinux_hide.o
+kernelsu-objs += feature/shell_su_adb_only.o
 
 ifdef KBUILD_EXTMOD
 ifeq ($(CONFIG_KSU_DISABLE_MANAGER),y)
@@ -43,12 +54,22 @@ endif
 ifeq ($(CONFIG_KSU_DEBUG),y)
 ccflags-y += -DCONFIG_KSU_DEBUG=1
 endif
+ifeq ($(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER),y)
+ccflags-y += -DCONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=1
+endif
 endif
 
 ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
 ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-generic/errno.h
 
-ifeq ($(filter /%,$(src)),)
+ifneq ($(KBUILD_EXTMOD),)
+# 6.18 exports the external module source as srcroot when M/MO are used.
+ifneq ($(srcroot),)
+KSU_KERNEL_DIR := $(srcroot)
+else
+KSU_KERNEL_DIR := $(KBUILD_EXTMOD)
+endif
+else ifeq ($(filter /%,$(src)),)
 KSU_KERNEL_DIR := $(srctree)/$(src)
 else
 KSU_KERNEL_DIR := $(src)
@@ -62,8 +83,8 @@ LPATH := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin
 MDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # Hardcore version
-KSU_GIT_VERSION := 3110
-KSU_GIT_TAG := v3.2.0
+KSU_GIT_VERSION := 3355
+KSU_GIT_TAG := v3.4.2
 KSU_GIT_VERSION_VALID := 1
 KSU_GIT_TAG_VALID := 1
 
@@ -116,7 +137,7 @@ ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
 
 ccflags-y += -DKSU_NEW_DCACHE_FLUSH=$(KSU_NEW_DCACHE_FLUSH)
 
-ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
+ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes -Wno-missing-declarations
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
 
 # Keep a new line here!! Because someone may append config

@@ -7,7 +7,7 @@
 #include <linux/version.h>
 #include <linux/namei.h>
 #include <linux/susfs.h>
-
+#include <linux/thread_info.h>
 #include "uapi/supercall.h"
 #include "supercall/internal.h"
 #include "arch.h" // IWYU pragma: keep
@@ -21,20 +21,24 @@
 #include "selinux/selinux.h"
 #include "infra/file_wrapper.h"
 #include "policy/app_profile.h"
+#include "sulog/event.h"
+#include "sulog/fd.h"
 #include "supercall/supercall.h"
-
-#include "tiny_sulog.h"
 
 static int do_grant_root(void __user *arg)
 {
+    int ret;
+    __u32 audit_uid = current_uid().val;
+    __u32 audit_euid = current_euid().val;
+
     // we already check uid above on allowed_for_su()
 
-    write_sulog('i'); // log ioctl escalation
+    pr_info("allow root for: %d\n", audit_uid);
+    ret = escape_with_root_profile();
+    ksu_sulog_emit_grant_root(ret, audit_uid, audit_euid, GFP_KERNEL);
+    ksu_compat_sulog('i');
 
-    pr_info("allow root for: %d\n", current_uid().val);
-    escape_with_root_profile();
-
-    return 0;
+    return ret;
 }
 
 static int do_get_info(void __user *arg)
@@ -43,6 +47,9 @@ static int do_get_info(void __user *arg)
 
 #ifdef MODULE
     cmd.flags |= KSU_GET_INFO_FLAG_LKM;
+    if (ksu_bundled) {
+        cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;
+    }
 #endif
 
     if (ksuver_override)
@@ -52,8 +59,39 @@ static int do_get_info(void __user *arg)
         cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
     }
 #ifdef EXPECTED_SIZE2
-    cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;
+	cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;
 #endif
+    if (ksu_late_loaded) {
+        cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
+    }
+    cmd.features = KSU_FEATURE_MAX;
+    cmd.uapi_version = KERNEL_SU_UAPI_VERSION;
+
+    if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+        pr_err("get_version: copy_to_user failed\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+static int do_get_info_legacy(void __user *arg)
+{
+    struct ksu_get_info_legacy_cmd cmd = { .version = KERNEL_SU_VERSION, .flags = 0 };
+
+#ifdef MODULE
+    cmd.flags |= KSU_GET_INFO_FLAG_LKM;
+    if (ksu_bundled) {
+        cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;
+    }
+#endif
+
+    if (is_manager()) {
+        cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
+    }
+    if (ksu_late_loaded) {
+        cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
+    }
     cmd.features = KSU_FEATURE_MAX;
 
     if (copy_to_user(arg, &cmd, sizeof(cmd))) {
@@ -66,6 +104,7 @@ static int do_get_info(void __user *arg)
 
 static int do_report_event(void __user *arg)
 {
+    static bool services_started = false;
     struct ksu_report_event_cmd cmd;
 
     if (copy_from_user(&cmd, arg, sizeof(cmd))) {
@@ -75,6 +114,9 @@ static int do_report_event(void __user *arg)
     switch (cmd.event) {
     case EVENT_POST_FS_DATA: {
         static bool post_fs_data_lock = false;
+
+        // Reset for emulated soft reboot
+        services_started = false;
         if (!post_fs_data_lock) {
             post_fs_data_lock = true;
             pr_info("post-fs-data triggered\n");
@@ -96,6 +138,15 @@ static int do_report_event(void __user *arg)
         pr_info("module mounted!\n");
         on_module_mounted();
         break;
+    }
+    case EVENT_SERVICES: {
+        if (services_started) {
+            pr_info("services already started, skipping\n");
+            return 0;
+        }
+        services_started = true;
+        pr_info("services triggered\n");
+        return 1;
     }
     default:
         break;
@@ -243,7 +294,7 @@ static int do_uid_granted_root(void __user *arg)
         return -EFAULT;
     }
 
-    cmd.granted = ksu_is_allow_uid_for_current(cmd.uid);
+    cmd.granted = ksu_is_uid_granted_root(cmd.uid);
 
     if (copy_to_user(arg, &cmd, sizeof(cmd))) {
         pr_err("uid_granted_root: copy_to_user failed\n");
@@ -290,24 +341,30 @@ static int do_get_app_profile(void __user *arg)
 #ifdef CONFIG_KSU_DISABLE_POLICY
     return -EOPNOTSUPP;
 #endif
+    uid_t uid;
+    struct app_profile *profile;
+    int ret = 0;
 
-    struct ksu_get_app_profile_cmd cmd;
-
-    if (copy_from_user(&cmd, arg, sizeof(cmd))) {
+    if (copy_from_user(&uid, (char __user *)arg + offsetof(struct ksu_get_app_profile_cmd, profile.curr_uid),
+                       sizeof(uid_t))) {
         pr_err("get_app_profile: copy_from_user failed\n");
         return -EFAULT;
     }
 
-    if (!ksu_get_app_profile(&cmd.profile)) {
-        return -ENOENT;
+    rcu_read_lock();
+    profile = ksu_get_app_profile(uid);
+    rcu_read_unlock();
+    if (!profile) {
+        ret = -ENOENT;
+    } else {
+        if (copy_to_user((char __user *)arg + offsetof(struct ksu_get_app_profile_cmd, profile), profile,
+                         sizeof(struct app_profile))) {
+            pr_err("get_app_profile: copy_to_user failed\n");
+            ret = -EFAULT;
+        }
+        ksu_put_app_profile(profile);
     }
-
-    if (copy_to_user(arg, &cmd, sizeof(cmd))) {
-        pr_err("get_app_profile: copy_to_user failed\n");
-        return -EFAULT;
-    }
-
-    return 0;
+    return ret;
 }
 
 static int do_set_app_profile(void __user *arg)
@@ -334,7 +391,7 @@ static int do_set_app_profile(void __user *arg)
 static int do_get_feature(void __user *arg)
 {
     struct ksu_get_feature_cmd cmd;
-    bool supported;
+    bool supported = false;
     int ret;
 
     if (copy_from_user(&cmd, arg, sizeof(cmd))) {
@@ -343,7 +400,13 @@ static int do_get_feature(void __user *arg)
     }
 
     ret = ksu_get_feature(cmd.feature_id, &cmd.value, &supported);
-    cmd.supported = supported ? 1 : 0;
+    cmd.supported = 0;
+    if (supported) {
+        cmd.supported |= KSU_FEATURE_FLAG_SUPPORTED;
+        if (ksu_feature_is_forced(cmd.feature_id)) {
+            cmd.supported |= KSU_FEATURE_FLAG_FORCED;
+        }
+    }
 
     if (ret && supported) {
         pr_err("get_feature: failed for feature %u: %d\n", cmd.feature_id, ret);
@@ -478,7 +541,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 
         reply = (unsigned long)*arg;
 
-        ret = send_sulog_dump((void __user *)*arg);
+		ret = ksu_sulog_handle_compat_dump((void __user *)*arg);
         if (ret)
             return 0;
 
@@ -903,6 +966,29 @@ out:
     return err;
 }
 
+static int do_get_sulog_fd(void __user *arg)
+{
+    struct ksu_get_sulog_fd_cmd cmd;
+
+    if (copy_from_user(&cmd, arg, sizeof(cmd))) {
+        pr_err("get_sulog_fd: copy_from_user failed\n");
+        return -EFAULT;
+    }
+
+    if (cmd.flags) {
+        pr_err("get_sulog_fd: unsupported flags 0x%x\n", cmd.flags);
+        return -EINVAL;
+    }
+
+    return ksu_install_sulog_fd();
+}
+
+static int do_disable_escape_to_root(void __user *arg)
+{
+    set_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT);
+    return 0;
+}
+
 // IOCTL handlers mapping table
 // clang-format off
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
@@ -916,6 +1002,12 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .cmd = KSU_IOCTL_GET_INFO,
         .name = "GET_INFO",
         .handler = do_get_info,
+        .perm_check = always_allow
+    },
+    {
+        .cmd = KSU_IOCTL_GET_INFO_LEGACY,
+        .name = "GET_INFO_LEGACY",
+        .handler = do_get_info_legacy,
         .perm_check = always_allow
     },
     {
@@ -982,13 +1074,13 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .cmd = KSU_IOCTL_GET_APP_PROFILE,
         .name = "GET_APP_PROFILE",
         .handler = do_get_app_profile,
-        .perm_check = only_manager
+        .perm_check = manager_or_root
     },
     {
         .cmd = KSU_IOCTL_SET_APP_PROFILE,
         .name = "SET_APP_PROFILE",
         .handler = do_set_app_profile,
-        .perm_check = only_manager
+        .perm_check = manager_or_root
     },
     {
         .cmd = KSU_IOCTL_GET_FEATURE,
@@ -1006,7 +1098,8 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .cmd = KSU_IOCTL_GET_WRAPPER_FD,
         .name = "GET_WRAPPER_FD",
         .handler = do_get_wrapper_fd,
-        .perm_check = manager_or_root
+        .perm_check = manager_or_root,
+        .allow_su_session = true
     },
     {
         .cmd = KSU_IOCTL_MANAGE_MARK,
@@ -1033,6 +1126,19 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .perm_check = only_root
     },
     {
+        .cmd = KSU_IOCTL_GET_SULOG_FD,
+        .name = "GET_SULOG_FD",
+        .handler = do_get_sulog_fd,
+        .perm_check = only_root
+    },
+    { 
+        .cmd = KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT, 
+        .name = "DISABLE_ESCAPE_TO_ROOT", 
+        .handler = do_disable_escape_to_root, 
+        .perm_check = only_root,
+        .allow_su_session = true
+    },
+    {
         .cmd = KSU_IOCTL_GET_HOOK_MODE,
         .name = "GET_HOOK_MODE",
         .handler = do_get_hook_mode,
@@ -1053,7 +1159,7 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
 };
 // clang-format on
 
-long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp)
+long ksu_supercall_handle_ioctl(const struct file *filp, unsigned int cmd, void __user *argp)
 {
     int i;
 
@@ -1064,7 +1170,8 @@ long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp)
     for (i = 0; ksu_ioctl_handlers[i].handler; i++) {
         if (cmd == ksu_ioctl_handlers[i].cmd) {
             // Check permission first
-            if (ksu_ioctl_handlers[i].perm_check && !ksu_ioctl_handlers[i].perm_check()) {
+            if (ksu_ioctl_handlers[i].perm_check && !ksu_ioctl_handlers[i].perm_check() &&
+                !(ksu_ioctl_handlers[i].allow_su_session && ksu_is_su_session_fd(filp))) {
                 pr_warn("ksu ioctl: permission denied for cmd=0x%x uid=%d\n", cmd, current_uid().val);
                 return -EPERM;
             }

@@ -12,8 +12,14 @@
     <a href="https://github.com/KernelSU-Next/KernelSU-Next/releases/latest">
       <img src="https://img.shields.io/github/v/release/KernelSU-Next/KernelSU-Next?label=Release&logo=github" alt="Latest Release">
     </a>
-    <a href="https://nightly.link/KernelSU-Next/KernelSU-Next/workflows/build-manager-ci/next/Manager">
+    <a href="https://github.com/KernelSU-Next/KernelSU-Next/releases">
+      <img src="https://img.shields.io/github/downloads/KernelSU-Next/KernelSU-Next/total?label=Downloads&logo=github" alt="Total Downloads">
+    </a>
+    <a href="https://nightly.link/KernelSU-Next/KernelSU-Next/workflows/build-manager-ci/dev/manager">
       <img src="https://img.shields.io/badge/Nightly%20Release-gray?logo=hackthebox&logoColor=fff" alt="Nightly Build">
+    </a>
+    <a href="https://github.com/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml">
+      <img src="https://github.com/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/badge.svg" alt="Build Status">
     </a>
     <a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html">
       <img src="https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu" alt="License: GPL v2">
@@ -30,25 +36,28 @@
 ## 🚀 Özellikler
 
 - Çekirdek tabanlı `su` ve root erişim yönetimi.
-- [Magic Mount](https://topjohnwu.github.io/Magisk/details.html#magic-mount)** ve [OverlayFS](https://en.wikipedia.org/wiki/OverlayFS) tabanlı modül sistemi.
-- [Uygulama Profili](https://kernelsu.org/guide/app-profile.html): Uygulama başına root yetkisini sınırlandırma.
+- [metamodules](https://kernelsu.org/guide/metamodule.html) tabanlı modül sistemi: sistem dışı değişiklikler için eklenebilir altyapı.
+- GKI 2.0 cihazlarda dahili SUSFS LKM sürücü yükleme desteği.
+- Şüpheli modüllerin kurulmasını engelleyen risk algılama.
+- Modüller ve uygulama profilleri için yedekleme ve geri yükleme desteği.
+- [Uygulama Profili](https://kernelsu.org/guide/app-profile.html): root gücünü bir kafese kapatır.
 
 ---
 
 ## ✅ Uyumluluk
 
-KernelSU Next, **4.4 ile 6.6** arasındaki Android çekirdeklerini destekler.
+KernelSU Next, **4.4 ile 6.18** arasındaki Android çekirdeklerini destekler.
 
-| Çekirdek Sürümü      | Destek Notları                                                      |
-|----------------------|---------------------------------------------------------------------|
-| 5.10+ (GKI 2.0)      | Hazır imajlar ve LKM/KMI desteği                                    |
-| 4.19 – 5.4 (GKI 1.0) | KernelSU sürücüsünün çekirdeğe gömülü olması gerekir                |
-| < 4.14 (EOL)         | KernelSU sürücüsü gerekir (3.18+ deneysel olup yama gerektirebilir) |
+| Çekirdek sürümü | Destek notları |
+|----------------------|-------------------------------------------------------------------------|
+| 5.10+ (GKI 2.0)      | Önceden derlenmiş imajlar ve LKM/KMI desteği |
+| 4.19 – 5.4 (GKI 1.0) | KernelSU sürücüsünün çekirdeğe gömülü olması gerekir |
+| < 4.14 (EOL)         | KernelSU sürücüsü gerekir (3.18+ deneysel olup geri yama gerekebilir) |
 
-**Desteklenen mimariler:** `arm64-v8a`, `armeabi-v7a`, `x86_64`
+**Desteklenen mimariler:** `arm64-v8a` ve `x86_64`
 
 > [!CAUTION]
-> Yeni çekirdek sürümleri, KernelSU Next'nun çökmesine ve `x86_64` üzerinde kernel panic tetiklemesine neden olabilecek uyumsuz bir değişiklik uyguladı! Daha fazla bilgi için web sitesini kontrol edin!
+> Yeni çekirdek sürümleri, KernelSU Next'in çalışmasını bozacak ve `x86_64` üzerinde kernel panic tetikleyebilecek kırıcı bir değişiklik uyguladı! Daha fazla bilgi için web sitesini kontrol edin!
 
 ---
 
@@ -58,9 +67,10 @@ Kurulum talimatları için [Kurulum Kılavuzu](https://kernelsu-next.github.io/w
 
 ---
 
-## 🏅 Güvenlik
+## 🏅 Katkı
 
-Güvenlik açıklarını bildirmek için lütfen [SECURITY.md](/SECURITY.md) dosyasına bakınız.
+- Yönetici için çeviri göndermek için [Crowdin](https://crowdin.com/project/kernelsu-next) adresine gidin!
+- Güvenlik açıklarını bildirmek için lütfen [SECURITY.md](/SECURITY.md) dosyasına bakınız.
 
 ---
 
@@ -73,22 +83,21 @@ Güvenlik açıklarını bildirmek için lütfen [SECURITY.md](/SECURITY.md) dos
 
 ## 💸 Bağışlar
 
-Projeye destek olmak isterseniz:
+Projeyi desteklemek isterseniz:
 
-- **USDT (BEP20, ERC20)**: `0x12b5224b7aca0121c2f003240a901e1d064371c1`
-- **USDT (TRC20)**: `TYUVMWGTcnR5svnDoX85DWHyqUAeyQcdjh`
-- **USDT (SOL)**: `A4wqBXYd6Ey4nK4SJ2bmjeMgGyaLKT9TwDLh8BEo8Zu6`
-- **ETH (ERC20)**: `0x12b5224b7aca0121c2f003240a901e1d064371c1`
-- **LTC**: `Ld238uYBuRQdZB5YwdbkuU6ektBAAUByoL`
-- **BTC**: `19QgifcjMjSr1wB2DJcea5cxitvWVcXMT6`
+- **USDT (BEP20, ERC20)**: `0x0b269716dc00692676e4217e23c7f67abd5f0f3e`
+- **USDT (TRC20)**: `TXu6VX8dvJLQPx4WBobjbYT5tefHTDikWo`
+- **LTC**: `LMYRqRXPKAFpYncBhNS44W1iwFit14LH1u`
 
 ---
 
 ## 🙏 Katkıda Bulunanlar
 
-- [Kernel-Assisted Superuser](https://git.zx2c4.com/kernel-assisted-superuser/about/) – KernelSU Fikrinin temeli
-- [Magisk](https://github.com/topjohnwu/Magisk) – Temel root altyapısı
+- [Kernel-Assisted Superuser](https://git.zx2c4.com/kernel-assisted-superuser/about/) – Kavramsal ilham
+- [Magisk](https://github.com/topjohnwu/Magisk) – Temel root uygulaması
 - [Genuine](https://github.com/brevent/genuine/) – APK v2 imza doğrulaması
 - [Diamorphine](https://github.com/m0nad/Diamorphine) – Rootkit teknikleri
-- [KernelSU](https://github.com/tiann/KernelSU) – KernelSU Next'in temelini oluşturan orijinal proje
-- [Magic Mount Port](https://github.com/5ec1cff/KernelSU/blob/main/userspace/ksud/src/magic_mount.rs) – KernelSU’yu kurtardığı için 💜 5ec1cff’e teşekkürler
+- [KernelSU](https://github.com/tiann/KernelSU) – KernelSU Next'in mümkün olmasını sağlayan orijinal temel
+- [Susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) – KernelSU için çekirdek seviyesinde root gizleme eklentisi
+- [Susfs4ksu-lkm](https://github.com/inforcqb/susfs4ksu-lkm) – Yüklenebilir çekirdek modülü olarak taşınan SUSFS
+

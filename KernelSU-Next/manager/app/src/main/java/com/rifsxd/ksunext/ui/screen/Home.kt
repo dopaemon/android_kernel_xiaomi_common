@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -81,6 +82,7 @@ import com.rifsxd.ksunext.ui.webui.WebUIActivity
 import com.rifsxd.ksunext.ui.util.restartActivity
 import com.rifsxd.ksunext.ui.util.module.LatestVersionInfo
 import com.rifsxd.ksunext.ui.viewmodel.ModuleViewModel
+import com.rifsxd.ksunext.ui.LocalNavBarEnabled
 import com.rifsxd.ksunext.ui.LocalScrollState 
 import com.rifsxd.ksunext.ui.screen.BottomBarDestination
 import com.rifsxd.ksunext.ui.trackScroll 
@@ -98,9 +100,11 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
     val isManager = Natives.isManager
-    val fullFeatured = isManager && !Natives.requireNewKernel() && rootAvailable()
+    val fullFeatured = Natives.isFullFeatured()
     val ksuVersion = if (isManager) Natives.version else null
     val ksuVersionTag = if (isManager) Natives.getVersionTag() else null
+    val kernelUAPIVersion = if (isManager) Natives.kernelUAPIVersion else null
+    val managerUAPIVersion = Natives.managerUAPIVersion
 
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -110,7 +114,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     val bottomBarScrollState = LocalScrollState.current
 
     val scrollState = LocalScrollState.current
-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
+    val navBarEnabled = LocalNavBarEnabled.current
+    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (navBarEnabled?.value == false)
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
     
     // Create scroll connection for bottom bar
@@ -131,6 +136,16 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 onInstallClick = {
                     navigator.navigate(InstallScreenDestination)
                 },
+                onSettingsClick = {
+                    navigator.navigate(SettingScreenDestination) {
+                        popUpTo(NavGraphs.root.startRoute) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                navBarEnabled = LocalNavBarEnabled.current?.value ?: true,
                 scrollBehavior = scrollBehavior
             )
         },
@@ -159,7 +174,13 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 Natives.isLkmMode
             }
 
-            StatusCard(kernelVersion, ksuVersion, lkmMode, ksuVersionTag = ksuVersionTag) {
+            StatusCard(
+                kernelVersion,
+                ksuVersion,
+                kernelUAPIVersion,
+                lkmMode,
+                ksuVersionTagParam = ksuVersionTag
+            ) {
                 navigator.navigate(InstallScreenDestination)
             }
 
@@ -203,11 +224,43 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 }
             }
 
-            if (isManager && Natives.requireNewKernel()) {
+            val currentVersionCode = getManagerVersion(context).second
+            val requiresNewKernel = isManager && kernelUAPIVersion != null && managerUAPIVersion > kernelUAPIVersion
+            val requiresNewManager = isManager && kernelUAPIVersion != null && managerUAPIVersion < kernelUAPIVersion
+
+            // Jailbreak mode runs on locked bootloaders, so flashing a boot image would brick the device.
+            val canInstallKernelUpdate = lkmMode == true && !Natives.isLateLoadMode
+
+            if (requiresNewKernel) {
                 WarningCard(
-                    stringResource(id = R.string.require_kernel_version).format(
-                        ksuVersion, Natives.MINIMAL_SUPPORTED_KERNEL
+                    stringResource(
+                        id = if (canInstallKernelUpdate) R.string.require_kernel_version else R.string.require_kernel_version_gki,
+                        kernelUAPIVersion!!,
+                        managerUAPIVersion
+                    ),
+                    onClick = if (canInstallKernelUpdate) {
+                        { navigator.navigate(InstallScreenDestination) }
+                    } else null
+                )
+            }
+
+            if (requiresNewManager) {
+                WarningCard(
+                    stringResource(
+                        id = R.string.require_manager_version,
+                        managerUAPIVersion,
+                        kernelUAPIVersion!!
                     )
+                )
+            }
+
+            val showLkmUpdate = isManager && lkmMode == true && Natives.isLkmBundled && ksuVersion?.toLong() != currentVersionCode && !requiresNewKernel && !requiresNewManager
+
+            if (showLkmUpdate) {
+                WarningCard(
+                    message = stringResource(R.string.home_lkm_update_available),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    onClick = { navigator.navigate(InstallScreenDestination) }
                 )
             }
 
@@ -279,8 +332,10 @@ private fun ModuleCard(onClick: (() -> Unit)? = null) {
     val count = getModuleCount()
     val moduleViewModel: ModuleViewModel = viewModel()
 
-    val moduleUpdateCount = moduleViewModel.moduleList.count {
-        moduleViewModel.checkUpdate(it).first.isNotEmpty()
+    val moduleUpdateCount = remember(moduleViewModel.moduleList) {
+        moduleViewModel.moduleList.count { module ->
+            module.enabled && (moduleViewModel.checkUpdate(module).first.isNotEmpty())
+        }
     }
 
     // State machine: 0 = nothing, 1 = show "+ Update!", 2 = show "+ X"
@@ -607,6 +662,8 @@ private fun TopBar(
     kernelVersion: KernelVersion,
     ksuVersion: Int?,
     onInstallClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    navBarEnabled: Boolean,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     var isSpinning by remember { mutableStateOf(false) }
@@ -629,13 +686,7 @@ private fun TopBar(
     ) { }
 
     val context = LocalContext.current
-
-    LaunchedEffect(Unit) {
-        isSpinning = true
-        rotationTarget += 360f * 6
-    }
-
-        TopAppBar(
+    TopAppBar(
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -666,6 +717,15 @@ private fun TopBar(
             }
         },
         actions = {
+            if (!navBarEnabled) {
+                IconButton(onClick = onSettingsClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = stringResource(id = R.string.settings)
+                    )
+                }
+            }
+
             if (ksuVersion != null) {
                 IconButton(onClick = onInstallClick) {
                     Icon(
@@ -713,19 +773,20 @@ private fun TopBar(
 
 @Composable
 private fun StatusCard(
-    kernelVersion: KernelVersion,
-    ksuVersion: Int?,
-    lkmMode: Boolean?,
+    kernelVersionParam: KernelVersion,
+    ksuVersionParam: Int?,
+    uapiVerParam: Int? = null,
+    lkmModeParam: Boolean?,
     moduleUpdateCount: Int = 0,
-    ksuVersionTag: String? = null,
+    ksuVersionTagParam: String? = null,
     onClickInstall: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = run {
-            if (ksuVersion != null) MaterialTheme.colorScheme.primary
-            else if (kernelVersion.isGKI()) MaterialTheme.colorScheme.secondaryContainer
+            if (ksuVersionParam != null) MaterialTheme.colorScheme.primary
+            else if (kernelVersionParam.isGKI()) MaterialTheme.colorScheme.secondaryContainer
             else MaterialTheme.colorScheme.errorContainer
         })
     ) {
@@ -733,17 +794,17 @@ private fun StatusCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    if (ksuVersion == null) {
+                    if (ksuVersionParam == null) {
                         onClickInstall()
                     }
                 }
                 .padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
             when {
-                ksuVersion != null -> {
-                    val workingMode = if (lkmMode == true || lkmMode == false) {
-                        val mode = if (lkmMode == true) "LKM" else "BUILT-IN"
-                        "$mode (" + kernelVersion.getKernelType() + ")"
-                    } else kernelVersion.getKernelType()
+                ksuVersionParam != null -> {
+                    val workingMode = if (lkmModeParam == true || lkmModeParam == false) {
+                        val mode = if (lkmModeParam == true) "LKM" else "BUILT-IN"
+                        "$mode (" + kernelVersionParam.getKernelType() + ")"
+                    } else kernelVersionParam.getKernelType()
 
                     Icon(
                         imageVector = Icons.Filled.Mood,
@@ -844,19 +905,38 @@ private fun StatusCard(
                             )
                         }
 
-                        val versionText = if (!ksuVersionTag.isNullOrEmpty()) {
-                            stringResource(id = R.string.home_working_version, ksuVersionTag, ksuVersion ?: 0)
-                        } else {
-                            stringResource(id = R.string.home_working_version, "v0.0.0", ksuVersion ?: 0)
-                        }
-                        Text(
-                            text = versionText,
-                            style = MaterialTheme.typography.bodySmall
+                        val ksuVer = ksuVersionParam ?: 0
+                        val uapiVer = uapiVerParam ?: 0
+                        val tag = if (!ksuVersionTagParam.isNullOrEmpty()) ksuVersionTagParam else "v0.0.0"
+                        val versionText = stringResource(
+                            R.string.home_working_version,
+                            tag,
+                            "$ksuVer-$uapiVer"
                         )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = versionText,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            if (lkmModeParam == true && !Natives.isLkmBundled) {
+                                Spacer(Modifier.width(8.dp))
+                                Surface(
+                                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.home_lkm_custom),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
-                kernelVersion.isGKI() -> {
+                kernelVersionParam.isGKI() -> {
                     Icon(Icons.Filled.AutoFixHigh, null)
                     Column(Modifier.padding(start = 20.dp)) {
                         Text(
@@ -918,24 +998,96 @@ fun WarningCard(
     }
 }
 
+private data class HomeInfoSnapshot(
+    val managerVersion: Pair<String, Long> = "" to 0L,
+    val managerUAPIVersion: Int = 0,
+    val managerAppId: Int = 0,
+    val hookMode: String? = null,
+    val metaModule: String? = null,
+    val metaInfo: ModuleViewModel.ModuleInfo? = null,
+    val suSFS: String? = null,
+    val suSFSVersion: String? = null,
+    val suSFSVariant: String? = null,
+    val zygiskEnabled: Boolean = false,
+    val zygiskInfo: ModuleViewModel.ModuleInfo? = null,
+    val unameRelease: String = "",
+    val unameMachine: String = "",
+    val seccompStatus: String = "Unavailable",
+    val selinuxStatusRes: Int = R.string.selinux_status_unknown,
+)
+
+private fun buildHomeInfoSnapshot(
+    context: Context,
+    ksuVersion: Int?,
+    moduleList: List<ModuleViewModel.ModuleInfo>,
+): HomeInfoSnapshot {
+    val managerVersion = getManagerVersion(context)
+    val managerUAPIVersion = Natives.managerUAPIVersion
+    val managerAppId = Natives.getManagerAppid()
+    val hookMode = if (ksuVersion == null) null else {
+        Natives.getHookMode().takeUnless { it.isNullOrBlank() } ?: "Unavailable"
+    }
+    val metaModule = if (ksuVersion == null) null else getMetaModule()
+    val metaInfo = if (metaModule == null) null else moduleList.firstOrNull { it.isMetaModule }
+    val suSFS = if (ksuVersion == null) null else getSuSFS()
+    val suSFSVersion = if (suSFS == "Supported" && ksuVersion != null) getSuSFSVersion() else null
+    val suSFSVariant = if (suSFS == "Supported" && ksuVersion != null) getSuSFSVariant() else null
+    val zygiskEnabled = if (ksuVersion == null) false else Natives.isZygiskEnabled()
+    val zygiskInfo = if (!zygiskEnabled) null else moduleList.firstOrNull { it.isZygisk && it.enabled }
+    val uname = kotlin.runCatching { Os.uname() }.getOrNull()
+    val statusInt = kotlin.runCatching { Os.prctl(21, 0, 0, 0, 0) }.getOrDefault(-1)
+    val seccompStatus = when (statusInt) {
+        -1 -> "Unavailable"
+        0 -> "Disabled"
+        1 -> "Strict"
+        2 -> "Filter"
+        else -> "Unknown"
+    }
+
+    return HomeInfoSnapshot(
+        managerVersion = managerVersion,
+        managerUAPIVersion = managerUAPIVersion,
+        managerAppId = managerAppId,
+        hookMode = hookMode,
+        metaModule = metaModule,
+        metaInfo = metaInfo,
+        suSFS = suSFS,
+        suSFSVersion = suSFSVersion,
+        suSFSVariant = suSFSVariant,
+        zygiskEnabled = zygiskEnabled,
+        zygiskInfo = zygiskInfo,
+        unameRelease = uname?.release.orEmpty(),
+        unameMachine = uname?.machine.orEmpty(),
+        seccompStatus = seccompStatus,
+        selinuxStatusRes = getSELinuxStatus(),
+    )
+}
+
 @Composable
 private fun InfoCard(autoExpand: Boolean = false) {
     val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
 
-    val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-
-    val isManager = Natives.isManager
-    val ksuVersion = if (isManager) Natives.version else null
+    val isManager = remember { Natives.isManager }
+    val ksuVersion = remember(isManager) { if (isManager) Natives.version else null }
 
     var expanded by rememberSaveable { mutableStateOf(false) }
-
-    val developerOptionsEnabled = prefs.getBoolean("enable_developer_options", false)
+    val developerOptionsEnabled = remember(prefs) { prefs.getBoolean("enable_developer_options", false) }
 
     LaunchedEffect(autoExpand) {
         if (autoExpand) {
             expanded = true
         }
-    }   
+    }
+
+    val moduleViewModel: ModuleViewModel = viewModel()
+    var homeInfo by remember { mutableStateOf(HomeInfoSnapshot()) }
+
+    LaunchedEffect(ksuVersion, moduleViewModel.moduleList) {
+        homeInfo = withContext(Dispatchers.IO) {
+            buildHomeInfoSnapshot(context, ksuVersion, moduleViewModel.moduleList)
+        }
+    }
 
     Card {
         Column(
@@ -976,86 +1128,69 @@ private fun InfoCard(autoExpand: Boolean = false) {
             }
 
             Column {
-                val managerVersion = getManagerVersion(context)
                 InfoCardItem(
                     label = stringResource(R.string.home_manager_version),
-                    content = if (
-                        developerOptionsEnabled
-                    ) {
-                        "${managerVersion.first} (${managerVersion.second}) | UID: ${Natives.getManagerAppid()}"
+                    content = if (developerOptionsEnabled) {
+                        "${homeInfo.managerVersion.first} (${homeInfo.managerVersion.second}-${homeInfo.managerUAPIVersion}) | UID: ${homeInfo.managerAppId}"
                     } else {
-                        "${managerVersion.first} (${managerVersion.second})"
+                        "${homeInfo.managerVersion.first} (${homeInfo.managerVersion.second}-${homeInfo.managerUAPIVersion})"
                     },
                     icon = Icons.Filled.AutoAwesomeMotion,
                 )
 
                 if (ksuVersion != null) {
-
-                    val hookMode =
-                        Natives.getHookMode()
-                            .takeUnless { it.isNullOrBlank() }
-                            ?: stringResource(R.string.unavailable)
-
                     Spacer(Modifier.height(16.dp))
-
                     InfoCardItem(
-                        label   = stringResource(R.string.hook_mode),
-                        content = hookMode,
-                        icon    = Icons.Filled.Phishing,
+                        label = stringResource(R.string.hook_mode),
+                        content = homeInfo.hookMode ?: stringResource(R.string.unavailable),
+                        icon = Icons.Filled.Phishing,
                     )
                 }
 
                 if (ksuVersion != null) {
+                    val metaInfo = homeInfo.metaInfo
+                    val metaDetail = if (metaInfo != null) " | ${metaInfo.name} | ${metaInfo.version}" else ""
                     Spacer(Modifier.height(16.dp))
-                    
-                    val moduleViewModel: ModuleViewModel = viewModel()
-                    val meta = moduleViewModel.moduleList.firstOrNull {
-                        it.isMetaModule && it.enabled && !it.remove
-                    }
-
-                    val mountSystem = currentMountSystem()
-                        .ifBlank { stringResource(R.string.unavailable) }
-
-                    val content = listOfNotNull(
-                        mountSystem,
-                        meta?.name?.takeIf { it.isNotBlank() }
-                            ?: stringResource(R.string.home_not_installed),
-                        meta?.version?.takeIf { it.isNotBlank() }
-                    ).joinToString(" | ")
-
                     InfoCardItem(
-                        label = stringResource(R.string.home_mount_system),
-                        content = content,
+                        label = stringResource(R.string.home_metamodule_status),
+                        content = when {
+                            homeInfo.metaModule == "Installed" && metaInfo != null && !metaInfo.enabled ->
+                                stringResource(R.string.disabled) + metaDetail
+                            homeInfo.metaModule == "Installed" ->
+                                stringResource(R.string.installed) + metaDetail
+                            else ->
+                                stringResource(R.string.home_not_installed)
+                        },
                         icon = Icons.Filled.SettingsSuggest
                     )
 
-                    val suSFS = getSuSFS()
-                    if (suSFS == "Supported") {
+                    if (homeInfo.suSFS == "Supported") {
                         Spacer(Modifier.height(16.dp))
                         InfoCardItem(
                             label = stringResource(R.string.home_susfs_version),
-                            content = "${stringResource(R.string.supported)} | ${getSuSFSVersion()} (${getSuSFSVariant()})",
+                            content = "${stringResource(R.string.supported)} | ${homeInfo.suSFSVersion ?: stringResource(R.string.unavailable)} (${homeInfo.suSFSVariant ?: stringResource(R.string.unavailable)})",
                             icon = painterResource(R.drawable.ic_sus),
                         )
                     }
 
-                    if (Natives.isZygiskEnabled()) {
+                    if (homeInfo.zygiskEnabled) {
                         Spacer(Modifier.height(16.dp))
+                        val zygiskInfo = homeInfo.zygiskInfo
+                        val zygiskDetail = if (zygiskInfo != null) " | ${zygiskInfo.name} | ${zygiskInfo.version}" else ""
                         InfoCardItem(
                             label = stringResource(R.string.zygisk_status),
-                            content = "${stringResource(R.string.enabled)} | ${getZygiskImplementation("name")} | ${getZygiskImplementation("version")}",
+                            content = stringResource(R.string.enabled) + zygiskDetail,
                             icon = Icons.Filled.Vaccines
                         )
                     }
                 }
 
                 AnimatedVisibility(visible = expanded) {
-                    val uname = Os.uname()
                     Column {
                         Spacer(Modifier.height(16.dp))
                         InfoCardItem(
                             label = stringResource(R.string.home_kernel),
-                            content = "${uname.release} (${uname.machine})",
+                            content = "${homeInfo.unameRelease} (${homeInfo.unameMachine})",
                             icon = painterResource(R.drawable.ic_linux),
                         )
 
@@ -1076,30 +1211,36 @@ private fun InfoCard(autoExpand: Boolean = false) {
                         Spacer(Modifier.height(16.dp))
                         InfoCardItem(
                             label = stringResource(R.string.home_selinux_status),
-                            content = getSELinuxStatus(),
+                            content = stringResource(homeInfo.selinuxStatusRes),
                             icon = Icons.Filled.Security,
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+                        InfoCardItem(
+                            label = stringResource(R.string.home_seccomp_status),
+                            content = homeInfo.seccompStatus,
+                            icon = Icons.Filled.LocalPolice
                         )
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center
                 ) {
                     val rotationAngle by animateFloatAsState(
                         targetValue = if (expanded) 180f else 0f,
                         animationSpec = tween(durationMillis = 300)
                     )
-                    
+
                     IconButton(
                         onClick = { expanded = !expanded },
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = if (expanded) "Show less" else "Show more",
+                            contentDescription = if (expanded) null else null,
                             modifier = Modifier.graphicsLayer {
                                 rotationZ = rotationAngle
                             }
@@ -1128,33 +1269,33 @@ fun ContributorsCard() {
             login = "rifsxd",
             name = "Rifat Azad",
             githubUrl = "https://github.com/rifsxd",
-            role = "Lead Developer",
+            role = stringResource(R.string.contributor_lead_developer),
             donationUrl = "https://github.com/KernelSU-Next/KernelSU-Next/tree/dev?tab=readme-ov-file#-donations"
         ),
         Contributor(
             login = "tiann",
             name = "Weishu",
             githubUrl = "https://github.com/tiann",
-            role = "KernelSU Author",
+            role = stringResource(R.string.contributor_kernel_author),
             donationUrl = "https://www.patreon.com/weishu"
         ),
         Contributor(
             login = "fatalcoder524",
             githubUrl = "https://github.com/fatalcoder524",
-            role = "Frontend Maintainer",
+            role = stringResource(R.string.contributor_frontend_maintainer),
             donationUrl = "https://github.com/sponsors/fatalcoder524"
         ),
         Contributor(
             login = "pershoot",
             githubUrl = "https://github.com/pershoot",
-            role = "Backend Maintainer",
+            role = stringResource(R.string.contributor_backend_maintainer),
             donationUrl = "https://github.com/sponsors/pershoot"
         ),
         Contributor(
             login = "maxsteeel",
             name = "Max",
             githubUrl = "https://github.com/maxsteeel",
-            role = "Legacy Maintainer",
+            role = stringResource(R.string.contributor_legacy_maintainer),
             donationUrl = "https://github.com/sponsors/maxsteeel"
         )
     )
@@ -1368,10 +1509,10 @@ fun getManagerVersion(context: Context): Pair<String, Long> {
 @Composable
 private fun StatusCardPreview() {
     Column {
-        StatusCard(KernelVersion(5, 10, 101), 1, null)
-        StatusCard(KernelVersion(5, 10, 101), 20000, true)
-        StatusCard(KernelVersion(5, 10, 101), null, true)
-        StatusCard(KernelVersion(4, 10, 101), null, false)
+        StatusCard(KernelVersion(5, 10, 101), 1, 1, null)
+        StatusCard(KernelVersion(5, 10, 101), 20000, 1, true)
+        StatusCard(KernelVersion(5, 10, 101), null, null, true)
+        StatusCard(KernelVersion(4, 10, 101), null, null, false)
     }
 }
 

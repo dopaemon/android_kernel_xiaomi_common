@@ -10,10 +10,11 @@
 #include <sys/prctl.h>
 #include <utility>
 
-#include "uapi/supercall.h"
-#include "uapi/app_profile.h"
-#include "uapi/feature.h"
-#include "uapi/selinux.h"
+#include "uapi/ksu.h"
+
+uint32_t get_kernel_uapi_version();
+
+uint32_t get_manager_uapi_version();
 
 uint32_t get_version();
 
@@ -22,6 +23,8 @@ bool uid_should_umount(int uid);
 bool is_safe_mode();
 
 bool is_lkm_mode();
+
+bool is_lkm_bundled();
 
 bool is_late_load_mode();
 
@@ -50,6 +53,16 @@ bool is_su_enabled();
 bool set_kernel_umount_enabled(bool enabled);
 
 bool is_kernel_umount_enabled();
+
+// ADB root
+bool set_adb_root_enabled(bool enabled);
+
+bool is_adb_root_enabled();
+
+// SELinux hide
+int set_selinux_hide_enabled(bool enabled);
+
+bool is_selinux_hide_enabled();
 
 // Avc spoof
 bool set_avc_spoof_enabled(bool enabled);

@@ -3,6 +3,10 @@ use crate::utils::*;
 use crate::{
     assets, defs, ksucalls, metamodule,
     restorecon::{restore_syscon, setsyscon},
+    risk::{
+        contains_risk_in_module, is_risk_detection_enabled, print_risk_block, print_risk_pause_prompt,
+        print_risk_timeout_block, RiskSeverity,
+    },
     sepolicy,
 };
 
@@ -10,24 +14,27 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use const_format::concatcp;
 use is_executable::is_executable;
 use java_properties::PropertiesIter;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use regex_lite::Regex;
 
-use std::fs::{copy, rename};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     env::var as env_var,
     fs::{File, Permissions, canonicalize, remove_dir_all, set_permissions},
     io::Cursor,
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
+    time::Instant,
+};
+use std::{
+    fs::{copy, rename},
+    io::Write,
 };
 use zip_extensions::inflate::zip_extract::zip_extract_file_to_memory;
 
 use crate::defs::{MODULE_DIR, MODULE_UPDATE_DIR, UPDATE_FILE_NAME};
 use crate::module::ModuleType::{Active, All};
-#[cfg(unix)]
 use std::os::unix::{prelude::PermissionsExt, process::CommandExt};
 
 const INSTALLER_CONTENT: &str = include_str!("./installer.sh");
@@ -41,29 +48,31 @@ const INSTALL_MODULE_SCRIPT: &str = concatcp!(
 );
 
 /// Validate module_id format and security
-/// Module ID must match: ^[a-zA-Z][a-zA-Z0-9._-]+$
-/// - Must start with a letter (a-zA-Z)
+/// Module ID must match: ^[a-zA-Z0-9][a-zA-Z0-9._-]+$
+/// - Must start with a letter or number (a-zA-Z0-9)
 /// - Followed by one or more alphanumeric, dot, underscore, or hyphen characters
 /// - Minimum length: 2 characters
 pub fn validate_module_id(module_id: &str) -> Result<()> {
-    let re = Regex::new(r"^[a-zA-Z][a-zA-Z0-9._-]+$")?;
+    let re = Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9._-]+$")?;
     if re.is_match(module_id) {
         Ok(())
     } else {
         Err(anyhow!(
-            "Invalid module ID: '{module_id}'. Must match /^[a-zA-Z][a-zA-Z0-9._-]+$/"
+            "Invalid module ID: '{module_id}'. Must match /^[a-zA-Z0-9][a-zA-Z0-9._-]+$/"
         ))
     }
 }
 
 /// Get common environment variables for script execution
-pub fn get_common_script_envs() -> Vec<(&'static str, String)> {
+pub fn get_common_script_envs(module_id: Option<&str>) -> Vec<(&'static str, String)> {
     let mut envs = vec![
         ("ASH_STANDALONE", "1".to_string()),
         ("KSU", "true".to_string()),
         ("KSU_KERNEL_VER_CODE", ksucalls::get_version().to_string()),
         ("KSU_VER_CODE", defs::VERSION_CODE.to_string()),
         ("KSU_VER", defs::VERSION_NAME.to_string()),
+        ("KSU_UAPI_VER", ksucalls::uapi_version().to_string()),
+        ("KSU_RUNTIME_MODE", ksucalls::runtime_mode().to_string()),
         (
             "PATH",
             format!(
@@ -74,6 +83,14 @@ pub fn get_common_script_envs() -> Vec<(&'static str, String)> {
         ),
     ];
 
+    if let Some(id) = module_id {
+        if validate_module_id(id).is_ok() {
+            envs.push(("KSU_MODULE", id.to_string()));
+        } else {
+            error!("Invalid module_id provided: {id}");
+        }
+    }
+
     if ksucalls::is_late_load() {
         envs.push(("KSU_LATE_LOAD", "1".to_string()));
     }
@@ -81,7 +98,7 @@ pub fn get_common_script_envs() -> Vec<(&'static str, String)> {
     envs
 }
 
-fn exec_install_script(module_file: &str, is_metamodule: bool) -> Result<()> {
+fn exec_install_script(module_file: &str, is_metamodule: bool, module_id: &str) -> Result<()> {
     let realpath = std::fs::canonicalize(module_file)
         .with_context(|| format!("realpath: {module_file} failed"))?;
 
@@ -91,7 +108,7 @@ fn exec_install_script(module_file: &str, is_metamodule: bool) -> Result<()> {
 
     let result = Command::new(assets::BUSYBOX_PATH)
         .args(["sh", "-c", &install_script])
-        .envs(get_common_script_envs())
+        .envs(get_common_script_envs(Some(module_id)))
         .env("OUTFD", "1")
         .env("ZIPFILE", realpath)
         .status()?;
@@ -157,10 +174,10 @@ pub fn load_sepolicy_rule() -> Result<()> {
         if !rule_file.exists() {
             return Ok(());
         }
-        info!("load policy: {}", &rule_file.display());
+        info!("load policy: {}", rule_file.display());
 
         if sepolicy::apply_file(&rule_file).is_err() {
-            warn!("Failed to load sepolicy.rule for {}", &rule_file.display());
+            warn!("Failed to load sepolicy.rule for {}", rule_file.display());
         }
         Ok(())
     })?;
@@ -168,7 +185,96 @@ pub fn load_sepolicy_rule() -> Result<()> {
     Ok(())
 }
 
-pub fn exec_script<T: AsRef<Path>>(path: T, wait: bool) -> Result<()> {
+#[derive(Clone, Copy)]
+pub enum ScriptWait {
+    NoWait,
+    Forever,
+    Until(Instant),
+}
+
+struct SigchldBlock {
+    set: libc::sigset_t,
+    previous: libc::sigset_t,
+}
+
+impl SigchldBlock {
+    fn block() -> std::io::Result<Self> {
+        // Initialize both sets before passing them to libc.
+        let mut set = unsafe { std::mem::zeroed() };
+        let mut previous = unsafe { std::mem::zeroed() };
+        unsafe {
+            libc::sigemptyset(&raw mut set);
+            libc::sigaddset(&raw mut set, libc::SIGCHLD);
+            if libc::sigprocmask(libc::SIG_BLOCK, &raw const set, &raw mut previous) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+        Ok(Self { set, previous })
+    }
+
+    fn wait_until(&self, pid: libc::pid_t, deadline: Instant) -> std::io::Result<bool> {
+        loop {
+            // Only reap the script being waited for. Other children can also send SIGCHLD.
+            let result = unsafe { libc::waitpid(pid, std::ptr::null_mut(), libc::WNOHANG) };
+            if result == pid {
+                return Ok(true);
+            }
+            if result < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(error);
+            }
+
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Ok(false);
+            }
+            let timeout = libc::timespec {
+                tv_sec: remaining.as_secs() as libc::time_t,
+                tv_nsec: remaining.subsec_nanos().into(),
+            };
+            // SIGCHLD stays blocked between waitpid and sigtimedwait to avoid lost wakeups.
+            if unsafe {
+                libc::sigtimedwait(
+                    &raw const self.set,
+                    std::ptr::null_mut(),
+                    &raw const timeout,
+                )
+            } < 0
+            {
+                let error = std::io::Error::last_os_error();
+                match error.raw_os_error() {
+                    Some(libc::EAGAIN) => return Ok(false),
+                    Some(libc::EINTR) => {}
+                    _ => return Err(error),
+                }
+            }
+        }
+    }
+}
+
+impl Drop for SigchldBlock {
+    fn drop(&mut self) {
+        // Restore the parent's signal mask on success, timeout, and every error path.
+        if unsafe {
+            libc::sigprocmask(
+                libc::SIG_SETMASK,
+                &raw const self.previous,
+                std::ptr::null_mut(),
+            )
+        } != 0
+        {
+            warn!(
+                "Failed to restore signal mask: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+}
+
+pub fn exec_script<T: AsRef<Path>>(path: T, wait: ScriptWait) -> Result<()> {
     info!("exec {}", path.as_ref().display());
 
     let is_module_script = path.as_ref().starts_with(defs::MODULE_DIR);
@@ -208,48 +314,53 @@ pub fn exec_script<T: AsRef<Path>>(path: T, wait: bool) -> Result<()> {
         );
     }
 
-    let mut command = &mut Command::new(assets::BUSYBOX_PATH);
-    #[cfg(unix)]
-    {
-        command = unsafe {
-            command.pre_exec(|| {
-                if let Err(e) = ksucalls::set_init_pgrp() {
-                    log::error!("failed to set init group: {e:?}");
-                    libc::setpgid(0, 0);
-                }
-                // ignore the error?
-                switch_cgroups();
-                Ok(())
-            })
-        };
-    }
-    command = command
+    let sigchld = SigchldBlock::block().context("Failed to block SIGCHLD")?;
+    let original_sigmask = sigchld.previous;
+    let mut command = Command::new(assets::BUSYBOX_PATH);
+    unsafe {
+        command.pre_exec(move || {
+            if libc::sigprocmask(
+                libc::SIG_SETMASK,
+                &raw const original_sigmask,
+                std::ptr::null_mut(),
+            ) != 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+            detach_process_group(true);
+            // ignore the error?
+            switch_cgroups();
+            Ok(())
+        })
+    };
+    command
         .current_dir(path.as_ref().parent().unwrap())
         .arg("sh")
         .arg(path.as_ref())
-        .envs(get_common_script_envs());
+        .envs(get_common_script_envs(validated_module_id));
 
-    // Set KSU_MODULE environment variable if module_id was validated successfully
-    if let Some(id) = validated_module_id {
-        command = command.env("KSU_MODULE", id);
-    }
-
-    let result = if wait {
-        command.status().map(|_| ())
-    } else {
-        command.spawn().map(|_| ())
+    let result = match wait {
+        ScriptWait::NoWait => command.spawn().map(|_| ()),
+        ScriptWait::Forever => command.status().map(|_| ()),
+        ScriptWait::Until(deadline) => command.spawn().and_then(|child| {
+            // Once the shared deadline has passed, launch later scripts without waiting.
+            if deadline > Instant::now()
+                && !sigchld.wait_until(child.id() as libc::pid_t, deadline)?
+            {
+                warn!("Timed out waiting for script: {}", path.as_ref().display());
+            }
+            Ok(())
+        }),
     };
     result.map_err(|e| anyhow!("Failed to exec {}: {e}", path.as_ref().display()))
 }
 
-pub fn exec_stage_script(stage: &str, block: bool) -> Result<()> {
+pub fn exec_stage_script(stage: &str, wait: ScriptWait) -> Result<()> {
     let metamodule_dir = metamodule::get_metamodule_path().and_then(|path| canonicalize(path).ok());
 
     foreach_active_module(|module| {
         if metamodule_dir.as_ref().is_some_and(|meta_dir| {
-            canonicalize(module)
-                .map(|resolved| resolved == *meta_dir)
-                .unwrap_or(false)
+            canonicalize(module).is_ok_and(|resolved| resolved == *meta_dir)
         }) {
             return Ok(());
         }
@@ -259,13 +370,13 @@ pub fn exec_stage_script(stage: &str, block: bool) -> Result<()> {
             return Ok(());
         }
 
-        exec_script(&script_path, block)
+        exec_script(&script_path, wait)
     })?;
 
     Ok(())
 }
 
-pub fn exec_common_scripts(dir: &str, wait: bool) -> Result<()> {
+pub fn exec_common_scripts(dir: &str, wait: ScriptWait) -> Result<()> {
     let script_dir = Path::new(defs::ADB_DIR).join(dir);
     if !script_dir.exists() {
         info!("{} not exists, skip", script_dir.display());
@@ -315,9 +426,8 @@ pub fn prune_modules() -> Result<()> {
         let module_id = module.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         // Check if this is a metamodule
-        let is_metamodule = read_module_prop(module)
-            .map(|props| metamodule::is_metamodule(&props))
-            .unwrap_or(false);
+        let is_metamodule =
+            read_module_prop(module).is_ok_and(|props| metamodule::is_metamodule(&props));
 
         if is_metamodule {
             info!("Removing metamodule symlink");
@@ -325,13 +435,13 @@ pub fn prune_modules() -> Result<()> {
                 warn!("Failed to remove metamodule symlink: {e}");
             }
         } else if let Err(e) = metamodule::exec_metauninstall_script(module_id) {
-            warn!("Failed to exec metamodule uninstall for {module_id}: {e}",);
+            warn!("Failed to exec metamodule uninstall for {module_id}: {e}");
         }
 
         // Then execute module's own uninstall.sh
         let uninstaller = module.join("uninstall.sh");
         if uninstaller.exists()
-            && let Err(e) = exec_script(uninstaller, true)
+            && let Err(e) = exec_script(uninstaller, ScriptWait::Forever)
         {
             warn!("Failed to exec uninstaller: {e}");
         }
@@ -362,8 +472,130 @@ pub fn prune_modules() -> Result<()> {
     Ok(())
 }
 
+const METADATA_FILE_CON: &str = "u:object_r:metadata_file:s0";
+
+// Prefer /metadata/watchdog/ when present, else /metadata.
+fn preinit_ksu_dir() -> &'static str {
+    if Path::new("/metadata/watchdog").is_dir() {
+        defs::PREINIT_DIR_WATCHDOG
+    } else {
+        defs::PREINIT_DIR_DEFAULT
+    }
+}
+
+fn collect_rc_files<P: AsRef<Path>>(
+    dir: P,
+    mod_id: Option<&str>,
+    out: &mut dyn Write,
+) -> Result<()> {
+    let dir = dir.as_ref();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(());
+    };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let path = entry.path();
+        let Ok(meta) = entry.metadata() else { continue };
+        if meta.is_file() && path.extension().and_then(|s| s.to_str()) == Some("rc") {
+            if let Some(mod_id) = mod_id {
+                writeln!(out, "# === from {mod_id}:{} ===", path.display())?;
+            } else {
+                // Although the rc file itself is not executable, we still use its executable bit as a switch.
+                if !is_executable(&path) {
+                    continue;
+                }
+                writeln!(out, "# === from {} ===", path.display())?;
+            }
+            let content = std::fs::read(&path)
+                .with_context(|| format!("Failed to read rc {}", path.display()))?;
+            out.write_all(&content)?;
+            writeln!(out)?;
+        }
+    }
+    Ok(())
+}
+
+/// Rebuild PREINITDIR/modules.rc by concatenating *.rc from every enabled
+/// module. The kernel-side read hook splices this file into init.rc on the
+/// next boot.
+pub fn regenerate_preinit_rc() -> Result<()> {
+    let preinit_str = preinit_ksu_dir();
+    let preinit_dir = Path::new(preinit_str);
+    std::fs::create_dir_all(preinit_dir)
+        .with_context(|| format!("Failed to create {}", preinit_dir.display()))?;
+
+    let tmp_path_buf = preinit_dir.join(defs::MODULES_RC_TMP_FILE);
+    let out_path_buf = preinit_dir.join(defs::MODULES_RC_FILE);
+    let tmp_path = tmp_path_buf.as_path();
+    let out_path = out_path_buf.as_path();
+
+    {
+        let mut tmp = File::create(tmp_path)
+            .with_context(|| format!("Failed to create {}", tmp_path.display()))?;
+
+        // collect modules in alphabetical order, with their effective module path in the next boot
+        let mut modules: BTreeMap<String, Option<PathBuf>> = BTreeMap::new();
+        // collect common initrc first
+        collect_rc_files(Path::new(defs::ADB_DIR).join("initrc.d"), None, &mut tmp)?;
+        // modules_update/ first so freshly-installed modules win on id collision.
+        for src_dir in [defs::MODULE_UPDATE_DIR, defs::MODULE_DIR] {
+            let Ok(entries) = std::fs::read_dir(src_dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let module_path = entry.path();
+                if !module_path.is_dir() {
+                    continue;
+                }
+                let Some(id) = module_path.file_name().and_then(|s| s.to_str()) else {
+                    continue;
+                };
+                let id = id.to_string();
+                if module_path.join(defs::DISABLE_FILE_NAME).exists()
+                    || module_path.join(defs::REMOVE_FILE_NAME).exists()
+                {
+                    modules.insert(id, None);
+                    continue;
+                }
+                modules.entry(id).or_insert(Some(module_path));
+            }
+        }
+        for (id, path) in modules {
+            if let Some(path) = path {
+                collect_rc_files(path.join(defs::MODULE_INIT_RC_DIR), Some(&id), &mut tmp)?;
+            }
+        }
+        tmp.sync_all()?;
+    }
+
+    std::fs::rename(tmp_path, out_path).with_context(|| {
+        format!(
+            "Failed to rename {} -> {}",
+            tmp_path.display(),
+            out_path.display()
+        )
+    })?;
+
+    // SELinux label so the kernel's filp_open in init context can read it.
+    if let Err(e) = crate::restorecon::lsetfilecon(out_path, METADATA_FILE_CON) {
+        debug!("set context on {} failed: {e}", out_path.display());
+    }
+
+    // Clear stale file at the other candidate path.
+    let stale_dir = if preinit_str == defs::PREINIT_DIR_WATCHDOG {
+        defs::PREINIT_DIR_DEFAULT
+    } else {
+        defs::PREINIT_DIR_WATCHDOG
+    };
+    std::fs::remove_file(Path::new(stale_dir).join(defs::MODULES_RC_FILE)).ok();
+
+    Ok(())
+}
+
 pub fn handle_updated_modules() -> Result<()> {
     let modules_root = Path::new(MODULE_DIR);
+    ensure_dir_exists(modules_root)?;
     foreach_module(ModuleType::Updated, |updated_module| {
         if !updated_module.is_dir() {
             return Ok(());
@@ -412,6 +644,34 @@ fn install_module_to_system(zip: &str) -> Result<()> {
     let zip_path = PathBuf::from_str(zip)?;
     let zip_path = zip_path.canonicalize()?;
     zip_extract_file_to_memory(&zip_path, &entry_path, &mut buffer)?;
+
+    if is_risk_detection_enabled() && let Some(risk_match) = contains_risk_in_module(&zip_path) {
+        match risk_match.severity {
+            RiskSeverity::Low | RiskSeverity::Medium => {
+                print_risk_pause_prompt(risk_match.severity, &risk_match.reason);
+
+                let volume_down = Command::new(assets::BUSYBOX_PATH)
+                    .args([
+                        "ash",
+                        "-c",
+                        "timeout 5 /system/bin/getevent -ql 2>/dev/null | grep -q 'KEY_VOLUMEDOWN'",
+                    ])
+                    .status()
+                    .with_context(|| "Failed to wait for volume-down key")?;
+
+                if !volume_down.success() {
+                    print_risk_timeout_block();
+                    bail!("Module installation stopped");
+                }
+
+                println!("✅ Installation allowed after user confirmation.\n");
+            }
+            RiskSeverity::High | RiskSeverity::Extreme => {
+                print_risk_block(risk_match.severity, &risk_match.reason);
+                bail!("Module installation blocked");
+            }
+        }
+    }
 
     let mut module_prop = HashMap::new();
     PropertiesIter::new_with_encoding(Cursor::new(buffer), encoding_rs::UTF_8).read_into(
@@ -511,14 +771,13 @@ fn install_module_to_system(zip: &str) -> Result<()> {
     // Set permission and selinux context for $MOD/system
     let module_system_dir = updated_dir.join("system");
     if module_system_dir.exists() {
-        #[cfg(unix)]
         set_permissions(&module_system_dir, Permissions::from_mode(0o755))?;
         restore_syscon(&module_system_dir)?;
     }
 
     // Execute install script
     println!("- Running module installer");
-    exec_install_script(zip, is_metamodule)?;
+    exec_install_script(zip, is_metamodule, module_id)?;
 
     let module_dir = Path::new(MODULE_DIR).join(module_id);
     ensure_dir_exists(&module_dir)?;
@@ -541,9 +800,13 @@ fn install_module_to_system(zip: &str) -> Result<()> {
 }
 
 pub fn install_module(zip: &str) -> Result<()> {
+    ksucalls::ensure_uapi_version_matched()?;
+
     let result = install_module_to_system(zip);
     if let Err(ref e) = result {
         println!("- Error: {e}");
+    } else if let Err(e) = regenerate_preinit_rc() {
+        warn!("regenerate preinit rc failed: {e}");
     }
     result
 }
@@ -562,6 +825,10 @@ pub fn restore_module(id: &str) -> Result<()> {
         info!("Removed the remove mark for module {id}");
     }
 
+    if let Err(e) = regenerate_preinit_rc() {
+        warn!("regenerate preinit rc failed: {e}");
+    }
+
     Ok(())
 }
 
@@ -577,14 +844,19 @@ pub fn uninstall_module(id: &str) -> Result<()> {
 
     info!("Module {id} marked for removal");
 
+    if let Err(e) = regenerate_preinit_rc() {
+        warn!("regenerate preinit rc failed: {e}");
+    }
+
     Ok(())
 }
 
 pub fn run_action(id: &str) -> Result<()> {
     validate_module_id(id)?;
+    ksucalls::ensure_uapi_version_matched()?;
 
     let action_script_path = format!("/data/adb/modules/{id}/action.sh");
-    exec_script(&action_script_path, true)
+    exec_script(&action_script_path, ScriptWait::Forever)
 }
 
 pub fn enable_module(id: &str) -> Result<()> {
@@ -601,6 +873,10 @@ pub fn enable_module(id: &str) -> Result<()> {
         info!("Module {id} enabled");
     }
 
+    if let Err(e) = regenerate_preinit_rc() {
+        warn!("regenerate preinit rc failed: {e}");
+    }
+
     Ok(())
 }
 
@@ -613,16 +889,28 @@ pub fn disable_module(id: &str) -> Result<()> {
 
     info!("Module {id} disabled");
 
+    if let Err(e) = regenerate_preinit_rc() {
+        warn!("regenerate preinit rc failed: {e}");
+    }
+
     Ok(())
 }
 
 pub fn disable_all_modules() -> Result<()> {
-    mark_all_modules(defs::DISABLE_FILE_NAME)
+    mark_all_modules(defs::DISABLE_FILE_NAME)?;
+    if let Err(e) = regenerate_preinit_rc() {
+        warn!("regenerate preinit rc failed: {e}");
+    }
+    Ok(())
 }
 
 pub fn uninstall_all_modules() -> Result<()> {
     info!("Uninstalling all modules");
-    mark_all_modules(defs::REMOVE_FILE_NAME)
+    mark_all_modules(defs::REMOVE_FILE_NAME)?;
+    if let Err(e) = regenerate_preinit_rc() {
+        warn!("regenerate preinit rc failed: {e}");
+    }
+    Ok(())
 }
 
 fn mark_all_modules(flag_file: &str) -> Result<()> {
@@ -805,10 +1093,14 @@ fn list_module(path: &str) -> Vec<HashMap<String, String>> {
     modules
 }
 
-pub fn mount_system() -> Result<()> {
-    println!("Mount system: {}", defs::MOUNT_SYSTEM);
+pub fn is_metamodule_installed() -> Result<()> {
 
-    Ok(())
+    if metamodule::has_metamodule() {
+        println!("Installed");
+        return Ok(());
+    } else {
+        Err(anyhow!("Unsupported"))
+    }
 }
 
 pub fn list_modules() -> Result<()> {

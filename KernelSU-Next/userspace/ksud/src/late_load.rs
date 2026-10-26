@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use log::{info, warn};
-use std::process::Command;
+use rustix::cstr;
+use std::{process::Command, time::Instant};
 
-use crate::module::{handle_updated_modules, prune_modules};
+use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
 use crate::{assets, defs, init_event, metamodule, restorecon, utils};
 
 fn dump_process_info(label: &str) {
@@ -34,8 +35,8 @@ fn dump_process_info(label: &str) {
     );
 }
 
-pub fn run() -> Result<()> {
-    utils::daemonize(|| Ok(()))?;
+pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Result<()> {
+    utils::daemonize(false)?;
     info!("late-load command triggered!");
     dump_process_info("late-load start");
 
@@ -44,9 +45,12 @@ pub fn run() -> Result<()> {
         info!("KernelSU already loaded, skip loading ko");
     } else {
         // 2. Detect current KMI version
-        let kmi =
-            crate::boot_patch::get_current_kmi().context("Failed to detect current KMI version")?;
+        let kmi = kmi.map_or_else(
+            || crate::boot_patch::get_current_kmi().context("Failed to detect current KMI version"),
+            Ok,
+        )?;
         info!("Detected KMI: {kmi}");
+
 
         // 3. Get kernelsu.ko from embedded assets
         let ko_name = format!("{kmi}_kernelsu.ko");
@@ -55,7 +59,13 @@ pub fn run() -> Result<()> {
 
         // 4. Load kernelsu.ko from memory with manual relocation
         info!("Loading kernelsu.ko for KMI {kmi}...");
-        ksuinit::load_module(&ko_data).context("Failed to load kernelsu.ko")?;
+        // bundled flag is meaningless in jailbreak mode since we can't flash boot to update it.
+        let params = if allow_shell {
+            cstr!("allow_shell=1")
+        } else {
+            cstr!("")
+        };
+        ksuinit::load_module(&ko_data, params).context("Failed to load kernelsu.ko")?;
         info!("kernelsu.ko loaded successfully!");
         dump_process_info("after load_module");
     }
@@ -95,12 +105,14 @@ pub fn run() -> Result<()> {
     }
 
     // 7. Initialize features
+    crate::feature::init_forced_features();
     if let Err(e) = crate::feature::init_features() {
         warn!("init features failed: {e}");
     }
 
-    // 8. Execute late-load stage scripts (blocking)
-    init_event::run_stage("late-load", true);
+    // 8. Execute late-load stage scripts with a shared boot deadline
+    let wait = ScriptWait::Until(Instant::now() + defs::BOOT_STAGE_TIMEOUT);
+    init_event::run_stage("late-load", wait);
 
     // 9. Load system.prop
     if let Err(e) = crate::module::load_system_prop() {
@@ -112,21 +124,24 @@ pub fn run() -> Result<()> {
         warn!("execute metamodule mount failed: {e}");
     }
 
-    // 11. Execute post-mount stage scripts (blocking)
-    init_event::run_stage("post-mount", true);
+    // 11. Execute post-mount stage scripts using the same deadline
+    init_event::run_stage("post-mount", wait);
 
     // 12. Execute service stage scripts (non-blocking)
-    init_event::run_stage("service", false);
+    init_event::run_stage("service", ScriptWait::NoWait);
 
     // 13. Execute boot-completed stage scripts (non-blocking)
-    init_event::run_stage("boot-completed", false);
+    init_event::run_stage("boot-completed", ScriptWait::NoWait);
 
     // 14. Restart Manager so it gets a fresh ksu fd from the newly loaded kernel module
-    info!("Restarting KernelSU Manager...");
-    let pkg = "com.rifsxd.ksunext";
-    let _ = Command::new("am").args(["force-stop", pkg]).status();
+    info!("Restarting KernelSU Next Manager {package_name}...");
+    let _ = Command::new("am").args(["force-stop", package_name]).status();
     let _ = Command::new("am")
-        .args(["start", "-n", &format!("{pkg}/.ui.MainActivity")])
+        .args([
+            "start",
+            "-n",
+            &format!("{package_name}/com.rifsxd.ksunext.ui.MainActivity"),
+        ])
         .status();
 
     Ok(())

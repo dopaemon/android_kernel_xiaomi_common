@@ -5,6 +5,7 @@ import android.os.Build
 import android.system.Os
 import com.rifsxd.ksunext.Natives
 import com.rifsxd.ksunext.ui.screen.getManagerVersion
+import com.rifsxd.ksunext.ui.util.nonRootShell
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.ShellUtils
 import java.io.File
@@ -43,7 +44,8 @@ fun getBugreportFile(context: Context): File {
     val shell = createRootShell(true)
 
     // busybox ps has very few features for embed devices
-    shell.newJob().add("toybox ps -T -A -w -o PID,TID,UID,COMM,CMDLINE,CMD,LABEL,STAT,WCHAN > ${processFile.absolutePath}").exec()
+    shell.newJob()
+        .add("toybox ps -T -A -w -o PID,TID,UID,COMM,CMDLINE,CMD,LABEL,STAT,WCHAN > ${processFile.absolutePath}").exec()
     shell.newJob().add("dmesg -r > ${dmesgFile.absolutePath}").exec()
     shell.newJob().add("logcat -b all -v uid -d > ${logcatFile.absolutePath}").exec()
     shell.newJob().add("tar -czf ${tombstonesFile.absolutePath} -C /data/tombstones .").exec()
@@ -114,3 +116,50 @@ fun getBugreportFile(context: Context): File {
     return targetFile
 }
 
+fun getBugreportFileUnrooted(context: Context): File {
+    val bugreportDir = File(context.cacheDir, "bugreport")
+    bugreportDir.mkdirs()
+
+    val processFile = File(bugreportDir, "process.txt")
+    val logcatFile = File(bugreportDir, "logcat.txt")
+    val propFile = File(bugreportDir, "props.txt")
+    val mountinfo = File(bugreportDir, "mountinfo.txt")
+
+    nonRootShell("toybox ps -T -A -w -o PID,TID,UID,COMM,CMDLINE,CMD,LABEL,STAT,WCHAN > ${processFile.absolutePath}")
+    nonRootShell("logcat -b all -v uid -d > ${logcatFile.absolutePath}")
+    nonRootShell("getprop > ${propFile.absolutePath}")
+    nonRootShell("cat /proc/self/mountinfo > ${mountinfo.absolutePath}")
+
+    val buildInfo = File(bugreportDir, "basic.txt")
+    PrintWriter(FileWriter(buildInfo)).use { pw ->
+        pw.println("Kernel: ${System.getProperty("os.version")}")
+        pw.println("BRAND: " + Build.BRAND)
+        pw.println("MODEL: " + Build.MODEL)
+        pw.println("PRODUCT: " + Build.PRODUCT)
+        pw.println("MANUFACTURER: " + Build.MANUFACTURER)
+        pw.println("ANDROID: " + Build.VERSION.RELEASE)
+        pw.println("SDK: " + Build.VERSION.SDK_INT)
+        pw.println("PREVIEW_SDK: " + Build.VERSION.PREVIEW_SDK_INT)
+        pw.println("FINGERPRINT: " + Build.FINGERPRINT)
+        pw.println("DEVICE: " + Build.DEVICE)
+        pw.println("Manager: " + getManagerVersion(context))
+
+        val uname = Os.uname()
+        pw.println("KernelRelease: ${uname.release}")
+        pw.println("KernelVersion: ${uname.version}")
+        pw.println("Machine: ${uname.machine}")
+        pw.println("Nodename: ${uname.nodename}")
+        pw.println("Sysname: ${uname.sysname}")
+    }
+
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm")
+    val current = LocalDateTime.now().format(formatter)
+
+    val targetFile = File(context.cacheDir, "KernelSU_Next_bugreport_${current}.tar.gz")
+
+    nonRootShell("tar czf ${targetFile.absolutePath} -C ${bugreportDir.absolutePath} .")
+    nonRootShell("rm -rf ${bugreportDir.absolutePath}")
+    nonRootShell("chmod 0644 ${targetFile.absolutePath}")
+
+    return targetFile
+}

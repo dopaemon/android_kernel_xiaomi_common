@@ -12,7 +12,9 @@ import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.system.Os
 import android.util.Log
+import com.rifsxd.ksunext.BuildConfig
 import com.rifsxd.ksunext.Natives
+import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.ksuApp
 import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
@@ -87,9 +89,9 @@ fun createRootShell(globalMnt: Boolean = false): Shell {
     }
 }
 
-fun execKsud(args: String, newShell: Boolean = false): Boolean {
+fun execKsud(args: String, newShell: Boolean = false, globalMnt: Boolean = false): Boolean {
     return if (newShell) {
-        withNewRootShell {
+        withNewRootShell(globalMnt = globalMnt) {
             ShellUtils.fastCmdResult(this, "${getKsuDaemonPath()} $args")
         }
     } else {
@@ -105,19 +107,24 @@ suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.
     out.firstOrNull()?.trim().orEmpty()
 }
 
-suspend fun getFeaturePersistValue(feature: String): Long? = withContext(Dispatchers.IO) {
+suspend fun getFeaturePersistValue(feature: String): Long? = readFeatureValue("--config $feature")
+
+// Current value in kernel
+suspend fun getFeatureValue(feature: String): Long? = readFeatureValue(feature)
+
+private suspend fun readFeatureValue(args: String): Long? = withContext(Dispatchers.IO) {
     val shell = createRootShell(true)
     
     val out = shell.newJob()
-        .add("${getKsuDaemonPath()} feature get --config $feature").to(ArrayList<String>(), null).exec().out
+        .add("${getKsuDaemonPath()} feature get $args").to(ArrayList<String>(), null).exec().out
     val valueLine = out.firstOrNull { it.trim().startsWith("Value:") } ?: return@withContext null
     valueLine.substringAfter("Value:").trim().toLongOrNull()
 }
 
 fun install() {
     val start = SystemClock.elapsedRealtime()
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so").absolutePath
-    val result = execKsud("install --magiskboot $magiskboot", true)
+    val libadbroot = File(ksuApp.applicationInfo.nativeLibraryDir, "libadbroot.so").absolutePath
+    val result = execKsud("install --libadbroot $libadbroot", true)
     Log.w(TAG, "install result: $result, cost: ${SystemClock.elapsedRealtime() - start}ms")
 }
 
@@ -297,16 +304,14 @@ fun runModuleAction(
 fun restoreBoot(
     onStdout: (String) -> Unit, onStderr: (String) -> Unit
 ): FlashResult {
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so")
-    val result = flashWithIO("${getKsuDaemonPath()} boot-restore -f --magiskboot $magiskboot", onStdout, onStderr)
+    val result = flashWithIO("${getKsuDaemonPath()} boot-restore -f", onStdout, onStderr)
     return FlashResult(result)
 }
 
 fun uninstallPermanently(
     onStdout: (String) -> Unit, onStderr: (String) -> Unit
 ): FlashResult {
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so")
-    val result = flashWithIO("${getKsuDaemonPath()} uninstall --magiskboot $magiskboot", onStdout, onStderr)
+    val result = flashWithIO("${getKsuDaemonPath()} uninstall --package-name ${BuildConfig.APPLICATION_ID}", onStdout, onStderr)
     return FlashResult(result)
 }
 
@@ -317,10 +322,48 @@ sealed class LkmSelection : Parcelable {
     data object KmiNone : LkmSelection()
 }
 
+// A single module name as accepted by ksud's --block-module parser.
+private fun isValidBlockModuleName(name: String): Boolean =
+    name.isNotEmpty() && name.length <= 64 &&
+        name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '_' }
+
+/** Parse the comma-separated block-modules field into the non-empty names. */
+fun parseBlockModules(input: String): List<String> =
+    input.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+// The kernel copies the block_modules= value into a 256-byte buffer, leaving
+// 255 bytes; a longer list would be silently truncated, leaving some modules
+// unblocked. Reject it here too.
+private const val MAX_BLOCK_MODULES_LEN = 255
+
+/** Whether every name in the block-modules field is valid (empty is valid). */
+fun isBlockModulesValid(input: String): Boolean {
+    val names = parseBlockModules(input)
+    return names.all(::isValidBlockModuleName) &&
+        names.joinToString(",").length <= MAX_BLOCK_MODULES_LEN
+}
+
+// Known vendor anti-root kernel modules that `--block-module` is meant for.
+private val KNOWN_BLOCKABLE_MODULES = listOf(
+    "vr", "vklp", "oplus_secure_guard", "oplus_secure_guard_new", "mkp"
+)
+
+// Return the known anti-root modules currently loaded on this device (per
+// /proc/modules), so the install screen can pre-fill only the relevant ones.
+suspend fun getLoadedBlockableModules(): List<String> = withContext(Dispatchers.IO) {
+    val shell = createRootShell(true)
+    val out = shell.newJob().add("cat /proc/modules").to(ArrayList(), null).exec().out
+    val loaded = out.mapNotNull { it.trim().substringBefore(' ').takeIf(String::isNotBlank) }.toHashSet()
+    KNOWN_BLOCKABLE_MODULES.filter { it in loaded }
+}
+
 fun installBoot(
     bootUri: Uri?,
     lkm: LkmSelection,
     ota: Boolean,
+    allowShell: Boolean,
+    enableAdb: Boolean,
+    blockModules: String = "",
     onStdout: (String) -> Unit,
     onStderr: (String) -> Unit,
 ): FlashResult {
@@ -337,14 +380,28 @@ fun installBoot(
         }
     }
 
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so")
-    var cmd = "boot-patch --magiskboot ${magiskboot.absolutePath}"
+    var cmd = "boot-patch"
 
     cmd += if (bootFile == null) {
         // no boot.img, use -f to force install
         " -f"
     } else {
         " -b ${bootFile.absolutePath}"
+    }
+
+    if (allowShell) {
+        cmd += " --allow-shell"
+    }
+
+    if (enableAdb) {
+        cmd += " --enable-adbd"
+    }
+
+    // Names are validated in the UI before install; pass them through without
+    // mutating. Drop the flag entirely (never inject) if anything slips through.
+    val names = parseBlockModules(blockModules)
+    if (names.isNotEmpty() && names.all(::isValidBlockModuleName)) {
+        cmd += " --block-module ${names.joinToString(",")}"
     }
 
     if (ota) {
@@ -392,7 +449,7 @@ fun installBoot(
 fun reboot(reason: String = "") {
     if (reason == "soft-reboot") {
         // ksud (userspace)
-        com.rifsxd.ksunext.ui.util.execKsud("soft-reboot")
+        com.rifsxd.ksunext.ui.util.execKsud("soft-reboot", true, true)
         return
     }
 
@@ -483,6 +540,49 @@ suspend fun getSupportedKmis(): List<String> = withContext(Dispatchers.IO) {
     out.filter { it.isNotBlank() }.map { it.trim() }
 }
 
+fun loadSusfsGuardLkm(kmi: String? = null): Boolean {
+    val args = buildString {
+        append("susfs load")
+        if (kmi != null) {
+            require(kmi.matches(Regex("[A-Za-z0-9._-]+"))) { "Invalid KMI: $kmi" }
+            append(" --kmi ")
+            append(kmi)
+        }
+    }
+    return execKsud(args, newShell = true, globalMnt = true)
+}
+
+fun unloadSusfsGuardLkm(): Boolean =
+    execKsud("susfs unload", newShell = true, globalMnt = true)
+
+suspend fun isSusfsGuardLkmLoaded(): Boolean = withContext(Dispatchers.IO) {
+    createRootShell(true).newJob()
+        .add("test -d /sys/module/susfs_guard_lkm")
+        .exec()
+        .isSuccess
+}
+
+suspend fun getSusfsAutoLoadEnabled(): Boolean = withContext(Dispatchers.IO) {
+    val shell = createRootShell(true)
+    val result = shell.newJob()
+        .add("${getKsuDaemonPath()} susfs autoload status")
+        .to(ArrayList<String>(), null)
+        .exec()
+    result.isSuccess && result.out.any { it.trim() == "enabled" }
+}
+
+fun setSusfsAutoLoadEnabled(enabled: Boolean, fallbackKmi: String? = null): Boolean {
+    val args = if (enabled) {
+        require(fallbackKmi != null && fallbackKmi.matches(Regex("[A-Za-z0-9._-]+"))) {
+            "A valid KMI is required to enable SUSFS auto-load"
+        }
+        "susfs autoload enable --kmi $fallbackKmi"
+    } else {
+        "susfs autoload disable"
+    }
+    return execKsud(args, newShell = true, globalMnt = true)
+}
+
 suspend fun isAbDevice(): Boolean = withContext(Dispatchers.IO) {
     val cmd = "boot-info is-ab-device"
     ShellUtils.fastCmd("${getKsuDaemonPath()} $cmd").trim().toBoolean()
@@ -555,7 +655,7 @@ fun getAppProfileTemplate(id: String): String {
 }
 
 fun getFileName(context: Context, uri: Uri): String {
-    var name = "Unknown Module"
+    var name = context.getString(R.string.module_unknown)
     if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
         val cursor: Cursor? = context.contentResolver.query(uri, null, null, null, null)
         cursor?.use {
@@ -564,7 +664,7 @@ fun getFileName(context: Context, uri: Uri): String {
             }
         }
     } else if (uri.scheme == "file") {
-        name = uri.lastPathSegment ?: "Unknown Module"
+        name = uri.lastPathSegment ?: context.getString(R.string.module_unknown)
     }
     return name
 }
@@ -587,29 +687,8 @@ fun zygiskRequired(dir: File): Boolean {
     return (SuFile(dir, "zygisk").listFiles()?.size ?: 0) > 0
 }
 
-fun getZygiskImplementation(property: String): String {
-    val modulesPath = "/data/adb/modules"
-    val zygiskModuleIds = arrayOf("rezygisk", "zygisksu")
-
-    for (moduleId in zygiskModuleIds) {
-        val moduleDir = SuFile.open("$modulesPath/$moduleId")
-        if (!moduleDir.isDirectory) continue
-        if (SuFile.open("$modulesPath/$moduleId/disable").isFile ||
-            SuFile.open("$modulesPath/$moduleId/remove").isFile
-        ) continue
-
-        val propFile = SuFile.open("$modulesPath/$moduleId/module.prop")
-        if (!propFile.isFile) continue
-
-        val prop = Properties().apply { load(propFile.newInputStream()) }
-        prop.getProperty(property)?.let {
-            Log.i(TAG, "Zygisk $property: $it")
-            return it
-        }
-    }
-
-    Log.i(TAG, "Zygisk $property: None")
-    return "None"
+fun isZygiskImpl(dir: File): Boolean {
+    return SuFile(dir, "bin/zygiskd").exists() || SuFile(dir, "bin/zygiskd64").exists()
 }
 
 fun refreshActivity(context: Context) {
@@ -648,9 +727,13 @@ fun getSuSFSFeatures(): String {
     return ShellUtils.fastCmd("${getKsuDaemonPath()} susfs features")
 }
 
+fun getMetaModule(): String {
+    return ShellUtils.fastCmd("${getKsuDaemonPath()} module metamodule")
+}
+
 fun setAppProfileTemplate(id: String, template: String): Boolean {
-    val escapedTemplate = template.replace("\"", "\\\"")
-    val cmd = """${getKsuDaemonPath()} profile set-template "$id" "$escapedTemplate'""""
+    val escapedTemplate = template.replace("'", "'\\''")
+    val cmd = """${getKsuDaemonPath()} profile set-template "$id" '$escapedTemplate'"""
     return Shell.cmd(cmd)
         .to(ArrayList(), null).exec().isSuccess
 }
@@ -675,4 +758,36 @@ fun launchApp(packageName: String) {
 fun restartApp(packageName: String) {
     forceStopApp(packageName)
     launchApp(packageName)
+}
+
+fun getRiskStatus(): Boolean? {
+    return runCatching {
+        val out = ShellUtils
+            .fastCmd("${getKsuDaemonPath()} module risk status")
+            .trim()
+
+        when {
+            out.equals("Enabled", ignoreCase = true) -> true
+            out.equals("Disabled", ignoreCase = true) -> false
+            else -> null
+        }
+    }.getOrNull()
+}
+
+fun setRisk(enabled: Boolean): Boolean {
+    return runCatching {
+        val command = if (enabled) "enable" else "disable"
+
+        ShellUtils.fastCmdResult(
+            "${getKsuDaemonPath()} module risk $command"
+        )
+    }.getOrDefault(false)
+}
+
+fun nonRootShell(command: String): Boolean {
+    val process = ProcessBuilder("sh", "-c", command)
+        .redirectErrorStream(true)
+        .start()
+    process.inputStream.bufferedReader().readText()
+    return process.waitFor() == 0
 }

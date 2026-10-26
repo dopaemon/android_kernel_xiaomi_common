@@ -59,21 +59,24 @@ struct Args {
     wait: bool,
 
     /// Timeout in seconds for --wait (default: wait forever).
-    #[arg(long = "timeout")]
-    timeout: Option<f64>,
+    #[arg(long = "timeout", value_parser = parse_timeout)]
+    timeout: Option<Duration>,
 
     /// Load and set properties from FILE.
     #[arg(short = 'f', long = "file")]
     file: Option<String>,
 
-    /// Compact property area memory (reclaim holes left by deleted properties).
-    /// Optionally pass a SELinux context name to compact only that area.
-    #[arg(short = 'c', long = "compact")]
-    compact: bool,
+    /// Rebuild a property area by SELinux context name, or all property areas if name is not given.
+    #[arg(short = 'c', long = "rebuild", alias = "compact")]
+    rebuild: bool,
 
-    /// Show SELinux context when listing properties.
+    /// Show SELinux context when listing properties, or if -c is used, rebuild the property area containing the property NAME.
     #[arg(short = 'Z')]
     show_context: bool,
+
+    /// Force rebuild all property areas, should be used with `-c` . Without this flag set, only abnormal property areas will be rebuilt.
+    #[arg(long = "force")]
+    force: bool,
 
     #[arg(
         allow_hyphen_values = true,
@@ -82,6 +85,11 @@ struct Args {
         hide = true,
     )]
     arguments: Vec<String>,
+}
+
+fn parse_timeout(s: &str) -> Result<Duration> {
+    let timeout: f64 = s.parse()?;
+    Ok(Duration::try_from_secs_f64(timeout)?)
 }
 
 impl Args {
@@ -133,23 +141,28 @@ fn run_from_args(args: &[String]) -> Result<()> {
         persist_only: cli.persist_only,
         verbose: cli.verbose,
         show_context: cli.show_context,
+        rebuild: false,
     };
 
     // Validate: at most one special mode
-    let special_modes = u8::from(cli.wait)
-        + u8::from(cli.delete)
-        + u8::from(cli.compact)
-        + u8::from(cli.file.is_some());
+    let special_modes = u8::from(cli.wait) + u8::from(cli.delete) + u8::from(cli.file.is_some());
     if special_modes > 1 {
         bail!("multiple operation modes detected");
+    }
+
+    if cli.rebuild && !(special_modes == 0 || cli.delete) {
+        bail!("Only -d can be used with -c");
     }
 
     // -w: wait mode
     if cli.wait {
         let name = cli.name().context("--wait requires a property name")?;
-        let timeout = cli.timeout.map(Duration::from_secs_f64);
         let ok = rp
-            .wait(name, cli.value().map(std::string::String::as_str), timeout)
+            .wait(
+                name,
+                cli.value().map(std::string::String::as_str),
+                cli.timeout,
+            )
             .context("wait failed")?;
         if !ok {
             return Err(WaitTimeoutError {
@@ -160,23 +173,16 @@ fn run_from_args(args: &[String]) -> Result<()> {
         return Ok(());
     }
 
-    // -c: compact property area memory
-    // When a positional argument is given, treat it as a SELinux context name.
-    if cli.compact {
-        let context = cli.name().map(std::string::String::as_str);
-        let compacted = sys_prop::compact(context).context("compact failed")?;
-        if !compacted {
-            bail!("nothing to compact");
-        }
-        return Ok(());
-    }
-
     // -f: load from file
     if let Some(path) = &cli.file {
         let file = File::open(path).with_context(|| format!("Failed to open {path}"))?;
         let reader = BufReader::new(file);
-        rp.load_props(reader.lines())
-            .context("Failed to load properties from file")?;
+        if rp
+            .load_props(reader.lines())
+            .context("Failed to load properties from file")?
+        {
+            eprintln!("resetprop: warning: rebuild is needed!");
+        }
         return Ok(());
     }
 
@@ -187,6 +193,23 @@ fn run_from_args(args: &[String]) -> Result<()> {
         if !deleted {
             bail!("{name} not found");
         }
+        if !cli.rebuild {
+            return Ok(());
+        }
+    }
+
+    if cli.rebuild {
+        if let Some(name) = cli.name() {
+            let ctx = if cli.show_context || cli.delete {
+                sys_prop::get_context(name)?
+            } else {
+                name.to_owned()
+            };
+            rp.rebuild(&ctx)?;
+        } else if !rp.rebuild_all(cli.force)? {
+            eprintln!("Something wrong happened, see log for detail.");
+            std::process::exit(1);
+        }
         return Ok(());
     }
 
@@ -196,8 +219,12 @@ fn run_from_args(args: &[String]) -> Result<()> {
     match (name, value) {
         // resetprop name value (set)
         (Some(name), Some(value)) => {
-            rp.set(name, value)
-                .with_context(|| format!("Failed to set {name}"))?;
+            if rp
+                .set(name, value)
+                .with_context(|| format!("Failed to set {name}"))?
+            {
+                eprintln!("resetprop: warning: rebuild is needed!");
+            }
         }
 
         // resetprop name (get)
@@ -235,12 +262,20 @@ pub fn load_system_prop_file(path: &Path) -> Result<()> {
         persist_only: false,
         verbose: false,
         show_context: false,
+        rebuild: false,
     };
 
     let file = File::open(path).with_context(|| format!("Failed to open {}", path.display()))?;
     let reader = BufReader::new(file);
-    rp.load_props(reader.lines())
-        .with_context(|| format!("Failed to load properties from {}", path.display()))?;
+    if rp
+        .load_props(reader.lines())
+        .with_context(|| format!("Failed to load properties from {}", path.display()))?
+    {
+        log::warn!(
+            "warning: after loaded prop file from {}, rebuild is needed!",
+            path.display()
+        );
+    }
 
     info!("Loaded system.prop from {}", path.display());
     Ok(())

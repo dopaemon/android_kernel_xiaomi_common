@@ -1,6 +1,5 @@
 use anyhow::Result;
 use log::{info, warn};
-use std::ffi::CStr;
 use std::fs;
 use std::process::Command;
 
@@ -65,7 +64,7 @@ fn find_ksu_fd_holders() -> Vec<i32> {
             let link_path = fd_entry.path();
             if let Ok(target) = fs::read_link(&link_path) {
                 let target_str = target.to_string_lossy();
-                if target_str.contains("[ksu_driver]") || target_str.contains("[ksu_fdwrapper]") {
+                if target_str.contains("[ksu_driver") || target_str.contains("[ksu_fdwrapper]") {
                     pids.push(pid);
                     break;
                 }
@@ -96,7 +95,7 @@ fn close_ksu_fds() {
         };
         if let Ok(target) = fs::read_link(entry.path()) {
             let target_str = target.to_string_lossy();
-            if target_str.contains("[ksu_driver]") || target_str.contains("[ksu_fdwrapper]") {
+            if target_str.contains("[ksu_driver") || target_str.contains("[ksu_fdwrapper]") {
                 info!("unload: closing fd {fd} -> {target_str}");
                 unsafe {
                     libc::close(fd);
@@ -143,10 +142,7 @@ pub fn unload() -> Result<()> {
 
     // 4. delete_module("kernelsu")
     info!("unload: removing kernelsu module...");
-    if let Err(e) = rustix::system::delete_module(
-        CStr::from_bytes_with_nul(b"kernelsu\0").unwrap(),
-        0,
-    ) {
+    if let Err(e) = rustix::system::delete_module(c"kernelsu", 0) {
         warn!("unload: delete_module kernelsu failed: {e}");
     }
 

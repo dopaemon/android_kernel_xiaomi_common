@@ -12,7 +12,7 @@ use std::{
     process::Command,
 };
 
-use crate::module::ModuleType::All;
+use crate::module::{ModuleType::All, ScriptWait};
 use crate::{assets, defs};
 
 /// Determine whether the provided module properties mark it as a metamodule
@@ -64,6 +64,15 @@ pub fn get_metamodule_path() -> Option<PathBuf> {
     });
 
     result
+}
+
+/// Get Metamodule Id
+pub fn get_metamodule_id() -> Option<String> {
+    get_metamodule_path().and_then(|path| {
+        path.file_name()
+            .and_then(|os_str| os_str.to_str())
+            .map(ToString::to_string)
+    })
 }
 
 /// Check if metamodule exists
@@ -135,7 +144,6 @@ pub fn ensure_symlink(module_path: &Path) -> Result<()> {
     }
 
     // Create symlink
-    #[cfg(unix)]
     std::os::unix::fs::symlink(module_path, symlink_path)
         .with_context(|| format!("Failed to create symlink to {}", module_path.display()))?;
 
@@ -222,12 +230,14 @@ pub fn exec_metauninstall_script(module_id: &str) -> Result<()> {
         return Ok(());
     };
 
-    info!("Executing metamodule metauninstall.sh for module: {module_id}",);
+    info!("Executing metamodule metauninstall.sh for module: {module_id}");
 
     let result = Command::new(assets::BUSYBOX_PATH)
         .args(["sh", metauninstall_path.to_str().unwrap()])
         .current_dir(metauninstall_path.parent().unwrap())
-        .envs(crate::module::get_common_script_envs())
+        .envs(crate::module::get_common_script_envs(
+            get_metamodule_id().as_deref(),
+        ))
         .env("MODULE_ID", module_id)
         .status()?;
 
@@ -236,7 +246,7 @@ pub fn exec_metauninstall_script(module_id: &str) -> Result<()> {
         "Metamodule metauninstall.sh failed for module {module_id}: {result:?}"
     );
 
-    info!("Metamodule metauninstall.sh executed successfully for {module_id}",);
+    info!("Metamodule metauninstall.sh executed successfully for {module_id}");
     Ok(())
 }
 
@@ -250,7 +260,9 @@ pub fn exec_mount_script(module_dir: &str) -> Result<()> {
 
     let result = Command::new(assets::BUSYBOX_PATH)
         .args(["sh", mount_script.to_str().unwrap()])
-        .envs(crate::module::get_common_script_envs())
+        .envs(crate::module::get_common_script_envs(
+            get_metamodule_id().as_deref(),
+        ))
         .env("MODULE_DIR", module_dir)
         .status()?;
 
@@ -264,13 +276,13 @@ pub fn exec_mount_script(module_dir: &str) -> Result<()> {
 }
 
 /// Execute metamodule script for a specific stage
-pub fn exec_stage_script(stage: &str, block: bool) -> Result<()> {
+pub fn exec_stage_script(stage: &str, wait: ScriptWait) -> Result<()> {
     let Some(script_path) = check_metamodule_script(&format!("{stage}.sh")) else {
         return Ok(());
     };
 
     info!("Executing metamodule {stage}.sh");
-    crate::module::exec_script(&script_path, block)?;
+    crate::module::exec_script(&script_path, wait)?;
     info!("Metamodule {stage}.sh executed successfully");
     Ok(())
 }

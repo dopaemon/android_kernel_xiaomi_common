@@ -8,7 +8,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -35,10 +35,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.activity.viewModels
 import androidx.navigation.NavBackStackEntry
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -62,6 +66,7 @@ import com.ramcosta.composedestinations.generated.destinations.SettingScreenDest
 import com.ramcosta.composedestinations.utils.isRouteOnBackStackAsState
 import com.ramcosta.composedestinations.utils.rememberDestinationsNavigator
 import com.rifsxd.ksunext.Natives
+import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.ksuApp
 import com.rifsxd.ksunext.ui.screen.BottomBarDestination
 import com.rifsxd.ksunext.ui.screen.FlashIt
@@ -73,10 +78,11 @@ import com.rifsxd.ksunext.ui.viewmodel.SuperUserViewModel
 data class ScrollState(
     val isScrollingDown: MutableState<Boolean>,
     val scrollOffset: MutableState<Float>,
-    val previousScrollOffset: MutableState<Float>
+    val previousScrollOffset: MutableState<Float>,
 )
 
 val LocalScrollState = compositionLocalOf<ScrollState?> { null }
+val LocalNavBarEnabled = compositionLocalOf<State<Boolean>?> { null }
 
 @Composable
 fun rememberScrollConnection(
@@ -118,8 +124,9 @@ fun rememberScrollConnection(
 fun Modifier.horizontalSwipeNavigator(
     currentRoute: String?,
     destinations: List<BottomBarDestination>,
+    isRtl: Boolean,
     onNavigate: (Int) -> Unit
-): Modifier = pointerInput(currentRoute) {
+): Modifier = pointerInput(currentRoute, isRtl) {
 
     var totalDrag = 0f
 
@@ -139,7 +146,7 @@ fun Modifier.horizontalSwipeNavigator(
 
                 if (currentIndex == -1) return@detectHorizontalDragGestures
 
-                if (totalDrag < 0) {
+                if (if (isRtl) totalDrag > 0 else totalDrag < 0) {  
                     val next = (currentIndex + 1)
                         .coerceAtMost(destinations.lastIndex)
                     if (next != currentIndex) onNavigate(next)
@@ -189,13 +196,17 @@ fun Modifier.trackScroll(
     return this.nestedScroll(scrollConnection)
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
+    private val appLockState = mutableStateOf(false)
+
+    private var pendingIntent: Intent? = null
     var zipUri by mutableStateOf<ArrayList<Uri>?>(null)
     enum class NavigateLocation { SUPERUSER, MODULES, SETTINGS }
     var navigateLoc by mutableStateOf<NavigateLocation?>(null)
     var moduleActionId by mutableStateOf<String?>(null)
     var amoledModeState = mutableStateOf(false)
+    var navBarEnabled = mutableStateOf(true)
     private val handler = Handler(Looper.getMainLooper())
 
     val moduleViewModel: ModuleViewModel by viewModels()
@@ -226,6 +237,7 @@ class MainActivity : ComponentActivity() {
         try {
             val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
             amoledModeState.value = prefsInit.getBoolean("enable_amoled", false)
+            navBarEnabled.value = prefsInit.getBoolean("enable_navbar", true)
         } catch (_: Exception) {}
 
         val isManager = Natives.isManager
@@ -236,242 +248,376 @@ class MainActivity : ComponentActivity() {
             intent = null
         }
 
+        val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
+        val requireBiometric = prefsInit.getBoolean("enable_biometric_lock", false)
+
+        if (savedInstanceState != null) {
+            appLockState.value = savedInstanceState.getBoolean("appLockState", requireBiometric)
+        } else {
+            appLockState.value = requireBiometric
+        }
+
         if(intent != null)
             handleIntent(intent)
 
-        setContent {
+        setContent { Box(modifier = Modifier.fillMaxSize()) {
             KernelSUTheme(amoledMode = amoledModeState.value) {
-                val navController = rememberNavController()
-                val snackBarHostState = remember { SnackbarHostState() }
-                val currentDestination = navController.currentBackStackEntryAsState().value?.destination
-                val bottomBarRoutes = remember {
-                    BottomBarDestination.entries.map { it.direction.route }.toSet()
-                }
-                val navigator = navController.rememberDestinationsNavigator()
+                var showSplash by remember { mutableStateOf(true) }
+                var splashRotationTarget by remember { mutableStateOf(0f) }
+                val splashRotation by animateFloatAsState(
+                    targetValue = splashRotationTarget,
+                    animationSpec = tween(
+                        durationMillis = 1400,
+                        easing = FastOutSlowInEasing
+                    ),
+                    finishedListener = {
+                        showSplash = false
+                    },
+                    label = "splashRotation"
+                )
 
-                val currentBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = currentBackStackEntry?.destination?.route
-
-                val homeDestination = BottomBarDestination.entries.firstOrNull()
-                val startRoute = homeDestination?.direction?.route
-
-                if (homeDestination != null && startRoute != null) {
-                    BackHandler(enabled = currentRoute != startRoute && currentRoute in bottomBarRoutes) {
-                        navigator.navigate(homeDestination.direction) {
-                            popUpTo(NavGraphs.root) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                LaunchedEffect(appLockState.value) {
+                    if (!appLockState.value && showSplash) {
+                        splashRotationTarget += 360f * 6
                     }
                 }
 
-                // Track the last bottom bar destination index for directional animations
-                var lastBottomBarIndex by remember { mutableStateOf(0) }
-                var isBottomBarNavigation by remember { mutableStateOf(false) }
-                
-                // Scroll state for bottom bar visibility
-                val isScrollingDown = remember { mutableStateOf(false) }
-                val scrollOffset = remember { mutableStateOf(0f) }
-                val previousScrollOffset = remember { mutableStateOf(0f) }
-                
-                // Remember the last valid navbar selection (persists across navbar hide/show)
-                val lastValidNavbarSelection = remember { mutableStateOf(0) }
-
-                LaunchedEffect(zipUri, navigateLoc, moduleActionId) {
-                    if (moduleActionId != null) {
-                        navigator.navigate(ExecuteModuleActionScreenDestination(moduleActionId!!))
-                        moduleActionId = null
-                    }
-
-                    if (!zipUri.isNullOrEmpty()) {
-                        val uris = zipUri!!
-                        val component = intent?.component?.className
-                        val flashIt = when {
-                            component?.endsWith("FlashAnyKernel") == true -> FlashIt.FlashAnyKernel(uris.first())
-                            else -> FlashIt.FlashModules(uris)
-                        }
-                        
-                        navigator.navigate(
-                            FlashScreenDestination(flashIt = flashIt)
-                        )
-                        zipUri = null
-                    }
-
-                    if (zipUri.isNullOrEmpty() && navigateLoc != null) {
-                        when (navigateLoc) {
-                            NavigateLocation.SUPERUSER -> navigator.navigate(SuperUserScreenDestination) {
-                                    popUpTo(NavGraphs.root.startRoute) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            NavigateLocation.MODULES -> navigator.navigate(ModuleScreenDestination) {
-                                    popUpTo(NavGraphs.root.startRoute) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            NavigateLocation.SETTINGS -> navigator.navigate(SettingScreenDestination) {
-                                    popUpTo(NavGraphs.root.startRoute) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            else -> { /* no-op for exhaustiveness */ }
-                        }
-                        navigateLoc = null
-                    }
-                }
-
-                val showBottomBar = when (currentDestination?.route) {
-                    FlashScreenDestination.route -> false // Hide for FlashScreenDestination
-                    ExecuteModuleActionScreenDestination.route -> false // Hide for ExecuteModuleActionScreen
-                    else -> !isScrollingDown.value
-                }
-
-                Scaffold(
-                    contentWindowInsets = WindowInsets(0, 0, 0, 0)
-                ) { innerPadding ->
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        CompositionLocalProvider(
-                            LocalSnackbarHost provides snackBarHostState,
-                            LocalScrollState provides ScrollState(
-                                isScrollingDown = isScrollingDown,
-                                scrollOffset = scrollOffset,
-                                previousScrollOffset = previousScrollOffset
-                            )
+                AnimatedContent(
+                    targetState = showSplash,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(180))
+                    },
+                    label = "appSplashTransition"
+                ) { isSplashVisible ->
+                    if (isSplashVisible) {
+                        Box(
+                            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                            contentAlignment = Alignment.Center
                         ) {
-                            val visibleDestinations = remember {
-                                BottomBarDestination.entries
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_ksu_next),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .size(120.dp)
+                                        .graphicsLayer { rotationZ = splashRotation }
+                                )
                             }
+                        }
+                    } else {
+                        val navController = rememberNavController()
+                        val snackBarHostState = remember { SnackbarHostState() }
+                        val currentDestination = navController.currentBackStackEntryAsState().value?.destination
+                        val bottomBarRoutes = remember {
+                            BottomBarDestination.entries.map { it.direction.route }.toSet()
+                        }
+                        val navigator = navController.rememberDestinationsNavigator()
 
-                            fun navigateToIndex(index: Int) {
-                                val destination = visibleDestinations.getOrNull(index) ?: return
-                                if (destination.direction.route == currentRoute) return
+                        val isManager = Natives.isManager
+                        val fullFeatured = Natives.isFullFeatured()
 
-                                navigator.navigate(destination.direction) {
-                                    popUpTo(NavGraphs.root.startRoute) {
+                        val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                        val currentRoute = currentBackStackEntry?.destination?.route
+
+                        val homeDestination = BottomBarDestination.entries.firstOrNull()
+                        val startRoute = homeDestination?.direction?.route
+
+                        if (homeDestination != null && startRoute != null) {
+                            BackHandler(enabled = currentRoute != startRoute && currentRoute in bottomBarRoutes) {
+                                navigator.navigate(homeDestination.direction) {
+                                    popUpTo(NavGraphs.root) {
                                         saveState = true
                                     }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
                             }
+                        }
 
-                            DestinationsNavHost(
-                                modifier = Modifier
-                                    .padding(innerPadding)
-                                    .fillMaxSize()
-                                    .horizontalSwipeNavigator(
-                                        currentRoute = currentRoute,
-                                        destinations = visibleDestinations,
-                                        onNavigate = { navigateToIndex(it) }
+                        // Track the last bottom bar destination index for directional animations
+                        var lastBottomBarIndex by remember { mutableStateOf(0) }
+                        var isBottomBarNavigation by remember { mutableStateOf(false) }
+
+                        // Scroll state for bottom bar visibility
+                        val isScrollingDown = remember { mutableStateOf(false) }
+                        val scrollOffset = remember { mutableStateOf(0f) }
+                        val previousScrollOffset = remember { mutableStateOf(0f) }
+
+                        // Remember the last valid navbar selection (persists across navbar hide/show)
+                        val lastValidNavbarSelection = remember { mutableStateOf(0) }
+
+                        LaunchedEffect(zipUri, navigateLoc, moduleActionId) {
+                            if (moduleActionId != null) {
+                                navigator.navigate(ExecuteModuleActionScreenDestination(moduleActionId!!))
+                                moduleActionId = null
+                            }
+
+                            if (!zipUri.isNullOrEmpty()) {
+                                val uris = zipUri!!
+                                val component = intent?.component?.className
+                                val flashIt = when {
+                                    // explicit legacy entry point
+                                    component?.endsWith("FlashAnyKernel") == true -> FlashIt.FlashAnyKernel(uris.first())
+                                    // auto-detect: single AnyKernel3 zip flashes as kernel, anything else as module(s)
+                                    uris.size == 1 && ZipUtils.isAnyKernel3Zip(applicationContext, uris.first()) ->
+                                        FlashIt.FlashAnyKernel(uris.first())
+                                    else -> FlashIt.FlashModules(uris)
+                                }
+
+                                navigator.navigate(
+                                    FlashScreenDestination(flashIt = flashIt)
+                                )
+                                zipUri = null
+                            }
+
+                            if (zipUri.isNullOrEmpty() && navigateLoc != null) {
+                                when (navigateLoc) {
+                                    NavigateLocation.SUPERUSER -> navigator.navigate(SuperUserScreenDestination) {
+                                        popUpTo(NavGraphs.root.startRoute) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                    NavigateLocation.MODULES -> navigator.navigate(ModuleScreenDestination) {
+                                        popUpTo(NavGraphs.root.startRoute) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                    NavigateLocation.SETTINGS -> navigator.navigate(SettingScreenDestination) {
+                                        popUpTo(NavGraphs.root.startRoute) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                    else -> { /* no-op for exhaustiveness */ }
+                                }
+                                navigateLoc = null
+                            }
+                        }
+
+                        val showBottomBar = when (currentDestination?.route) {
+                            FlashScreenDestination.route -> false // Hide for FlashScreenDestination
+                            ExecuteModuleActionScreenDestination.route -> false // Hide for ExecuteModuleActionScreen
+                            else -> !isScrollingDown.value && navBarEnabled.value
+                        }
+
+                        Scaffold(
+                            contentWindowInsets = WindowInsets(0, 0, 0, 0)
+                        ) { innerPadding ->
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                CompositionLocalProvider(
+                                    LocalSnackbarHost provides snackBarHostState,
+                                    LocalScrollState provides ScrollState(
+                                        isScrollingDown = isScrollingDown,
+                                        scrollOffset = scrollOffset,
+                                        previousScrollOffset = previousScrollOffset,
                                     ),
-                                navGraph = NavGraphs.root,
-                                navController = navController,
-                                defaultTransitions = object : NavHostAnimatedDestinationStyle() {
-                                    override val enterTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-                                        val targetRoute = targetState.destination.route
-                                        val initialRoute = initialState.destination.route
+                                    LocalNavBarEnabled provides navBarEnabled
+                                ) {
+                                    val visibleDestinations = remember(fullFeatured) {
+                                        BottomBarDestination.entries.filter { fullFeatured || !it.rootRequired }
+                                    }
 
-                                        val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
-                                        val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+                                    fun navigateToIndex(index: Int) {
+                                        val destination = visibleDestinations.getOrNull(index) ?: return
+                                        if (destination.direction.route == currentRoute) return
 
-                                        when {
-                                            // Bottom bar → bottom bar: slide based on index direction
-                                            targetIndex != -1 && initialIndex != -1 -> {
-                                                val offsetSign = if (targetIndex > initialIndex) 1 else -1
-                                                slideInHorizontally(initialOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                        navigator.navigate(destination.direction) {
+                                            popUpTo(NavGraphs.root.startRoute) {
+                                                saveState = true
                                             }
-                                            // Detail page → bottom bar: slide in from left
-                                            targetRoute in bottomBarRoutes && initialRoute !in bottomBarRoutes -> {
-                                                slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300))
-                                            }
-                                            // Bottom bar → detail page: slide in from right
-                                            else -> slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300))
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
                                     }
 
-                                    override val exitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-                                        val targetRoute = targetState.destination.route
-                                        val initialRoute = initialState.destination.route
+                                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                                    val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+                                    val animationDirection = if (isRtl) -1 else 1
 
-                                        val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
-                                        val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+                                    val hostModifier = Modifier
+                                        .padding(innerPadding)
+                                        .fillMaxSize()
+                                        .horizontalSwipeNavigator(
+                                            currentRoute = currentRoute,
+                                            destinations = visibleDestinations,
+                                            isRtl = isRtl,
+                                            onNavigate = {
+                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.GestureEnd)
+                                                navigateToIndex(it)
+                                            }
+                                        )
 
-                                        when {
-                                            // Bottom bar → bottom bar: slide out opposite direction
-                                            targetIndex != -1 && initialIndex != -1 -> {
-                                                val offsetSign = if (targetIndex > initialIndex) -1 else 1
-                                                slideOutHorizontally(targetOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                    DestinationsNavHost(
+                                        modifier = hostModifier,
+                                        navGraph = NavGraphs.root,
+                                        navController = navController,
+                                        defaultTransitions = object : NavHostAnimatedDestinationStyle() {
+                                            override val enterTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+                                                val targetRoute = targetState.destination.route
+                                                val initialRoute = initialState.destination.route
+
+                                                val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
+                                                val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+
+                                                when {
+                                                    // Bottom bar → bottom bar: slide based on index direction
+                                                    targetIndex != -1 && initialIndex != -1 -> {
+                                                        val offsetSign = (if (targetIndex > initialIndex) 1 else -1) * animationDirection
+                                                        slideInHorizontally(initialOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                                    }
+                                                    // Detail page → bottom bar: slide in from left
+                                                    targetRoute in bottomBarRoutes && initialRoute !in bottomBarRoutes -> {
+                                                        slideInHorizontally(initialOffsetX = { -it * animationDirection }, animationSpec = tween(300))
+                                                    }
+                                                    // Bottom bar → detail page: slide in from right
+                                                    else -> slideInHorizontally(initialOffsetX = { it * animationDirection }, animationSpec = tween(300))
+                                                }
                                             }
-                                            // Bottom bar → detail page: slide out to left
-                                            initialRoute in bottomBarRoutes && targetRoute !in bottomBarRoutes -> {
-                                                slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300))
+
+                                            override val exitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+                                                val targetRoute = targetState.destination.route
+                                                val initialRoute = initialState.destination.route
+
+                                                val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
+                                                val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+
+                                                when {
+                                                    // Bottom bar → bottom bar: slide out opposite direction
+                                                    targetIndex != -1 && initialIndex != -1 -> {
+                                                        val offsetSign = (if (targetIndex > initialIndex) -1 else 1) * animationDirection
+                                                        slideOutHorizontally(targetOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                                    }
+                                                    // Bottom bar → detail page: slide out to left
+                                                    initialRoute in bottomBarRoutes && targetRoute !in bottomBarRoutes -> {
+                                                        slideOutHorizontally(targetOffsetX = { -it * animationDirection }, animationSpec = tween(300))
+                                                    }
+                                                    // Default
+                                                    else -> slideOutHorizontally(targetOffsetX = { -it * animationDirection }, animationSpec = tween(300))
+                                                }
                                             }
-                                            // Default
-                                            else -> slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300))
+
+                                            override val popEnterTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+                                                val targetRoute = targetState.destination.route
+                                                val initialRoute = initialState.destination.route
+
+                                                val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
+                                                val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+
+                                                when {
+                                                    // Bottom bar → bottom bar pop: mirror of exit
+                                                    targetIndex != -1 && initialIndex != -1 -> {
+                                                        val offsetSign = (if (targetIndex > initialIndex) 1 else -1) * animationDirection
+                                                        slideInHorizontally(initialOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                                    }
+                                                    // Returning from detail → bottom bar: slide in from left
+                                                    targetRoute in bottomBarRoutes -> {
+                                                        slideInHorizontally(initialOffsetX = { -it * animationDirection }, animationSpec = tween(300))
+                                                    }
+                                                    else -> slideInHorizontally(initialOffsetX = { -it * animationDirection }, animationSpec = tween(300))
+                                                }
+                                            }
+
+                                            override val popExitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+                                                val targetRoute = targetState.destination.route
+                                                val initialRoute = initialState.destination.route
+
+                                                val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
+                                                val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
+
+                                                when {
+                                                    // Bottom bar → bottom bar pop
+                                                    targetIndex != -1 && initialIndex != -1 -> {
+                                                        val offsetSign = (if (targetIndex > initialIndex) -1 else 1) * animationDirection
+                                                        slideOutHorizontally(targetOffsetX = { it * offsetSign }, animationSpec = tween(300))
+                                                    }
+                                                    // Detail page closing: slide out to right
+                                                    initialRoute !in bottomBarRoutes -> {
+                                                        slideOutHorizontally(targetOffsetX = { it * animationDirection }, animationSpec = tween(300))
+                                                    }
+                                                    else -> slideOutHorizontally(targetOffsetX = { it * animationDirection }, animationSpec = tween(300))
+                                                }
+                                            }
                                         }
-                                    }
-
-                                    override val popEnterTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-                                        val targetRoute = targetState.destination.route
-                                        val initialRoute = initialState.destination.route
-
-                                        val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
-                                        val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
-
-                                        when {
-                                            // Bottom bar → bottom bar pop: mirror of exit
-                                            targetIndex != -1 && initialIndex != -1 -> {
-                                                val offsetSign = if (targetIndex > initialIndex) 1 else -1
-                                                slideInHorizontally(initialOffsetX = { it * offsetSign }, animationSpec = tween(300))
-                                            }
-                                            // Returning from detail → bottom bar: slide in from left
-                                            targetRoute in bottomBarRoutes -> {
-                                                slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300))
-                                            }
-                                            else -> slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300))
-                                        }
-                                    }
-
-                                    override val popExitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-                                        val targetRoute = targetState.destination.route
-                                        val initialRoute = initialState.destination.route
-
-                                        val targetIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == targetRoute }
-                                        val initialIndex = BottomBarDestination.entries.indexOfFirst { it.direction.route == initialRoute }
-
-                                        when {
-                                            // Bottom bar → bottom bar pop
-                                            targetIndex != -1 && initialIndex != -1 -> {
-                                                val offsetSign = if (targetIndex > initialIndex) -1 else 1
-                                                slideOutHorizontally(targetOffsetX = { it * offsetSign }, animationSpec = tween(300))
-                                            }
-                                            // Detail page closing: slide out to right
-                                            initialRoute !in bottomBarRoutes -> {
-                                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
-                                            }
-                                            else -> slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
-                                        }
-                                    }
+                                    )
                                 }
-                            )
+
+                                // Floating Bottom Bar as overlay
+                                AnimatedVisibility(
+                                    visible = showBottomBar,
+                                    modifier = Modifier.align(Alignment.BottomCenter),
+                                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                                ) {
+                                    BottomBar(navController, lastValidNavbarSelection)
+                                }
+                            }
                         }
-                        
-                        // Floating Bottom Bar as overlay
-                        AnimatedVisibility(
-                            visible = showBottomBar,
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                        ) {
-                            BottomBar(navController, lastValidNavbarSelection)
+                    }
+                }
+            }
+
+            AppLockOverlay(amoledModeState.value)
+
+        } } // Box & setContent
+    } // onCreate
+
+    @Composable
+    private fun AppLockOverlay(amoledMode: Boolean) {
+        if (appLockState.value) {
+            KernelSUTheme(amoledMode = amoledMode) {
+                androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize()) {
+                    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                    var isPromptShowing by remember { mutableStateOf(false) }
+                    DisposableEffect(lifecycleOwner) {
+                        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                                val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+                                val timeout = prefs.getLong("app_lock_timeout", 60000L)
+                                if (!com.rifsxd.ksunext.ui.util.AppLockManager.shouldPrompt(timeout)) {
+                                    appLockState.value = false
+                                    pendingIntent?.let {
+                                        handleIntent(it)
+                                        pendingIntent = null
+                                    }
+                                    return@LifecycleEventObserver
+                                }
+
+                                if (!isPromptShowing) {
+                                    isPromptShowing = true
+                                    com.rifsxd.ksunext.ui.util.BiometricAuthenticator(this@MainActivity)
+                                        .authenticate(
+                                            title = getString(com.rifsxd.ksunext.R.string.biometric_prompt_subtitle),
+                                            subtitle = null,
+                                            onSuccess = {
+                                                isPromptShowing = false
+                                                appLockState.value = false
+                                                com.rifsxd.ksunext.ui.util.AppLockManager.unlock()
+                                                pendingIntent?.let {
+                                                    handleIntent(it)
+                                                    pendingIntent = null
+                                                }
+                                            },
+                                            onError = {
+                                                isPromptShowing = false
+                                                Toast.makeText(this@MainActivity, getString(R.string.auth_failed, it), Toast.LENGTH_SHORT).show()
+                                                finish()
+                                            }
+                                        )
+                                }
+                            }
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose {
+                            lifecycleOwner.lifecycle.removeObserver(observer)
                         }
                     }
                 }
@@ -487,13 +633,45 @@ class MainActivity : ComponentActivity() {
         amoledModeState.value = enabled
     }
 
+    fun setNavBarEnabled(enabled: Boolean) {
+        try {
+            val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+            prefs.edit().putBoolean("enable_navbar", enabled).apply()
+        } catch (_: Exception) {}
+        navBarEnabled.value = enabled
+    }
+
+    override fun onStart() {
+        super.onStart()
+        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStart()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
         setIntent(intent)
     }
 
+    override fun onStop() {
+        super.onStop()
+        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStop(this)
+        val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
+        if (prefsInit.getBoolean("enable_biometric_lock", false)) {
+            appLockState.value = true
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean("appLockState", appLockState.value)
+
+    }
+
     private fun handleIntent(intent: Intent) {
+        if (appLockState.value) {
+            pendingIntent = intent
+            return
+        }
         val shortcutType = intent.getStringExtra("shortcut_type")
         if (shortcutType == "module_action") {
             moduleActionId = intent.getStringExtra("module_id")
@@ -526,7 +704,7 @@ private fun BottomBar(
 ) {
     val navigator = navController.rememberDestinationsNavigator()
     val isManager = Natives.isManager
-    val fullFeatured = isManager && !Natives.requireNewKernel() && rootAvailable()
+    val fullFeatured = Natives.isFullFeatured()
 
     val visibleDestinations = remember(fullFeatured) {
         BottomBarDestination.entries.filter { fullFeatured || !it.rootRequired }
@@ -610,6 +788,7 @@ private fun BottomBar(
                         (containerPadding * 2)
 
                 val density = LocalDensity.current
+                val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
                 val itemSizePx = with(density) { itemSize.toPx() }
                 val itemSpacingPx = with(density) { itemSpacing.toPx() }
                 val containerPaddingPx = with(density) { containerPadding.toPx() }
@@ -618,13 +797,15 @@ private fun BottomBar(
                     modifier = Modifier
                         .width(navBarWidth)
                         .height(72.dp)
-                        .pointerInput(visibleDestinations, effectiveSelectedIndex) {
+                        .pointerInput(visibleDestinations, effectiveSelectedIndex, isRtl) {
                             detectDragGestures(
                                 onDragStart = { offset ->
                                     val extraTouchArea = with(density) { 20.dp.toPx() }
 
+                                    val visualIndex = if (isRtl) visibleDestinations.lastIndex - effectiveSelectedIndex else effectiveSelectedIndex
+
                                     val pillLeft = containerPaddingPx +
-                                            effectiveSelectedIndex * (itemSizePx + itemSpacingPx) - extraTouchArea
+                                            visualIndex * (itemSizePx + itemSpacingPx) - extraTouchArea
 
                                     val pillRight = pillLeft + itemSizePx + (extraTouchArea * 2)
 
@@ -646,11 +827,11 @@ private fun BottomBar(
                                     if (isDraggingPill) {
                                         change.consume()
                                         // Map finger X to nearest icon index
-                                        val index = ((change.position.x - containerPaddingPx) /
+                                        val visualIndex = ((change.position.x - containerPaddingPx) /
                                                 (itemSizePx + itemSpacingPx))
                                             .toInt()
                                             .coerceIn(0, visibleDestinations.lastIndex)
-                                        dragTargetIndex = index
+                                        dragTargetIndex = if (isRtl) visibleDestinations.lastIndex - visualIndex else visualIndex
                                     }
                                 }
                             )

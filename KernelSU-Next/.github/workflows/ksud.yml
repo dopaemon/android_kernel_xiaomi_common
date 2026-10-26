@@ -25,22 +25,35 @@ jobs:
   build:
     runs-on: ${{ inputs.os }}
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
+    - uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: r29
+
     - name: Download artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
     
-    - name: Prepare LKM fies
+    - name: Prepare ksu LKM fies
       if: ${{ inputs.pack_lkm }}
       run: |
-        cp android*-lkm/*_kernelsu.ko ./userspace/ksud/bin/aarch64/
-    
+        cp aarch64-android*-ksu-lkm/*_kernelsu.ko ./userspace/ksud/bin/aarch64/
+        cp x86_64-android*-ksu-lkm/*_kernelsu.ko ./userspace/ksud/bin/x86_64/
+
+    - name: Prepare susfs LKM fies
+      if: ${{ inputs.pack_lkm }}
+      run: |
+        cp aarch64-android*-susfs-lkm/*_susfs_guard_lkm.ko ./userspace/ksud/bin/aarch64/
+
     - name: Prepare ksuinit
       if: ${{ inputs.pack_ksuinit }}
       run: |
-        mv ksuinit/*/release/ksuinit ./userspace/ksud/bin/aarch64/
+        mv ksuinit-aarch64/ksuinit ./userspace/ksud/bin/aarch64/
+        mv ksuinit-x86_64/ksuinit ./userspace/ksud/bin/x86_64/
+        mv ksuinit-riscv64/ksuinit ./userspace/ksud/bin/riscv64/
         
     - name: Setup rustup
       run: |
@@ -48,14 +61,24 @@ jobs:
         rustup target add x86_64-apple-darwin
         rustup target add aarch64-apple-darwin
         rustup target add aarch64-linux-android
+        if [ "${{ inputs.target }}" = "riscv64-linux-android" ]; then
+          rustup toolchain install nightly-2026-09-23 --profile minimal --component rust-src
+        fi
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: userspace/ksud
         cache-targets: false
+        cache-bin: false
 
     - name: Install cross
       run: |
         RUSTFLAGS="" cargo install cross --git https://github.com/cross-rs/cross --rev 66845c1
+
+    - name: Assemble LKM bootstrap
+      run: |
+        clang --target=aarch64-linux-gnu -c -nostdlib \
+          -o userspace/ksud/.lkm_image_bootstrap.o \
+          userspace/ksud/src/lkm_image_bootstrap.S
 
     - name: Build ksud
       env:
@@ -63,10 +86,24 @@ jobs:
           --sysroot=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot
           -I$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/aarch64-linux-android
           -I$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include
-      run: CROSS_NO_WARNINGS=0 cross build --target ${{ inputs.target }} --release --manifest-path ./userspace/ksud/Cargo.toml
+      run: |
+        if [ "${{ inputs.target }}" = "riscv64-linux-android" ]; then
+          LLVM_BIN=${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin
+          export CLANG_PATH="$LLVM_BIN/riscv64-linux-android35-clang"
+          export CARGO_TARGET_RISCV64_LINUX_ANDROID_LINKER="$CLANG_PATH"
+          export CC_riscv64_linux_android="$CLANG_PATH"
+          export CXX_riscv64_linux_android="${CLANG_PATH}++"
+          export AR_riscv64_linux_android="$LLVM_BIN/llvm-ar"
+          BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-riscv64-android.a"
+          export RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wno-unused-command-line-argument -C link-arg=$BUILTINS"
+          export BINDGEN_EXTRA_CLANG_ARGS_riscv64_linux_android="--sysroot=${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot -I${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/riscv64-linux-android -I${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
+          cargo +nightly-2026-09-23 build --config .github/riscv64-cargo.toml -Z build-std=std,panic_abort --target ${{ inputs.target }} --release --manifest-path ./userspace/ksud/Cargo.toml
+        else
+          CROSS_NO_WARNINGS=0 cross build --target ${{ inputs.target }} --release --manifest-path ./userspace/ksud/Cargo.toml
+        fi
 
     - name: Upload ksud artifact
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: ksud-${{ inputs.target }}
         path: userspace/ksud/target/**/release/ksud*

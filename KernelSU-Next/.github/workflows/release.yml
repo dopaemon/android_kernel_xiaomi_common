@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
       - name: Rename ksud
         run: |
           mkdir -p ksud
@@ -30,6 +30,18 @@ jobs:
                  done
               fi
           done
+
+      - name: Rename LKM artifacts
+        run: |
+          for f in ./*android*-lkm/*_kernelsu.ko; do
+            [ -f "$f" ] || continue
+            dir="${f%/*}"
+            base="${f##*/}"
+            arch="${dir#./}"
+            arch="${arch%%-*}"
+            mv "$f" "${dir}/${arch}_${base}"
+          done
+
       - name: Zip AnyKernel3
         run: |
           for dir in AnyKernel3-*; do
@@ -66,7 +78,8 @@ jobs:
           files: |
             manager/*.apk
             manager-spoofed/*.apk
-            android*-lkm/*_kernelsu.ko
+            *android*-ksu-lkm/*_kernelsu.ko
+            *android*-susfs-lkm/*_susfs_guard_lkm.ko
             AnyKernel3-*.zip
             boot-images-*/Image-*/*.img.gz
             kernel-WSA*.zip
