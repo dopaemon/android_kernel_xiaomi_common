@@ -1143,11 +1143,13 @@ export MODULES_NSDEPS := $(extmod_prefix)modules.nsdeps
 
 PHONY += headers
 
+QCOM_DISPLAY_DRIVERS_DIR ?= display-drivers
+
 ext-mod-dir := ../sm8750-modules
 ext-mod-dirs := \
 	$(ext-mod-dir)/qcom/opensource/audio-kernel \
 	$(ext-mod-dir)/qcom/opensource/dataipa/drivers/platform/msm \
-	$(ext-mod-dir)/qcom/opensource/display-drivers \
+	$(ext-mod-dir)/qcom/opensource/$(QCOM_DISPLAY_DRIVERS_DIR) \
  	$(ext-mod-dir)/qcom/opensource/mm-sys-kernel/ubwcp \
  	$(ext-mod-dir)/qcom/opensource/securemsm-kernel/smmu-proxy \
 	$(ext-mod-dir)/qcom/opensource/video-kernel \
