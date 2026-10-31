@@ -48,7 +48,7 @@ def _define_build_config(
 
     gen_config_command = """
       cat << 'EOF' > "$@"
-KERNEL_DIR="vendor/qcom/kernel"
+KERNEL_DIR="vendor/xiaomi/sm8450-kernel"
 VARIANTS=(%s)
 MSM_ARCH=%s
 VARIANT=%s
@@ -462,10 +462,10 @@ def define_msm_la(
     target = msm_target.replace("_", "-") + "_" + variant.replace("_", "-")
 
     if variant == "consolidate":
-        base_kernel = "//vendor/qcom/kernel:kernel_aarch64_consolidate"
+        base_kernel = "//vendor/xiaomi/sm8450-kernel:kernel_aarch64_consolidate"
         define_abi_targets = False
     else:
-        base_kernel = "//vendor/qcom/kernel:kernel_aarch64"
+        base_kernel = "//vendor/xiaomi/sm8450-kernel:kernel_aarch64"
         define_abi_targets = True
 
     dtb_list = get_dtb_list(msm_target)

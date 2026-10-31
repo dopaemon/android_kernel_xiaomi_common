@@ -48,7 +48,7 @@ def _define_build_config(
     earlycon_param = "earlycon" + earlycon_param
     gen_config_command = """
       cat << 'EOF' > "$@"
-KERNEL_DIR="vendor/qcom/kernel"
+KERNEL_DIR="vendor/xiaomi/sm8450-kernel"
 VARIANTS=(%s)
 MSM_ARCH=%s
 VARIANT=%s
