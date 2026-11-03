@@ -122,7 +122,7 @@ int wl2866d_camera_power_up(int out_iotype, int out_delay)
 	atomic_inc(&wl2866d_use_count[wl2866_iotype]);
 	if (atomic_read(&wl2866d_use_count[wl2866_iotype]) > 1) {
 		pr_err("wl2866_iotype:%d power up %d times, do nothing\n",
-		       wl2866_iotype, wl2866d_use_count[wl2866_iotype]);
+		       wl2866_iotype, atomic_read(&wl2866d_use_count[wl2866_iotype]));
 		mutex_unlock(&wl2866d_mutex);
 		return 0;
 	}
@@ -303,7 +303,7 @@ int wl2866d_camera_power_down(int out_iotype, int out_delay)
 	atomic_dec(&wl2866d_use_count[wl2866_iotype]);
 	if (atomic_read(&wl2866d_use_count[wl2866_iotype]) > 0) {
 		pr_err("wl2866_iotype:%d already have %d users, skip power down\n",
-		       wl2866_iotype, wl2866d_use_count[wl2866_iotype]);
+		       wl2866_iotype, atomic_read(&wl2866d_use_count[wl2866_iotype]));
 		mutex_unlock(&wl2866d_mutex);
 		return 0;
 	}
@@ -896,8 +896,7 @@ static int wl2866d_voltage_init(struct wl2866d_chip *chip)
 	return 0;
 }
 
-static int wl2866d_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int wl2866d_probe(struct i2c_client *client)
 {
 	int ret = 0;
 	struct wl2866d_chip *chip;
@@ -969,13 +968,12 @@ err_mem:
 	return ret;
 }
 
-static int wl2866d_remove(struct i2c_client *client)
+static void wl2866d_remove(struct i2c_client *client)
 {
 	struct wl2866d_chip *chip = i2c_get_clientdata(client);
 
 	devm_kfree(chip->dev, chip);
 	chip = NULL;
-	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP
