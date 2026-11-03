@@ -33,6 +33,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
@@ -242,14 +243,14 @@ static int request_vreg_gpio(struct fpc1020_data *fpc1020, bool enable)
 
 	release_irq_gpio:
 		if (gpio_is_valid(fpc1020->irq_gpio)) {
-			devm_gpio_free(dev, fpc1020->irq_gpio);
+			gpio_free(fpc1020->irq_gpio);
 			fpc1020->irq_gpio = FPC_GPIO_NO_DEFAULT;
 			dev_info(dev, "fpc irq gpio released successfully!\n");
 		}
 
 	release_vreg_gpio:
 		if (gpio_is_valid(fpc1020->vdd1v8_gpio)) {
-			devm_gpio_free(dev, fpc1020->vdd1v8_gpio);
+			gpio_free(fpc1020->vdd1v8_gpio);
 			fpc1020->vdd1v8_gpio = FPC_GPIO_NO_DEFAULT;
 			vreg_conf[0].gpio = FPC_GPIO_NO_DEFAULT;
 			dev_info(dev, "fpc vreg gpio released successfully!\n");
@@ -1017,7 +1018,7 @@ static int fpc1020_request_named_gpio(struct fpc1020_data *fpc1020,
 	}
 	*gpio = rc;
 
-	rc = devm_gpio_request(dev, *gpio, label);
+	rc = gpio_request(*gpio, label);
 	if (rc) {
 		dev_err(dev, "failed to request gpio %d\n", *gpio);
 		return FPC_GPIO_REQUEST_FAIL;
