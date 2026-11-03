@@ -144,7 +144,7 @@ static int _block2mtd_write(struct block2mtd_dev *dev, const u_char *buf,
 	int offset = to & ~PAGE_MASK;	// page offset
 	int cpylen;
 
-	printk(KERN_ERR "_block2mtd_write: start len = %d, mapping_index= %d \n",len,index);
+	printk(KERN_ERR "_block2mtd_write: start len = %zu, mapping_index= %lu \n",len,index);
 	while (len) {
 		if ((offset+len) > PAGE_SIZE)
 			cpylen = PAGE_SIZE - offset;	// multiple pages
