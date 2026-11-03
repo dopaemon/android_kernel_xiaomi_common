@@ -175,7 +175,7 @@ void show_state_filter_single(unsigned long state_filter)
 		 */
 		touch_nmi_watchdog();
 		//touch_all_softlockup_watchdogs();
-		if (p->state == state_filter)
+		if (READ_ONCE(p->__state) == state_filter)
 			sched_show_task(p);
 	}
 	rcu_read_unlock();
@@ -190,9 +190,9 @@ static irqreturn_t pm8941_pwrkey_irq(int irq, void *_data)
 	if (!strcmp(pwrkey->data->name,"pmic_pwrkey_bark")){
 
 #if IS_ENABLED(CONFIG_MTD_OOPS)
-		error = regmap_read(pwrkey->regmap,
+		err = regmap_read(pwrkey->regmap,
 			pwrkey->baseaddr + PON_RT_STS, &sts);
-		if (error)
+		if (err)
 			return IRQ_HANDLED;
 		sts &= pwrkey->data->status_bit;
 		if(sts){
@@ -204,15 +204,15 @@ static irqreturn_t pm8941_pwrkey_irq(int irq, void *_data)
 	}
 	else if (!strcmp(pwrkey->data->name,"pmic_pwrkey_resin_bark")){
 
-		error = regmap_read(pwrkey->regmap,
+		err = regmap_read(pwrkey->regmap,
 			pwrkey->baseaddr + PON_RT_STS, &sts);
-		if (error)
+		if (err)
 			return IRQ_HANDLED;
 		sts &= pwrkey->data->status_bit;
 		if(sts){
 			int tmp_console = console_loglevel;
 			dev_err(pwrkey->dev, "pwrkey_resin_bark_irq trigger, start D&R task info");
-			console_verbose();
+			console_loglevel = CONSOLE_LOGLEVEL_MOTORMOUTH;
 			pr_info("------ collect D&R-state processes info before long comb key ------\n");
 			show_state_filter_single(TASK_UNINTERRUPTIBLE);
 			show_state_filter_single(TASK_RUNNING);
@@ -538,7 +538,6 @@ static const struct pm8941_data pon_gen3_pwrkey_bark_data = {
 	.phys = "pmic_pwrkey_bark/input0",
 	.supports_ps_hold_poff_config = false,
 	.supports_debounce_config = false,
-	.needs_sw_debounce = true,
 	.has_pon_pbs = true,
 };
 
@@ -548,7 +547,6 @@ static const struct pm8941_data pon_gen3_pwrkey_resin_bark_data = {
 	.phys = "pmic_pwrkey_resin_bark/input0",
 	.supports_ps_hold_poff_config = false,
 	.supports_debounce_config = false,
-	.needs_sw_debounce = true,
 	.has_pon_pbs = true,
 };
 
