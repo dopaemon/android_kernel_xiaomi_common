@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/reboot.h>
+#include <linux/panic_notifier.h>
 #include <linux/pm.h>
 #include <linux/of_address.h>
 #include <linux/nvmem-consumer.h>
