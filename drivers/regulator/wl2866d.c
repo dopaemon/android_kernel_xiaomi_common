@@ -594,7 +594,7 @@ static int wl2866d_driver_register(int index, struct regmap *regmap)
 	}
 
 	if (pwl2866d_class == NULL) {
-		pwl2866d_class = class_create(THIS_MODULE, WL2866D_CLASS_NAME);
+		pwl2866d_class = class_create(WL2866D_CLASS_NAME);
 		if (IS_ERR(pwl2866d_class)) {
 			int ret = PTR_ERR(pwl2866d_class);
 			wl2866d_debug("Unable to create class, err = %d\n",
@@ -613,14 +613,14 @@ static int wl2866d_driver_register(int index, struct regmap *regmap)
 	}
 
 	wl2866d_dev.pdevice->driver_data = regmap;
-	sysfs_create_file(&(wl2866d_dev.pdevice->kobj), &dev_attr_status.attr);
-	sysfs_create_file(&(wl2866d_dev.pdevice->kobj), &dev_attr_info.attr);
-	sysfs_create_file(&(wl2866d_dev.pdevice->kobj), &dev_attr_enable.attr);
+	if (sysfs_create_file(&(wl2866d_dev.pdevice->kobj), &dev_attr_status.attr) ||
+	    sysfs_create_file(&(wl2866d_dev.pdevice->kobj), &dev_attr_info.attr) ||
+	    sysfs_create_file(&(wl2866d_dev.pdevice->kobj), &dev_attr_enable.attr))
+		wl2866d_debug("Failed to create sysfs nodes\n");
 
 	return 0;
 }
-static int wl2866d_regulator_probe(struct i2c_client *client,
-				   const struct i2c_device_id *id)
+static int wl2866d_regulator_probe(struct i2c_client *client)
 {
 	int rc = 0;
 	unsigned int val = 0xFF;
