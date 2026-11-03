@@ -1169,7 +1169,7 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	struct device_node *np = dev->of_node;
 	u32 temp_val;
 
-	bdata->irq_gpio = of_get_named_gpio_flags(np, "fts,irq-gpio", 0, NULL);
+	bdata->irq_gpio = of_get_named_gpio(np, "fts,irq-gpio", 0);
 
 	log_info(1, "%s: irq_gpio = %d\n", __func__, bdata->irq_gpio);
 
@@ -1194,8 +1194,8 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	}
 
 	if (of_property_read_bool(np, "fts,reset-gpio")) {
-		bdata->reset_gpio = of_get_named_gpio_flags(np,
-				"fts,reset-gpio", 0, NULL);
+		bdata->reset_gpio = of_get_named_gpio(np,
+				"fts,reset-gpio", 0);
 		log_info(1, "%s: reset_gpio =%d\n",
 			__func__, bdata->reset_gpio);
 	} else
@@ -1501,7 +1501,7 @@ probe_error_exit_0:
   * This function is called when the driver need to be removed.
   */
 #ifdef I2C_INTERFACE
-static int fts_remove(struct i2c_client *client)
+static void fts_remove(struct i2c_client *client)
 {
 #else
 static int fts_remove(struct spi_device *client)
