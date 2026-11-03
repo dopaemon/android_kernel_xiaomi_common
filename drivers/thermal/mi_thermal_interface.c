@@ -30,7 +30,7 @@ static struct drm_panel *prim_panel;
 #define BOARD__BUFFER_SIZE 128
 struct mi_thermal_device {
 	struct device *dev;
-	struct class *class;
+	const struct class *class;
 	struct attribute_group attrs;
 };
 
@@ -880,7 +880,7 @@ static int thermal_check_panel(struct device_node *np)
 
 	for (i = 0; i < count; i++) {
 		node = of_parse_phandle(np, "panel", i);
-		printk(KERN_ERR "%s: try to add of node panel: %s\n", __func__,
+		printk(KERN_ERR "%s: try to add of node panel: %pOF\n", __func__,
 		       node);
 		panel = of_drm_find_panel(node);
 		of_node_put(node);
@@ -895,7 +895,7 @@ static int thermal_check_panel(struct device_node *np)
 		pr_err("%s ERROR: Cannot fine prim_panel of node!", __func__);
 	}
 	printk(KERN_ERR
-	       "%s: count of panel in node PTR_ERR_prim_panel  is: %d\n",
+	       "%s: count of panel in node PTR_ERR_prim_panel  is: %ld\n",
 	       __func__, PTR_ERR(prim_panel));
 #if IS_ENABLED(CONFIG_HAVE_MULTI_SCREEN)
 find_sec_panel:
@@ -933,7 +933,7 @@ static void create_thermal_message_node(void)
 	struct kernfs_node *sysfs_sd = NULL;
 	struct kernfs_node *thermal_sd = NULL;
 	struct kernfs_node *class_sd = NULL;
-	struct class *cls = NULL;
+	const struct class *cls = NULL;
 	struct subsys_private *cp = NULL;
 	struct kobject *kobj_tmp = NULL;
 
