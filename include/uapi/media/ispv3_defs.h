@@ -72,7 +72,7 @@ struct ispv3_mfnr_capture_info {
 	int32_t ds_keyframe_fd;
 	int32_t ds_refframe_fd[MFNR_REF_FRAME_NUM];
 	int32_t result_fd;
-	bool is_transfer_ds;
+	__u8 is_transfer_ds;
 };
 
 //=====================================================
