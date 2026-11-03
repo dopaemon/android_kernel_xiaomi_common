@@ -846,7 +846,7 @@ out:
 	return ret;
 }
 
-static int ispv3_spi_remove(struct spi_device *spi)
+static void ispv3_spi_remove(struct spi_device *spi)
 {
 	struct ispv3_data *data = spi_get_drvdata(spi);
 	int ret = 0;
