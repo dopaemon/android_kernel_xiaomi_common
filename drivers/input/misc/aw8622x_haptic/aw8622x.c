@@ -1807,7 +1807,7 @@ static int aw8622x_ram_update(struct aw8622x *aw8622x)
 	aw8622x->ram_init = 0;
 	aw8622x->rtp_init = 0;
 
-	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+	return request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 				       aw8622x_ram_name, aw8622x->dev,
 				       GFP_KERNEL, aw8622x, aw8622x_ram_loaded);
 }

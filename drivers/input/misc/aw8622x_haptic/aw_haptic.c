@@ -1,4 +1,5 @@
 #include <linux/module.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/kernel.h>
 #include <linux/i2c.h>
 #include <linux/of_gpio.h>
@@ -297,8 +298,7 @@ static int awinic_parse_dt(struct device *dev, struct awinic *awinic,
 	return 0;
 }
 
-static int awinic_i2c_probe(struct i2c_client *i2c,
-			    const struct i2c_device_id *id)
+static int awinic_i2c_probe(struct i2c_client *i2c)
 {
 	struct awinic *awinic;
 	struct input_dev *input_dev;
@@ -369,8 +369,7 @@ static int awinic_i2c_probe(struct i2c_client *i2c,
 #endif
 	if (!awinic->enable_pin_control) {
 		if (gpio_is_valid(awinic->reset_gpio)) {
-			ret = devm_gpio_request_one(&i2c->dev,
-						    awinic->reset_gpio,
+			ret = gpio_request_one(awinic->reset_gpio,
 						    GPIOF_OUT_INIT_LOW,
 						    "awinic_rst");
 			if (ret) {
@@ -382,7 +381,7 @@ static int awinic_i2c_probe(struct i2c_client *i2c,
 		}
 	}
 	if (gpio_is_valid(awinic->irq_gpio)) {
-		ret = devm_gpio_request_one(&i2c->dev, awinic->irq_gpio,
+		ret = gpio_request_one(awinic->irq_gpio,
 					    GPIOF_DIR_IN, "awinic_int");
 		if (ret) {
 			aw_dev_err(&i2c->dev, "%s: int request failed\n",
@@ -403,9 +402,9 @@ static int awinic_i2c_probe(struct i2c_client *i2c,
 					      GFP_KERNEL);
 		if (awinic->aw8624 == NULL) {
 			if (gpio_is_valid(awinic->irq_gpio))
-				devm_gpio_free(&i2c->dev, awinic->irq_gpio);
+				gpio_free(awinic->irq_gpio);
 			if (gpio_is_valid(awinic->reset_gpio))
-				devm_gpio_free(&i2c->dev, awinic->reset_gpio);
+				gpio_free(awinic->reset_gpio);
 			devm_kfree(&i2c->dev, awinic);
 			awinic = NULL;
 			return -ENOMEM;
@@ -511,9 +510,9 @@ static int awinic_i2c_probe(struct i2c_client *i2c,
 			&i2c->dev, sizeof(struct aw8622x), GFP_KERNEL);
 		if (awinic->aw8622x == NULL) {
 			if (gpio_is_valid(awinic->irq_gpio))
-				devm_gpio_free(&i2c->dev, awinic->irq_gpio);
+				gpio_free(awinic->irq_gpio);
 			if (gpio_is_valid(awinic->reset_gpio))
-				devm_gpio_free(&i2c->dev, awinic->reset_gpio);
+				gpio_free(awinic->reset_gpio);
 			devm_kfree(&i2c->dev, awinic);
 			awinic = NULL;
 			return -ENOMEM;
@@ -656,10 +655,10 @@ err_aw8624_parse_dt:
 
 err_id:
 	if (gpio_is_valid(awinic->irq_gpio))
-		devm_gpio_free(&i2c->dev, awinic->irq_gpio);
+		gpio_free(awinic->irq_gpio);
 err_irq_gpio_request:
 	if (gpio_is_valid(awinic->reset_gpio))
-		devm_gpio_free(&i2c->dev, awinic->reset_gpio);
+		gpio_free(awinic->reset_gpio);
 err_reset_gpio_request:
 err_parse_dt:
 	devm_kfree(&i2c->dev, awinic);
@@ -667,7 +666,7 @@ err_parse_dt:
 	return ret;
 }
 
-static int awinic_i2c_remove(struct i2c_client *i2c)
+static void awinic_i2c_remove(struct i2c_client *i2c)
 {
 	struct awinic *awinic = i2c_get_clientdata(i2c);
 
@@ -681,9 +680,9 @@ static int awinic_i2c_remove(struct i2c_client *i2c)
 		devm_free_irq(&i2c->dev, gpio_to_irq(awinic->aw8624->irq_gpio),
 			      awinic->aw8624);
 		if (gpio_is_valid(awinic->aw8624->irq_gpio))
-			devm_gpio_free(&i2c->dev, awinic->aw8624->irq_gpio);
+			gpio_free(awinic->aw8624->irq_gpio);
 		if (gpio_is_valid(awinic->aw8624->reset_gpio))
-			devm_gpio_free(&i2c->dev, awinic->aw8624->reset_gpio);
+			gpio_free(awinic->aw8624->reset_gpio);
 		if (awinic->aw8624 != NULL) {
 			flush_workqueue(awinic->aw8624->work_queue);
 			destroy_workqueue(awinic->aw8624->work_queue);
@@ -715,11 +714,10 @@ static int awinic_i2c_remove(struct i2c_client *i2c)
 		awinic->aw8622x = NULL;
 	} else {
 		aw_dev_err(&i2c->dev, "%s no chip\n", __func__);
-		return -ERANGE;
+		return;
 	}
 
 	aw_dev_info(&i2c->dev, "%s exit\n", __func__);
-	return 0;
 }
 
 static const struct i2c_device_id awinic_i2c_id[] = { { AWINIC_I2C_NAME, 0 },

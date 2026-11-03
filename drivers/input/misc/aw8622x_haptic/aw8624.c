@@ -385,7 +385,7 @@ static int aw8624_rtp_update(struct aw8624 *aw8624)
 {
 	pr_info("%s: enter\n", __func__);
 
-	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+	return request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 				       aw8624_rtp_name[aw8624->rtp_file_num],
 				       aw8624->dev, GFP_KERNEL, aw8624,
 				       aw8624_rtp_loaded);
@@ -521,7 +521,7 @@ static int aw8624_ram_update(struct aw8624 *aw8624)
 {
 	aw8624->ram_init = 0;
 	aw8624->rtp_init = 0;
-	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+	return request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 				       aw8624_ram_name, aw8624->dev, GFP_KERNEL,
 				       aw8624, aw8624_ram_loaded);
 }
