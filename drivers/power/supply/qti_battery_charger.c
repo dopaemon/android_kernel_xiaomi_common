@@ -1640,7 +1640,7 @@ static int power_supply_read_temp(struct thermal_zone_device *tzd,
 	s64 delta;
 
 	WARN_ON(tzd == NULL);
-	psy = tzd->devdata;
+	psy = thermal_zone_device_priv(tzd);
 	bcdev = power_supply_get_drvdata(psy);
 	pst = &bcdev->psy_list[PSY_TYPE_XM];
 
@@ -1659,7 +1659,7 @@ static int power_supply_read_temp(struct thermal_zone_device *tzd,
 	*temp = batt_temp * 100;
 	if( batt_temp!= last_temp) {
 		last_temp = batt_temp;
-		pr_err("batt_thermal temp:%d ,delta:%ld rc=%d\n",batt_temp,delta, rc);
+		pr_err("batt_thermal temp:%d ,delta:%lld rc=%d\n",batt_temp,delta, rc);
 	}
 	return 0;
 }
@@ -1689,8 +1689,8 @@ static int battery_chg_init_psy(struct battery_chg_dev *bcdev)
 	}
 	psy = bcdev->psy_list[PSY_TYPE_BATTERY].psy;
 #if defined(CONFIG_BQ_FUEL_GAUGE)
-	psy->tzd = thermal_zone_device_register(psy->desc->name,
-					0, 0, psy, &psy_tzd_ops, NULL, 0, 0);
+	psy->tzd = thermal_tripless_zone_device_register(psy->desc->name,
+					psy, &psy_tzd_ops, NULL);
 #endif
 
 	bcdev->psy_list[PSY_TYPE_USB].psy =
@@ -2643,10 +2643,8 @@ static int battery_chg_parse_dt(struct battery_chg_dev *bcdev)
 static int battery_chg_reboot_notify(struct notifier_block *nb, unsigned long code,
 		void *unused)
 {
-	struct battery_charger_notify_msg msg_notify = { { 0 } };
 	struct battery_chg_dev *bcdev = container_of(nb, struct battery_chg_dev,
 						     reboot_notifier);
-	int rc;
 
 	if (!bcdev->ship_mode_en)
 		return NOTIFY_DONE;
@@ -2893,7 +2891,7 @@ static void qti_battery_register_panel_notifier_work(struct work_struct *work)
 		cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY,
 				PANEL_EVENT_NOTIFIER_CLIENT_CHARGE, active_panel,
 				screen_state_for_charge_callback, (void *)pvt_data);
-		pr_err("ERROR: cookie:%s", cookie);
+		pr_err("ERROR: cookie:%p", cookie);
 		if (IS_ERR(cookie))
 			printk(KERN_ERR "%s:Failed to register for panel events\n", __func__);
 		else
@@ -2952,7 +2950,7 @@ static void qti_battery_register_panel_sec_notifier_work(struct work_struct *wor
 		cookie1 = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_SECONDARY,
 				PANEL_EVENT_NOTIFIER_CLIENT_CHARGE_SECOND, active_panel_sec,
 				screen_state_for_charge_callback, (void *)pvt_data);
-		pr_err("ERROR: cookie1:%s", cookie1);
+		pr_err("ERROR: cookie1:%p", cookie1);
 		if (IS_ERR(cookie1))
 			printk(KERN_ERR "%s:Failed to register for second panel events\n", __func__);
 		else

@@ -662,8 +662,6 @@ struct battery_chg_dev {
 	bool				battery_auth;
 	bool				slave_battery_auth;
 	int				mtbf_current;
-	bool				notify_en;
-	bool				error_prop;
 	struct work_struct pen_notifier_work;
 	struct work_struct current_battery_level_notifier_work;
 #ifndef CONFIG_MI_CHARGER_M81
