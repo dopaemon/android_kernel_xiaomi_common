@@ -30,7 +30,7 @@ struct pmsg_buffer_hdr {
 	uint32_t    sig;
 	atomic_t    start;
 	atomic_t    size;
-	uint8_t     data[0];
+	uint8_t     data[];
 };
 
 /* Maximum MTD partition size */
@@ -429,7 +429,7 @@ static void mtdoops_do_dump(struct kmsg_dumper *dumper,
 	pmsg_buffer_start = phys_to_virt((cxt->pmsg_data.mem_address + cxt->pmsg_data.mem_size) - cxt->pmsg_data.pmsg_size);
 	p_hdr = (struct pmsg_buffer_hdr *)pmsg_buffer_start;
 
-	pr_err("mtdoops: mtdoops_do_dump pmsg paddr = 0x%lx \n",pmsg_buffer_start);
+	pr_err("mtdoops: mtdoops_do_dump pmsg paddr = %p \n",pmsg_buffer_start);
 
 	if(p_hdr->sig == 0x43474244)
 	{
@@ -647,8 +647,8 @@ static int mtdoops_pmsg_probe(struct platform_device *pdev)
 	parse_u32("pmsg-size", cxt->pmsg_data.pmsg_size, 0);
 #undef parse_u32
 
-	printk(KERN_ERR "mtdoops: pares mtd_dt, mem_address =0x%x, mem_size =0x%x \n", cxt->pmsg_data.mem_address, cxt->pmsg_data.mem_size);
-	printk(KERN_ERR "mtdoops: pares mtd_dt, pmsg_size =0x%x \n", cxt->pmsg_data.pmsg_size);
+	printk(KERN_ERR "mtdoops: pares mtd_dt, mem_address =%pa, mem_size =0x%lx \n", &cxt->pmsg_data.mem_address, cxt->pmsg_data.mem_size);
+	printk(KERN_ERR "mtdoops: pares mtd_dt, pmsg_size =0x%lx \n", cxt->pmsg_data.pmsg_size);
 
 	return 0;
 }
