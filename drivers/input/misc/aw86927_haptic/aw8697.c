@@ -313,7 +313,7 @@ static int aw8697_rtp_update(struct aw8697 *aw8697)
 {
 	aw_info("%s enter\n", __func__);
 
-	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+	return request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 				       awinic_rtp_name[aw8697->rtp_file_num],
 				       aw8697->dev, GFP_KERNEL, aw8697,
 				       aw8697_rtp_loaded);
@@ -507,7 +507,7 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 	aw8697->rtp_init = 0;
 	aw_info("%s enter\n", __func__);
 
-	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+	return request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 				       awinic_ram_name[0], aw8697->dev,
 				       GFP_KERNEL, aw8697, aw8697_ram_loaded);
 }

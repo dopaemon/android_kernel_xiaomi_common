@@ -3906,13 +3906,13 @@ static int aw86927_ram_update(struct aw86927 *aw86927)
 	aw_info("%s enter\n", __func__);
 	if (aw86927->nv_flag == 1) {
 		aw_info("Use the backup ram file!\n");
-		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+		return request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 					       awinic_ram_name[1], aw86927->dev,
 					       GFP_KERNEL, aw86927,
 					       aw86927_ram_loaded);
 	} else {
 		aw_info("Use the default ram file!\n");
-		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+		return request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
 					       awinic_ram_name[0], aw86927->dev,
 					       GFP_KERNEL, aw86927,
 					       aw86927_ram_loaded);
