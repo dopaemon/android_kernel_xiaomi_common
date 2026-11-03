@@ -26,7 +26,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-#include <stdarg.h>
+#include <linux/stdarg.h>
 #include <linux/time.h>
 #include <linux/ktime.h>
 #include <linux/delay.h>

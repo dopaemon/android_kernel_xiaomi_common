@@ -25,7 +25,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-#include <stdarg.h>
+#include <linux/stdarg.h>
 #include <linux/delay.h>
 #include <linux/ctype.h>
 #include <linux/of_gpio.h>
@@ -161,7 +161,7 @@ int fts_read(u8 *outBuf, int byteToRead)
 	spi_message_init(&msg);
 
 	transfer[0].len = byteToRead;
-	transfer[0].delay_usecs = SPI_DELAY_CS;
+	transfer[0].delay.value = SPI_DELAY_CS;
 	transfer[0].tx_buf = NULL;
 	transfer[0].rx_buf = outBuf;
 	spi_message_add_tail(&transfer[0], &msg);
@@ -230,7 +230,7 @@ int fts_writeRead(u8 *cmd, int cmdLength, u8 *outBuf, int byteToRead)
 	spi_message_add_tail(&transfer[0], &msg);
 
 	transfer[1].len = byteToRead;
-	transfer[1].delay_usecs = SPI_DELAY_CS;
+	transfer[1].delay.value = SPI_DELAY_CS;
 	transfer[1].tx_buf = NULL;
 	transfer[1].rx_buf = outBuf;
 	spi_message_add_tail(&transfer[1], &msg);
@@ -289,7 +289,7 @@ int fts_write(u8 *cmd, int cmdLength)
 	spi_message_init(&msg);
 
 	transfer[0].len = cmdLength;
-	transfer[0].delay_usecs = SPI_DELAY_CS;
+	transfer[0].delay.value = SPI_DELAY_CS;
 	transfer[0].tx_buf = cmd;
 	transfer[0].rx_buf = NULL;
 	spi_message_add_tail(&transfer[0], &msg);
@@ -499,7 +499,7 @@ int fts_writeFwCmd(u8 *cmd, int cmdLength)
 	spi_message_init(&msg);
 
 	transfer[0].len = cmdLength;
-	transfer[0].delay_usecs = SPI_DELAY_CS;
+	transfer[0].delay.value = SPI_DELAY_CS;
 	transfer[0].tx_buf = cmd;
 	transfer[0].rx_buf = NULL;
 	spi_message_add_tail(&transfer[0], &msg);
@@ -589,7 +589,7 @@ int fts_writeThenWriteRead(u8 *writeCmd1, int writeCmdLength, u8 *readCmd1,
 	spi_message_add_tail(&transfer[1], &msg);
 
 	transfer[2].len = byteToRead;
-	transfer[2].delay_usecs = SPI_DELAY_CS;
+	transfer[2].delay.value = SPI_DELAY_CS;
 	transfer[2].tx_buf = NULL;
 	transfer[2].rx_buf = outBuf;
 	spi_message_add_tail(&transfer[2], &msg);

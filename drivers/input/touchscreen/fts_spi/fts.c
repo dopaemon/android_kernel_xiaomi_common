@@ -49,6 +49,7 @@
 #endif
 
 #include <linux/gpio.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
 
@@ -3656,6 +3657,7 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info,
 			__set_bit(touchId, &info->stylus_id);
 			break;
 		}
+		fallthrough;
 #endif
 	case TOUCH_TYPE_FINGER:
 		/*logError(0, "%s  %s : It is a finger!\n",tag,__func__); */
@@ -3777,6 +3779,7 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info,
 			__clear_bit(touchId, &info->stylus_id);
 			break;
 		}
+		fallthrough;
 #endif
 
 	case TOUCH_TYPE_FINGER:
@@ -6330,7 +6333,7 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	struct fts_config_info *config_info;
 	u32 temp_val;
 
-	bdata->irq_gpio = of_get_named_gpio_flags(np, "fts,irq-gpio", 0, NULL);
+	bdata->irq_gpio = of_get_named_gpio(np, "fts,irq-gpio", 0);
 
 	logError(0, "%s irq_gpio = %d\n", tag, bdata->irq_gpio);
 	retval = of_property_read_string(np, "fts,pwr-reg-name", &name);
@@ -6364,7 +6367,7 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 
 	if (of_property_read_bool(np, "fts,reset-gpio-enable")) {
 		bdata->reset_gpio =
-			of_get_named_gpio_flags(np, "fts,reset-gpio", 0, NULL);
+			of_get_named_gpio(np, "fts,reset-gpio", 0);
 		logError(0, "%s reset_gpio =%d\n", tag, bdata->reset_gpio);
 	} else {
 		bdata->reset_gpio = GPIO_NOT_DEFINED;
@@ -7113,7 +7116,7 @@ void fts_secure_remove(struct fts_ts_info *info)
  * It allocates device variables, initialize queues and schedule works, registers the IRQ handler, suspend/resume callbacks, registers the device to the linux input subsystem etc.
  */
 #ifdef I2C_INTERFACE
-static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
+static int fts_probe(struct i2c_client *client)
 {
 #else
 static int fts_probe(struct spi_device *client)
@@ -7577,7 +7580,7 @@ static int fts_probe(struct spi_device *client)
 #endif
 
 	if (info->fts_tp_class == NULL)
-		info->fts_tp_class = class_create(THIS_MODULE, "touch_fts");
+		info->fts_tp_class = class_create("touch_fts");
 	info->fts_touch_dev = device_create(info->fts_tp_class, NULL,
 					    DCHIP_ID_0, info, FTS_TOUCH_DEV_NAME);
 
@@ -7710,10 +7713,10 @@ ProbeErrorExit_0:
  * This function is called when the driver need to be removed.
  */
 #ifdef I2C_INTERFACE
-static int fts_remove(struct i2c_client *client)
+static void fts_remove(struct i2c_client *client)
 {
 #else
-static int fts_remove(struct spi_device *client)
+static void fts_remove(struct spi_device *client)
 {
 #endif
 
@@ -7776,8 +7779,6 @@ static int fts_remove(struct spi_device *client)
 #endif
 	/* free all */
 	kfree(info);
-
-	return OK;
 }
 
 /**
