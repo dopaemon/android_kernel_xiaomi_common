@@ -580,6 +580,7 @@ struct psy_state {
 struct battery_chg_match_data {
 	const struct power_supply_desc	*batt_psy_desc;
 	const struct power_supply_desc	*wls_psy_desc;
+	u32				batt_prop_count;
 };
 
 struct battery_chg_dev {
