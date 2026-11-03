@@ -734,8 +734,7 @@ exit:
 	return status;
 }
 
-static int stmvl53l5_i2c_probe(struct i2c_client *client,
-			       const struct i2c_device_id *id)
+static int stmvl53l5_i2c_probe(struct i2c_client *client)
 {
 	int status = STATUS_OK;
 
@@ -787,7 +786,7 @@ exit:
 	return status;
 }
 
-static int stmvl53l5_i2c_remove(struct i2c_client *client)
+static void stmvl53l5_i2c_remove(struct i2c_client *client)
 {
 #ifdef STM_VL53L5_GPIO_ENABLE
 	(void)stmvl53l5_platform_terminate(&stm_module->stdev);
@@ -796,8 +795,6 @@ static int stmvl53l5_i2c_remove(struct i2c_client *client)
 
 	stm_module->gpio = NULL;
 	kfree(stm_module);
-
-	return 0;
 }
 
 static struct i2c_driver stmvl53l5_i2c_driver = {
@@ -883,7 +880,7 @@ exit:
 	return status;
 }
 
-static int stmvl53l5_spi_remove(struct spi_device *device)
+static void stmvl53l5_spi_remove(struct spi_device *device)
 {
 #ifdef STM_VL53L5_GPIO_ENABLE
 	(void)stmvl53l5_platform_terminate(&stm_module->stdev);
@@ -893,7 +890,6 @@ static int stmvl53l5_spi_remove(struct spi_device *device)
 	stm_module->gpio = NULL;
 	kfree(stm_module);
 	disable_power();
-	return 0;
 }
 
 static struct spi_driver stmvl53l5_spi_driver = {
