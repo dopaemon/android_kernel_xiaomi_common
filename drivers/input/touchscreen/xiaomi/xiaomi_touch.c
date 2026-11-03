@@ -621,7 +621,7 @@ static int __init xiaomi_touch_init(void)
 		goto misc_register_err;
 	}
 
-	touch_class = class_create(THIS_MODULE, "touch");
+	touch_class = class_create("touch");
 	if (IS_ERR(touch_class)) {
 		pr_err("failed to create class\n");
 		goto class_create_err;
