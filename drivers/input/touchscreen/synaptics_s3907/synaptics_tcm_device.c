@@ -488,7 +488,7 @@ static int device_create_class(void)
 	if (device_hcd->class != NULL)
 		return 0;
 
-	device_hcd->class = class_create(THIS_MODULE, PLATFORM_DRIVER_NAME);
+	device_hcd->class = class_create(PLATFORM_DRIVER_NAME);
 
 	if (IS_ERR(device_hcd->class)) {
 		LOGE(tcm_hcd->pdev->dev.parent, "Failed to create class\n");

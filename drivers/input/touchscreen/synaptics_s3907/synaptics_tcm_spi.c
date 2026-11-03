@@ -148,9 +148,15 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 	LOGE(dev, "-----enter-----%s\n", __func__);
 	prop = of_find_property(np, "synaptics,irq-gpio", NULL);
 	if (prop && prop->length) {
-		bdata->irq_gpio = of_get_named_gpio_flags(
-			np, "synaptics,irq-gpio", 0,
-			(enum of_gpio_flags *)&bdata->irq_flags);
+		struct of_phandle_args args;
+
+		bdata->irq_gpio = of_get_named_gpio(np, "synaptics,irq-gpio", 0);
+		if (!of_parse_phandle_with_args(np, "synaptics,irq-gpio",
+						"#gpio-cells", 0, &args)) {
+			if (args.args_count > 1)
+				bdata->irq_flags = args.args[1];
+			of_node_put(args.np);
+		}
 	} else {
 		bdata->irq_gpio = -1;
 	}
@@ -175,8 +181,8 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 
 	prop = of_find_property(np, "synaptics,power-gpio", NULL);
 	if (prop && prop->length) {
-		bdata->power_gpio = of_get_named_gpio_flags(
-			np, "synaptics,power-gpio", 0, NULL);
+		bdata->power_gpio = of_get_named_gpio(
+			np, "synaptics,power-gpio", 0);
 	} else {
 		bdata->power_gpio = -1;
 	}
@@ -239,8 +245,8 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 
 	prop = of_find_property(np, "synaptics,reset-gpio", NULL);
 	if (prop && prop->length) {
-		bdata->reset_gpio = of_get_named_gpio_flags(
-			np, "synaptics,reset-gpio", 0, NULL);
+		bdata->reset_gpio = of_get_named_gpio(
+			np, "synaptics,reset-gpio", 0);
 	} else {
 		bdata->reset_gpio = -1;
 	}
@@ -295,8 +301,8 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 
 	/*prop = of_find_property(np, "synaptics,tpio-reset-gpio", NULL);
 	if (prop && prop->length) {
-		bdata->tpio_reset_gpio = of_get_named_gpio_flags(np,
-				"synaptics,tpio-reset-gpio", 0, NULL);
+		bdata->tpio_reset_gpio = of_get_named_gpio(np,
+				"synaptics,tpio-reset-gpio", 0);
 	} else {
 		bdata->tpio_reset_gpio = -1;
 	}*/
@@ -468,7 +474,7 @@ static int syna_tcm_spi_rmi_read(struct syna_tcm_hcd *tcm_hcd,
 		xfer[1].tx_buf = &buf[2];
 		xfer[1].rx_buf = data;
 		if (bdata->block_delay_us)
-			xfer[1].delay_usecs = bdata->block_delay_us;
+			xfer[1].delay.value = bdata->block_delay_us;
 		xfer[1].speed_hz = bdata->ubl_max_freq;
 		spi_message_add_tail(&xfer[1], &msg);
 	} else {
@@ -481,9 +487,9 @@ static int syna_tcm_spi_rmi_read(struct syna_tcm_hcd *tcm_hcd,
 				xfer[idx].tx_buf = &buf[2];
 				xfer[idx].rx_buf = &data[idx - 2];
 			}
-			xfer[idx].delay_usecs = bdata->ubl_byte_delay_us;
+			xfer[idx].delay.value = bdata->ubl_byte_delay_us;
 			if (bdata->block_delay_us && (idx == byte_count - 1))
-				xfer[idx].delay_usecs = bdata->block_delay_us;
+				xfer[idx].delay.value = bdata->block_delay_us;
 			xfer[idx].speed_hz = bdata->ubl_max_freq;
 			spi_message_add_tail(&xfer[idx], &msg);
 		}
@@ -544,7 +550,7 @@ static int syna_tcm_spi_rmi_write(struct syna_tcm_hcd *tcm_hcd,
 	xfer[0].len = byte_count;
 	xfer[0].tx_buf = buf;
 	if (bdata->block_delay_us)
-		xfer[0].delay_usecs = bdata->block_delay_us;
+		xfer[0].delay.value = bdata->block_delay_us;
 	spi_message_add_tail(&xfer[0], &msg);
 
 	mode = spi->mode;
@@ -608,7 +614,7 @@ static int syna_tcm_spi_read(struct syna_tcm_hcd *tcm_hcd, unsigned char *data,
 		xfer[0].tx_buf = buf;
 		xfer[0].rx_buf = data;
 		if (bdata->block_delay_us)
-			xfer[0].delay_usecs = bdata->block_delay_us;
+			xfer[0].delay.value = bdata->block_delay_us;
 		spi_message_add_tail(&xfer[0], &msg);
 	} else {
 		buf[0] = 0xff;
@@ -616,9 +622,9 @@ static int syna_tcm_spi_read(struct syna_tcm_hcd *tcm_hcd, unsigned char *data,
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = buf;
 			xfer[idx].rx_buf = &data[idx];
-			xfer[idx].delay_usecs = bdata->byte_delay_us;
+			xfer[idx].delay.value = bdata->byte_delay_us;
 			if (bdata->block_delay_us && (idx == length - 1))
-				xfer[idx].delay_usecs = bdata->block_delay_us;
+				xfer[idx].delay.value = bdata->block_delay_us;
 			spi_message_add_tail(&xfer[idx], &msg);
 		}
 	}
@@ -679,15 +685,15 @@ static int syna_tcm_spi_write(struct syna_tcm_hcd *tcm_hcd, unsigned char *data,
 		xfer[0].len = length;
 		xfer[0].tx_buf = data;
 		if (bdata->block_delay_us)
-			xfer[0].delay_usecs = bdata->block_delay_us;
+			xfer[0].delay.value = bdata->block_delay_us;
 		spi_message_add_tail(&xfer[0], &msg);
 	} else {
 		for (idx = 0; idx < length; idx++) {
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = &data[idx];
-			xfer[idx].delay_usecs = bdata->byte_delay_us;
+			xfer[idx].delay.value = bdata->byte_delay_us;
 			if (bdata->block_delay_us && (idx == length - 1))
-				xfer[idx].delay_usecs = bdata->block_delay_us;
+				xfer[idx].delay.value = bdata->block_delay_us;
 			spi_message_add_tail(&xfer[idx], &msg);
 		}
 	}
@@ -783,13 +789,11 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int syna_tcm_spi_remove(struct spi_device *spi)
+static void syna_tcm_spi_remove(struct spi_device *spi)
 {
 	syna_tcm_spi_device->dev.platform_data = NULL;
 
 	platform_device_unregister(syna_tcm_spi_device);
-
-	return 0;
 }
 
 static const struct spi_device_id syna_tcm_id_table[] = {

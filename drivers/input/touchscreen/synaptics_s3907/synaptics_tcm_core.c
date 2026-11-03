@@ -36,6 +36,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/gpio.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/kthread.h>
 #include <linux/interrupt.h>
 #include <linux/regulator/consumer.h>
@@ -1845,6 +1846,7 @@ retry:
 		case STATUS_CONTINUED_READ:
 			LOGD(tcm_hcd->pdev->dev.parent,
 			     "Out-of-sync continued read\n");
+		fallthrough;
 		case STATUS_IDLE:
 		case STATUS_BUSY:
 			tcm_hcd->payload_length = 0;
@@ -4004,6 +4006,7 @@ static int syna_tcm_set_cur_value(void *private, enum touch_mode mode, int value
 	case TOUCH_MODE_FOD_PRESS_GESTURE:
 		tcm_hcd->finger_unlock_status = FOD_STATUS_INPUT_FINGERPRINT;
 		tcm_hcd->fod_enabled = FLAG_FOD_ENABLE;
+		fallthrough;
 	case TOUCH_MODE_SINGLETAP_GESTURE:
 		tcm_hcd->aod_enable = value > 0 ? true : false;
 		break;
@@ -4096,6 +4099,7 @@ static int syna_tcm_set_cur_value(void *private, enum touch_mode mode, int value
 			     retval);
 			goto exit;
 		}
+		fallthrough;
 	default:
 		LOGE(tcm_hcd->pdev->dev.parent, "handler got mode %d with value %d, not implemented",
 		       mode, value);
@@ -4655,13 +4659,13 @@ static int syna_tcm_probe(struct platform_device *pdev)
 */
 	tcm_hcd->pinctrl = devm_pinctrl_get(&spi->dev);
 	if (IS_ERR(tcm_hcd->pinctrl)) {
-		LOGE(&pdev->dev, "Cannot find default pinctrl, ret = %d!\n",
+		LOGE(&pdev->dev, "Cannot find default pinctrl, ret = %ld!\n",
 		     PTR_ERR(tcm_hcd->pinctrl));
 	} else {
 		tcm_hcd->pins_default =
 			pinctrl_lookup_state(tcm_hcd->pinctrl, "default");
 		if (IS_ERR(tcm_hcd->pins_default))
-			LOGE(&pdev->dev, "Cannot find pinctrl default %d!\n",
+			LOGE(&pdev->dev, "Cannot find pinctrl default %ld!\n",
 			     PTR_ERR(tcm_hcd->pins_default));
 		else
 			pinctrl_select_state(tcm_hcd->pinctrl,
@@ -4794,7 +4798,7 @@ static int syna_tcm_probe(struct platform_device *pdev)
 	tcm_hcd->xiaomi_touch.private = tcm_hcd;
 	register_xiaomi_touch_client(TOUCH_ID_PRIMARY, &tcm_hcd->xiaomi_touch);
 #endif
-	tcm_hcd->syna_tcm_class = class_create(THIS_MODULE, "touch-syna_tcm");
+	tcm_hcd->syna_tcm_class = class_create("touch-syna_tcm");
 
 	tcm_hcd->syna_tcm_dev =
 		device_create(tcm_hcd->syna_tcm_class, NULL,

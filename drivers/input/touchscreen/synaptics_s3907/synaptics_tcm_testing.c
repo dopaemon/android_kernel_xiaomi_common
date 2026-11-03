@@ -2482,7 +2482,7 @@ exit:
 
 static int auto_test_open(struct inode *inode, struct file *file)
 {
-	return single_open_size(file, auto_test_result_show, PDE_DATA(inode),
+	return single_open_size(file, auto_test_result_show, pde_data(inode),
 				DEFAULT_SEQ_FILE_SIZE);
 }
 

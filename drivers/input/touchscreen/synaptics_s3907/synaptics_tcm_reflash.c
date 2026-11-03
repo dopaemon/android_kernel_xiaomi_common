@@ -353,7 +353,7 @@ static int syna_tcm_lockdown_info(void)
 		for (i = 0; i < 8; i++) {
 			tcm_hcd->lockdown_info[i] = p[i];
 			LOGI(tcm_hcd->pdev->dev.parent,
-			     "%s: p[%d] = 0x%02x, PAGE_SIZE = %d\n", __func__,
+			     "%s: p[%d] = 0x%02x, PAGE_SIZE = %lu\n", __func__,
 			     i, p[i], PAGE_SIZE);
 		}
 		tcm_hcd->lockdown_info_ready = true;
@@ -2436,6 +2436,7 @@ static int reflash_do_reflash(void)
 				goto exit;
 			}
 		}
+		fallthrough;
 	case CONFIG_ONLY:
 		if (reflash_hcd->disp_cfg_update) {
 			retval = reflash_update_disp_config(false);
