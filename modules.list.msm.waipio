@@ -50,7 +50,7 @@ nvmem_qcom-spmi-sdam.ko
 phy-generic.ko
 phy-qcom-ufs.ko
 phy-qcom-ufs-qmp-v4-cape.ko
-phy-qcom-ufs-qmp-v4-cape.ko
+phy-qcom-ufs-qmp-v4-waipio.ko
 pinctrl-msm.ko
 proxy-consumer.ko
 qcom-dcvs.ko
