@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#fffbff">
+    <title>NoMount</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="index.js" type="module"></script>
+</head>
+<body class="loading">
+    <div class="root_layout">
+        <div class="top-app-bar" id="top-app-bar" aria-hidden="true">
+            <div class="top-app-bar-title" id="top-app-bar-title"></div>
+        </div>
+
+        <div class="page-container">
+            <div class="pull-to-refresh-indicator">
+                <md-icon>refresh</md-icon>
+            </div>
+            <div id="view-home" class="view-content active">
+                <div class="header-title">NoMount</div>
+                <div class="home-status-card">
+                    <md-icon id="status-icon" class="status-icon">check_circle</md-icon>
+                    <div class="status-text-col">
+                        <div class="status-title-row">
+                            <h2 id="status-title">Checking...</h2>
+                            <span id="nm-mode-badge" class="mode-badge"></span>
+                        </div>
+                        <div id="status-indicator" class="status-label">Checking...</div>
+                    </div>
+                </div>
+
+                <div class="home-segment-group">
+                    <div class="home-segment-row">
+                        <div class="segment-icon"><md-icon>link_off</md-icon></div>
+                        <div class="info-data">
+                            <span class="info-label" data-i18n="module_version_label">Module Version</span>
+                            <span class="info-value" id="module-version">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="home-segment-row">
+                        <div class="segment-icon"><md-icon>account_tree</md-icon></div>
+                        <div class="info-data">
+                            <span class="info-label" data-i18n="status_label">Status</span>
+                            <span class="info-value" id="injection-stats">Calculating...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="segment-section-label" data-i18n="device_label">Device</div>
+                <div class="home-segment-group">
+                    <div class="home-segment-row">
+                        <div class="segment-icon"><md-icon>smartphone</md-icon></div>
+                        <div class="info-data">
+                            <span class="info-label" data-i18n="model_label">Model</span>
+                            <span class="info-value" id="device-model">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="home-segment-row">
+                        <div class="segment-icon"><md-icon>settings_suggest</md-icon></div>
+                        <div class="info-data">
+                            <span class="info-label" data-i18n="system_label">System</span>
+                            <span class="info-value" id="android-ver">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="home-segment-row">
+                        <div class="segment-icon">
+                            <md-icon>memory</md-icon>
+                        </div>
+                        <div class="info-data">
+                            <span class="info-label" data-i18n="kernel_label">Kernel</span>
+                            <span class="info-value" id="kernel-version">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-modules" class="view-content">
+                <div class="header-title" data-i18n="nav_modules">Modules</div>
+                <div id="modules-list" class="list"></div>
+            </div>
+
+            <div id="view-exclusions" class="view-content">
+                <div class="header-title" data-i18n="nav_exclusions">Exclusions</div>
+                <div id="exclusions-list" class="list"></div>
+            </div>
+
+            <div id="view-options" class="view-content">
+                <div class="header-title" data-i18n="nav_options">Settings</div>
+                
+                <div class="segment-section-label" data-i18n="appearance">Appearance</div>
+                <div class="settings-segment-group">
+                    <div class="segment-card setting-item" id="lang-setting-card">
+                        <div class="setting-text">
+                            <h3 data-i18n="language">Language</h3>
+                            <p data-i18n="language_description">Select the interface language.</p>
+                        </div>
+
+                        <div class="custom-select-wrapper" id="lang-select-wrapper">
+                            <div class="custom-select-trigger" id="lang-select-trigger">
+                                <span id="lang-select-value">English</span>
+                                <md-icon class="dropdown-arrow">arrow_drop_down</md-icon>
+                            </div>
+                            <div class="custom-select-menu" id="lang-select-menu"></div>
+                        </div>
+                    </div>
+
+                    <div class="segment-card setting-item" style="z-index: 1001;">
+                        <div class="setting-text">
+                            <h3 data-i18n="theme_mode">Theme</h3>
+                            <p data-i18n="theme_mode_desc">System, Light, Dark, or AMOLED</p>
+                        </div>
+                        <div class="custom-select-wrapper" id="theme-select-wrapper">
+                            <div class="custom-select-trigger" id="theme-select-trigger">
+                                <span id="theme-select-value">System</span>
+                                <md-icon class="dropdown-arrow">arrow_drop_down</md-icon>
+                            </div>
+                            <div class="custom-select-menu" id="theme-select-menu"></div>
+                        </div>
+                    </div>
+
+                    <div class="segment-card setting-item">
+                        <div class="setting-text">
+                            <h3 data-i18n="material_you">Material You</h3>
+                            <p data-i18n="material_you_desc">Use system wallpaper colors</p>
+                        </div>
+                        <label class="custom-switch" id="setting-material">
+                            <input type="checkbox" class="switch-input" aria-label="Material You">
+                            <span class="switch-track">
+                                <span class="switch-thumb"></span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="segment-card setting-item" id="custom-color-card" style="display: none; cursor: pointer;">
+                        <div class="setting-text">
+                            <h3 data-i18n="custom_color">Custom Color</h3>
+                            <p data-i18n="custom_color_desc">Pick your interface accent color</p>
+                        </div>
+                        <div class="color-indicator" id="custom-color-indicator"></div>
+                    </div>
+                </div>
+
+                <div class="segment-section-label" data-i18n="advanced">Advanced</div>
+
+                <div class="settings-segment-group">
+                     <div class="segment-card setting-item" id="setting-isolated-card" style="display: none;">
+                        <div class="setting-text">
+                            <h3 data-i18n="block_isolated_uids">Block Isolated UIDs</h3>
+                            <p data-i18n="block_isolated_uids_desc">Bypass redirection for Android isolated processes (UIDs 90000-99999).</p>
+                        </div>
+                        <label class="custom-switch" id="setting-isolated">
+                            <input type="checkbox" class="switch-input" aria-label="Block Isolated UIDs">
+                            <span class="switch-track">
+                                <span class="switch-thumb"></span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="segment-card setting-item">
+                        <div class="setting-text">
+                            <h3 data-i18n="safe_mode">Safe Mode</h3>
+                            <p data-i18n="safe_mode_desc">Disable injection on next boot</p>
+                        </div>
+                        <label class="custom-switch" id="setting-safemode">
+                            <input type="checkbox" class="switch-input" aria-label="Safe Mode">
+                            <span class="switch-track">
+                                <span class="switch-thumb"></span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="segment-card setting-item">
+                        <div class="setting-text">
+                            <h3 data-i18n="dump_rules">Dump rules</h3>
+                            <p data-i18n="dump_rules_desc">Dump all rules into android log. Only enable for debugging.</p>
+                        </div>
+                        <label class="custom-switch" id="setting-dumprule">
+                            <input type="checkbox" class="switch-input" aria-label="Dump rules">
+                            <span class="switch-track">
+                                <span class="switch-thumb"></span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; flex-direction: row; flex-wrap: wrap;">
+                    <button class="custom-tonal-btn" id="btn-dump-now" style="flex: 1 1 100%; display: none;" data-i18n="dump_now">
+                        Dump rules now
+                    </button>
+                    <button class="custom-tonal-btn error" id="btn-clear-rules-only" style="flex: 1; min-width: 140px; padding: 0 12px;" data-i18n="clear_rules">
+                        Clear rules
+                    </button>
+                    <button class="custom-tonal-btn error" id="btn-clear-uids-only" style="flex: 1; min-width: 140px; padding: 0 12px;" data-i18n="clear_uids">
+                        Clear UIDs
+                    </button>
+                    <button class="custom-tonal-btn error" id="btn-clear-all" style="flex: 1 1 100%;" data-i18n="clear_all">
+                        Clear all
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item active" data-target="view-home">
+                <div class="nav-icon"><md-icon>home</md-icon></div>
+                <span data-i18n="nav_home">Home</span>
+            </div>
+            <div class="nav-item" data-target="view-modules">
+                <div class="nav-icon"><md-icon>extension</md-icon></div>
+                <span data-i18n="nav_modules">Modules</span>
+            </div>
+            <div class="nav-item" data-target="view-exclusions">
+                <div class="nav-icon"><md-icon>shield</md-icon></div>
+                <span data-i18n="nav_exclusions">Exclusions</span>
+            </div>
+            <div class="nav-item" data-target="view-options">
+                <div class="nav-icon"><md-icon>settings</md-icon></div>
+                <span data-i18n="nav_options">Options</span>
+            </div>
+    </div>
+
+    <div id="fab-container">
+        <button class="custom-fab" id="fab-add-exclusion" aria-label="Add exclusion">
+            <md-icon>add</md-icon>
+        </button>
+    </div>
+
+    <div id="uid-input-modal" class="modal-overlay">
+        <div class="md-dialog">
+            <h3 class="md-dialog-title" data-i18n="enter_manual_uid">Enter UID manually</h3>
+            <div>
+                <div class="md-text-field">
+                    <input type="number" id="manual-uid-input" placeholder="e.g. 10123">
+                </div>
+            </div>
+            <div class="md-dialog-actions">
+                <button class="btn-text" id="btn-cancel-uid" data-i18n="cancel">Cancel</button>
+                <button class="btn-text" id="btn-confirm-uid" data-i18n="add">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-selector-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="select_application">Select Application</h3>
+                <md-icon-button id="btn-close-modal">
+                    <md-icon>close</md-icon>
+                </md-icon-button>
+            </div>
+
+            <div class="search-box">
+                <md-icon>search</md-icon>
+                <input id="app-search-input" data-i18n="search_placeholder"
+                    placeholder="Search app or package...">
+                <md-icon-button id="btn-filter-toggle">
+                    <md-icon>filter_list</md-icon>
+                </md-icon-button>
+            </div>
+
+            <div id="filter-menu" class="filter-menu">
+                <div class="filter-option">
+                    <span data-i18n="filter_show_system_apps">Show System Apps</span>
+                    <label class="custom-switch" id="switch-system-apps">
+                        <input type="checkbox" class="switch-input" aria-label="Show System Apps">
+                        <span class="switch-track">
+                            <span class="switch-thumb"></span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="app-list-wrapper">
+                <button class="custom-fab modal-fab" id="modal-fab-action" aria-label="Manual UID/Batch Add">
+                    <md-icon>edit</md-icon>
+                </button>
+                <div id="app-modal-refresh-indicator" class="pull-to-refresh-indicator">
+                    <md-icon>refresh</md-icon>
+                </div>
+                <div id="app-list-container" class="app-list">
+                    <div class="loading-spinner" data-i18n="loading_apps">Loading apps...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="md-dialog-overlay" id="dialog-color-presets">
+        <div class="md-dialog">
+            <h3 class="md-dialog-title" data-i18n="select_custom_color">Select custom color</h3>
+            <div class="md-dialog-content">
+                <div class="color-presets-grid" id="color-presets-grid"></div>
+            </div>
+            <div class="md-dialog-actions">
+                <button class="btn-text" id="btn-adv-color-open" data-i18n="advanced">Advanced</button>
+                <button class="btn-text" id="btn-color-presets-close" data-i18n="done">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="md-dialog-overlay" id="dialog-adv-color">
+        <div class="md-dialog">
+            <h3 class="md-dialog-title" data-i18n="advanced_color">Advanced Color</h3>
+            <div class="md-dialog-content" style="display: flex; flex-direction: column; gap: 16px;">
+                <div id="adv-color-preview" style="height: 64px; border-radius: 16px; transition: background 0.1s; border: 2px solid var(--md-sys-color-outline);"></div>
+                <div class="adv-hex-container">
+                    <span class="adv-hex-hash">#</span>
+                    <input type="text" id="adv-hex-input" class="adv-hex-input" maxlength="7" autocomplete="off" spellcheck="false" placeholder="6750a4" />
+                </div>
+
+                <div class="slider-group">
+                    <label style="font-size: 12px; color: var(--md-sys-color-primary); font-weight: 600;">Hue (Color)</label>
+                    <input type="range" id="adv-slider-h" min="0" max="360" class="md-slider hue-slider">
+                </div>
+                <div class="slider-group">
+                    <label style="font-size: 12px; color: var(--md-sys-color-primary); font-weight: 600;">Saturation</label>
+                    <input type="range" id="adv-slider-s" min="0" max="100" class="md-slider sat-slider">
+                </div>
+                <div class="slider-group">
+                    <label style="font-size: 12px; color: var(--md-sys-color-primary); font-weight: 600;">Lightness</label>
+                    <input type="range" id="adv-slider-l" min="15" max="85" class="md-slider light-slider">
+                </div>
+            </div>
+            <div class="md-dialog-actions">
+                <button class="btn-text" id="btn-adv-color-cancel" data-i18n="cancel">Cancel</button>
+                <button class="btn-text" id="btn-adv-color-accept" data-i18n="done">Done</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

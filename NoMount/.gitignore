@@ -1,0 +1,11 @@
+ELFkickers-3.2
+sstrip
+ko-loader*
+nm
+*.zip
+*.cmd
+*.o
+*.ko
+*.mod*
+*.order*
+*.symver*
