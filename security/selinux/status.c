@@ -13,6 +13,10 @@
 #include "avc.h"
 #include "security.h"
 
+#ifdef CONFIG_KSU_SUSFS
+extern bool susfs_is_current_ksu_domain(void);
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 /*
  * The selinux_status_page shall be exposed to userspace applications
  * using mmap interface on /selinux/status.
@@ -84,6 +88,16 @@ void selinux_status_update_setenforce(bool enforcing)
 	if (selinux_state.status_page) {
 		status = page_address(selinux_state.status_page);
 
+#ifdef CONFIG_KSU_SUSFS
+		if (susfs_is_current_ksu_domain()) {
+			smp_wmb();
+			status->enforcing = enforcing ? 1 : 0;
+			smp_wmb();
+			mutex_unlock(&selinux_state.status_lock);
+			return;
+		}
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 		status->sequence++;
 		smp_wmb();
 
@@ -108,6 +122,17 @@ void selinux_status_update_policyload(u32 seqno)
 	mutex_lock(&selinux_state.status_lock);
 	if (selinux_state.status_page) {
 		status = page_address(selinux_state.status_page);
+
+#ifdef CONFIG_KSU_SUSFS
+		if (susfs_is_current_ksu_domain()) {
+			smp_wmb();
+			status->policyload = seqno;
+			status->deny_unknown = !security_get_allow_unknown();
+			smp_wmb();
+			mutex_unlock(&selinux_state.status_lock);
+			return;
+		}
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 		status->sequence++;
 		smp_wmb();
