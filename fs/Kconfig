@@ -405,4 +405,5 @@ source "fs/unicode/Kconfig"
 config IO_WQ
 	bool
 
+source "fs/nomount/Kconfig"
 endmenu
