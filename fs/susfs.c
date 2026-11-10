@@ -174,6 +174,7 @@ void susfs_spoof_avd_allowed_rcu(u32 s_type, u32 t_type, u32 c_type, u32 *avd_al
 	}
 }
 
+#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
 /*
  * Switches the selinux domain of the current process to the KernelSU one, so
  * that the data paths of the apps can be accessed despite of the selinux
@@ -222,6 +223,8 @@ static void susfs_restore_creds(struct cred *orig_cred) {
 
 	commit_creds(orig_cred);
 }
+#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER /* credential helpers */
+
 
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
