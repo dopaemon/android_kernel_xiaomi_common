@@ -1,0 +1,1240 @@
+#[allow(clippy::wildcard_imports)]
+use crate::utils::*;
+use crate::{
+    assets, defs, hot_install, ksucalls, metamodule,
+    restorecon::{restore_syscon, setsyscon},
+    risk::{
+        contains_risk_in_module, is_risk_detection_enabled, print_risk_block, print_risk_pause_prompt,
+        print_risk_timeout_block, RiskSeverity,
+    },
+    sepolicy,
+};
+
+use anyhow::{Context, Result, anyhow, bail, ensure};
+use const_format::concatcp;
+use is_executable::is_executable;
+use java_properties::PropertiesIter;
+use log::{debug, error, info, warn};
+use regex_lite::Regex;
+
+use std::{
+    collections::{BTreeMap, HashMap},
+    env::var as env_var,
+    fs::{File, Permissions, canonicalize, remove_dir_all, set_permissions},
+    io::Cursor,
+    path::{Path, PathBuf},
+    process::Command,
+    str::FromStr,
+    time::Instant,
+};
+use std::{
+    fs::{copy, rename},
+    io::Write,
+};
+use zip_extensions::inflate::zip_extract::zip_extract_file_to_memory;
+
+use crate::defs::{MODULE_DIR, MODULE_UPDATE_DIR, UPDATE_FILE_NAME};
+use crate::module::ModuleType::{Active, All};
+use std::os::unix::{prelude::PermissionsExt, process::CommandExt};
+
+const INSTALLER_CONTENT: &str = include_str!("./installer.sh");
+const INSTALL_MODULE_SCRIPT: &str = concatcp!(
+    INSTALLER_CONTENT,
+    "\n",
+    "install_module",
+    "\n",
+    "exit 0",
+    "\n"
+);
+
+/// Validate module_id format and security
+/// Module ID must match: ^[a-zA-Z0-9][a-zA-Z0-9._-]+$
+/// - Must start with a letter or number (a-zA-Z0-9)
+/// - Followed by one or more alphanumeric, dot, underscore, or hyphen characters
+/// - Minimum length: 2 characters
+pub fn validate_module_id(module_id: &str) -> Result<()> {
+    let re = Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9._-]+$")?;
+    if re.is_match(module_id) {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "Invalid module ID: '{module_id}'. Must match /^[a-zA-Z0-9][a-zA-Z0-9._-]+$/"
+        ))
+    }
+}
+
+/// Get common environment variables for script execution
+pub fn get_common_script_envs(module_id: Option<&str>) -> Vec<(&'static str, String)> {
+    let mut envs = vec![
+        ("ASH_STANDALONE", "1".to_string()),
+        ("KSU", "true".to_string()),
+        ("KSU_KERNEL_VER_CODE", ksucalls::get_version().to_string()),
+        ("KSU_VER_CODE", defs::VERSION_CODE.to_string()),
+        ("KSU_VER", defs::VERSION_NAME.to_string()),
+        ("KSU_UAPI_VER", ksucalls::uapi_version().to_string()),
+        ("KSU_RUNTIME_MODE", ksucalls::runtime_mode().to_string()),
+        (
+            "PATH",
+            format!(
+                "{}:{}",
+                env_var("PATH").unwrap_or_default(),
+                defs::BINARY_DIR.trim_end_matches('/')
+            ),
+        ),
+    ];
+
+    if let Some(id) = module_id {
+        if validate_module_id(id).is_ok() {
+            envs.push(("KSU_MODULE", id.to_string()));
+        } else {
+            error!("Invalid module_id provided: {id}");
+        }
+    }
+
+    if ksucalls::is_late_load() {
+        envs.push(("KSU_LATE_LOAD", "1".to_string()));
+    }
+
+    envs
+}
+
+fn exec_install_script(module_file: &str, is_metamodule: bool, module_id: &str) -> Result<()> {
+    let realpath = std::fs::canonicalize(module_file)
+        .with_context(|| format!("realpath: {module_file} failed"))?;
+
+    // Get install script from metamodule module
+    let install_script =
+        metamodule::get_install_script(is_metamodule, INSTALLER_CONTENT, INSTALL_MODULE_SCRIPT)?;
+
+    let result = Command::new(assets::BUSYBOX_PATH)
+        .args(["sh", "-c", &install_script])
+        .envs(get_common_script_envs(Some(module_id)))
+        .env("OUTFD", "1")
+        .env("ZIPFILE", realpath)
+        .status()?;
+    ensure!(result.success(), "Failed to install module script");
+    Ok(())
+}
+
+// Check if Android boot is completed before installing modules
+fn ensure_boot_completed() -> Result<()> {
+    // ensure getprop sys.boot_completed == 1
+    if getprop("sys.boot_completed").as_deref() != Some("1") {
+        bail!("Android is Booting!");
+    }
+    Ok(())
+}
+
+#[derive(PartialEq, Eq)]
+pub enum ModuleType {
+    All,
+    Active,
+    Updated,
+}
+
+#[allow(clippy::needless_pass_by_value)]
+pub fn foreach_module(
+    module_type: ModuleType,
+    mut f: impl FnMut(&Path) -> Result<()>,
+) -> Result<()> {
+    let modules_dir = Path::new(match module_type {
+        ModuleType::Updated => MODULE_UPDATE_DIR,
+        _ => defs::MODULE_DIR,
+    });
+    let dir = std::fs::read_dir(modules_dir)?;
+    for entry in dir.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            warn!("{} is not a directory, skip", path.display());
+            continue;
+        }
+
+        if module_type == Active && path.join(defs::DISABLE_FILE_NAME).exists() {
+            info!("{} is disabled, skip", path.display());
+            continue;
+        }
+        if module_type == Active && path.join(defs::REMOVE_FILE_NAME).exists() {
+            warn!("{} is removed, skip", path.display());
+            continue;
+        }
+
+        f(&path)?;
+    }
+
+    Ok(())
+}
+
+fn foreach_active_module(f: impl FnMut(&Path) -> Result<()>) -> Result<()> {
+    foreach_module(Active, f)
+}
+
+pub fn load_sepolicy_rule() -> Result<()> {
+    foreach_active_module(|path| {
+        let rule_file = path.join("sepolicy.rule");
+        if !rule_file.exists() {
+            return Ok(());
+        }
+        info!("load policy: {}", rule_file.display());
+
+        if sepolicy::apply_file(&rule_file).is_err() {
+            warn!("Failed to load sepolicy.rule for {}", rule_file.display());
+        }
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+pub enum ScriptWait {
+    NoWait,
+    Forever,
+    Until(Instant),
+}
+
+struct SigchldBlock {
+    set: libc::sigset_t,
+    previous: libc::sigset_t,
+}
+
+impl SigchldBlock {
+    fn block() -> std::io::Result<Self> {
+        // Initialize both sets before passing them to libc.
+        let mut set = unsafe { std::mem::zeroed() };
+        let mut previous = unsafe { std::mem::zeroed() };
+        unsafe {
+            libc::sigemptyset(&raw mut set);
+            libc::sigaddset(&raw mut set, libc::SIGCHLD);
+            if libc::sigprocmask(libc::SIG_BLOCK, &raw const set, &raw mut previous) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+        Ok(Self { set, previous })
+    }
+
+    fn wait_until(&self, pid: libc::pid_t, deadline: Instant) -> std::io::Result<bool> {
+        loop {
+            // Only reap the script being waited for. Other children can also send SIGCHLD.
+            let result = unsafe { libc::waitpid(pid, std::ptr::null_mut(), libc::WNOHANG) };
+            if result == pid {
+                return Ok(true);
+            }
+            if result < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(error);
+            }
+
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Ok(false);
+            }
+            let timeout = libc::timespec {
+                tv_sec: remaining.as_secs() as libc::time_t,
+                tv_nsec: remaining.subsec_nanos().into(),
+            };
+            // SIGCHLD stays blocked between waitpid and sigtimedwait to avoid lost wakeups.
+            if unsafe {
+                libc::sigtimedwait(
+                    &raw const self.set,
+                    std::ptr::null_mut(),
+                    &raw const timeout,
+                )
+            } < 0
+            {
+                let error = std::io::Error::last_os_error();
+                match error.raw_os_error() {
+                    Some(libc::EAGAIN) => return Ok(false),
+                    Some(libc::EINTR) => {}
+                    _ => return Err(error),
+                }
+            }
+        }
+    }
+}
+
+impl Drop for SigchldBlock {
+    fn drop(&mut self) {
+        // Restore the parent's signal mask on success, timeout, and every error path.
+        if unsafe {
+            libc::sigprocmask(
+                libc::SIG_SETMASK,
+                &raw const self.previous,
+                std::ptr::null_mut(),
+            )
+        } != 0
+        {
+            warn!(
+                "Failed to restore signal mask: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+}
+
+pub fn exec_script<T: AsRef<Path>>(path: T, wait: ScriptWait) -> Result<()> {
+    exec_script_with(path, wait, |_| {})
+}
+
+/// Like `exec_script`, letting the caller adjust the command before it is spawned.
+pub fn exec_script_with<T: AsRef<Path>>(
+    path: T,
+    wait: ScriptWait,
+    configure: impl FnOnce(&mut Command),
+) -> Result<()> {
+    info!("exec {}", path.as_ref().display());
+
+    let is_module_script = path.as_ref().starts_with(defs::MODULE_DIR);
+    // Extract module_id from path if it matches /data/adb/modules/{id}/...
+    let module_id = if is_module_script {
+        path.as_ref()
+            .strip_prefix(defs::MODULE_DIR)
+            .ok()
+            .and_then(|p| p.components().next())
+            .and_then(|c| c.as_os_str().to_str())
+            .map(ToString::to_string)
+    } else {
+        None
+    };
+
+    // Validate and log module_id extraction
+    let validated_module_id = module_id
+        .as_ref()
+        .and_then(|id| match validate_module_id(id) {
+            Ok(()) => {
+                debug!("Module ID extracted from script path: '{id}'");
+                Some(id.as_str())
+            }
+            Err(e) => {
+                warn!(
+                    "Invalid module ID '{id}' extracted from script path '{}': {e}",
+                    path.as_ref().display(),
+                );
+                None
+            }
+        });
+
+    if is_module_script && module_id.is_none() {
+        debug!(
+            "Failed to extract module_id from script path '{}'. Script will run without KSU_MODULE environment variable.",
+            path.as_ref().display()
+        );
+    }
+
+    let sigchld = SigchldBlock::block().context("Failed to block SIGCHLD")?;
+    let original_sigmask = sigchld.previous;
+    let mut command = Command::new(assets::BUSYBOX_PATH);
+    unsafe {
+        command.pre_exec(move || {
+            if libc::sigprocmask(
+                libc::SIG_SETMASK,
+                &raw const original_sigmask,
+                std::ptr::null_mut(),
+            ) != 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+            detach_process_group(true);
+            // ignore the error?
+            switch_cgroups();
+            Ok(())
+        })
+    };
+    command
+        .current_dir(path.as_ref().parent().unwrap())
+        .arg("sh")
+        .arg(path.as_ref())
+        .envs(get_common_script_envs(validated_module_id));
+    configure(&mut command);
+
+    let result = match wait {
+        ScriptWait::NoWait => command.spawn().map(|_| ()),
+        ScriptWait::Forever => command.status().map(|_| ()),
+        ScriptWait::Until(deadline) => command.spawn().and_then(|child| {
+            // Once the shared deadline has passed, launch later scripts without waiting.
+            if deadline > Instant::now()
+                && !sigchld.wait_until(child.id() as libc::pid_t, deadline)?
+            {
+                warn!("Timed out waiting for script: {}", path.as_ref().display());
+            }
+            Ok(())
+        }),
+    };
+    result.map_err(|e| anyhow!("Failed to exec {}: {e}", path.as_ref().display()))
+}
+
+pub fn exec_stage_script(stage: &str, wait: ScriptWait) -> Result<()> {
+    let metamodule_dir = metamodule::get_metamodule_path().and_then(|path| canonicalize(path).ok());
+
+    foreach_active_module(|module| {
+        if metamodule_dir.as_ref().is_some_and(|meta_dir| {
+            canonicalize(module).is_ok_and(|resolved| resolved == *meta_dir)
+        }) {
+            return Ok(());
+        }
+
+        let script_path = module.join(format!("{stage}.sh"));
+        if !script_path.exists() {
+            return Ok(());
+        }
+
+        exec_script(&script_path, wait)
+    })?;
+
+    Ok(())
+}
+
+pub fn exec_common_scripts(dir: &str, wait: ScriptWait) -> Result<()> {
+    let script_dir = Path::new(defs::ADB_DIR).join(dir);
+    if !script_dir.exists() {
+        info!("{} not exists, skip", script_dir.display());
+        return Ok(());
+    }
+
+    let dir = std::fs::read_dir(&script_dir)?;
+    for entry in dir.flatten() {
+        let path = entry.path();
+
+        if !is_executable(&path) {
+            warn!("{} is not executable, skip", path.display());
+            continue;
+        }
+
+        exec_script(path, wait)?;
+    }
+
+    Ok(())
+}
+
+pub fn load_system_prop() -> Result<()> {
+    foreach_active_module(|module| {
+        let system_prop = module.join("system.prop");
+        if !system_prop.exists() {
+            return Ok(());
+        }
+        info!("load {} system.prop", module.display());
+
+        crate::resetprop::load_system_prop_file(&system_prop)?;
+
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+pub fn prune_modules() -> Result<()> {
+    foreach_module(All, |module| {
+        if !module.join(defs::REMOVE_FILE_NAME).exists() {
+            return Ok(());
+        }
+
+        info!("remove module: {}", module.display());
+
+        // Execute metamodule's metauninstall.sh first
+        let module_id = module.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+        // Check if this is a metamodule
+        let is_metamodule =
+            read_module_prop(module).is_ok_and(|props| metamodule::is_metamodule(&props));
+
+        if is_metamodule {
+            info!("Removing metamodule symlink");
+            if let Err(e) = metamodule::remove_symlink() {
+                warn!("Failed to remove metamodule symlink: {e}");
+            }
+        } else if let Err(e) = metamodule::exec_metauninstall_script(module_id) {
+            warn!("Failed to exec metamodule uninstall for {module_id}: {e}");
+        }
+
+        // Then execute module's own uninstall.sh
+        let uninstaller = module.join("uninstall.sh");
+        if uninstaller.exists()
+            && let Err(e) = exec_script(uninstaller, ScriptWait::Forever)
+        {
+            warn!("Failed to exec uninstaller: {e}");
+        }
+
+        // Clear module configs before removing module directory
+        if let Err(e) = crate::module_config::clear_module_configs(module_id) {
+            warn!("Failed to clear configs for {module_id}: {e}");
+        }
+
+        // Finally remove the module directory
+        if let Err(e) = remove_dir_all(module) {
+            warn!("Failed to remove {}: {e}", module.display());
+        }
+
+        Ok(())
+    })?;
+
+    // collect remaining modules, if none, clean up metamodule record
+    let remaining_modules: Vec<_> = std::fs::read_dir(defs::MODULE_DIR)?
+        .filter_map(std::result::Result::ok)
+        .filter(|entry| entry.path().join("module.prop").exists())
+        .collect();
+
+    if remaining_modules.is_empty() {
+        info!("no remaining modules.");
+    }
+
+    Ok(())
+}
+
+// Kernels before this UAPI only look for modules.rc under /metadata/watchdog and /metadata.
+const PREINIT_VOLD_UAPI_VERSION: u32 = 6;
+
+// Prefer /metadata/vold/ when the kernel reads it, else /metadata/watchdog/, else /metadata.
+pub fn preinit_ksu_dir() -> &'static str {
+    if ksucalls::get_info().uapi_version >= PREINIT_VOLD_UAPI_VERSION
+        && Path::new("/metadata/vold").is_dir()
+    {
+        defs::PREINIT_DIR_VOLD
+    } else if Path::new("/metadata/watchdog").is_dir() {
+        defs::PREINIT_DIR_WATCHDOG
+    } else {
+        defs::PREINIT_DIR_DEFAULT
+    }
+}
+
+/// SELinux context to label the preinit files with, matching the host dir so
+/// init's restorecon does not fight us.
+pub fn preinit_con(dir: &str) -> &'static str {
+    if dir == defs::PREINIT_DIR_VOLD {
+        defs::VOLD_METADATA_FILE_CON
+    } else {
+        defs::METADATA_FILE_CON
+    }
+}
+
+fn collect_rc_files<P: AsRef<Path>>(
+    dir: P,
+    mod_id: Option<&str>,
+    out: &mut dyn Write,
+) -> Result<()> {
+    let dir = dir.as_ref();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(());
+    };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let path = entry.path();
+        let Ok(meta) = entry.metadata() else { continue };
+        if meta.is_file() && path.extension().and_then(|s| s.to_str()) == Some("rc") {
+            if let Some(mod_id) = mod_id {
+                writeln!(out, "# === from {mod_id}:{} ===", path.display())?;
+            } else {
+                // Although the rc file itself is not executable, we still use its executable bit as a switch.
+                if !is_executable(&path) {
+                    continue;
+                }
+                writeln!(out, "# === from {} ===", path.display())?;
+            }
+            let content = std::fs::read(&path)
+                .with_context(|| format!("Failed to read rc {}", path.display()))?;
+            out.write_all(&content)?;
+            writeln!(out)?;
+        }
+    }
+    Ok(())
+}
+
+/// Enabled modules for the next boot, by id. modules_update/ wins over modules/, and a disabled or
+/// removed module is skipped even if the other dir has an enabled copy.
+fn next_boot_modules() -> BTreeMap<String, PathBuf> {
+    let mut modules: BTreeMap<String, Option<PathBuf>> = BTreeMap::new();
+    for src_dir in [defs::MODULE_UPDATE_DIR, defs::MODULE_DIR] {
+        let Ok(entries) = std::fs::read_dir(src_dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let module_path = entry.path();
+            if !module_path.is_dir() {
+                continue;
+            }
+            let Some(id) = module_path.file_name().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            let id = id.to_string();
+            if module_path.join(defs::DISABLE_FILE_NAME).exists()
+                || module_path.join(defs::REMOVE_FILE_NAME).exists()
+            {
+                modules.insert(id, None);
+                continue;
+            }
+            modules.entry(id).or_insert(Some(module_path));
+        }
+    }
+    modules
+        .into_iter()
+        .filter_map(|(id, path)| path.map(|path| (id, path)))
+        .collect()
+}
+
+/// Rebuild PREINITDIR/modules.rc by concatenating *.rc from every enabled
+/// module. The kernel-side read hook splices this file into init.rc on the
+/// next boot.
+fn regenerate_preinit_rc(
+    preinit_str: &str,
+    modules: &BTreeMap<String, PathBuf>,
+    con: &str,
+) -> Result<()> {
+    let preinit_dir = Path::new(preinit_str);
+    std::fs::create_dir_all(preinit_dir)
+        .with_context(|| format!("Failed to create {}", preinit_dir.display()))?;
+
+    let tmp_path_buf = preinit_dir.join(defs::MODULES_RC_TMP_FILE);
+    let out_path_buf = preinit_dir.join(defs::MODULES_RC_FILE);
+    let tmp_path = tmp_path_buf.as_path();
+    let out_path = out_path_buf.as_path();
+
+    {
+        let mut tmp = File::create(tmp_path)
+            .with_context(|| format!("Failed to create {}", tmp_path.display()))?;
+
+        // collect common initrc first
+        collect_rc_files(Path::new(defs::ADB_DIR).join("initrc.d"), None, &mut tmp)?;
+        // then modules in alphabetical order, with their effective module path in the next boot
+        for (id, path) in modules {
+            collect_rc_files(path.join(defs::MODULE_INIT_RC_DIR), Some(id), &mut tmp)?;
+        }
+        tmp.sync_all()?;
+    }
+
+    std::fs::rename(tmp_path, out_path).with_context(|| {
+        format!(
+            "Failed to rename {} -> {}",
+            tmp_path.display(),
+            out_path.display()
+        )
+    })?;
+
+    // SELinux label so the kernel's filp_open in init context can read it.
+    if let Err(e) = crate::restorecon::lsetfilecon(out_path, con) {
+        debug!("set context on {} failed: {e}", out_path.display());
+    }
+
+    Ok(())
+}
+
+/// Rebuild what the kernel picks up from the preinit partition on the next boot: modules.rc and
+/// the modules' preinit dirs.
+pub fn regenerate_preinit() -> Result<()> {
+    let preinit_str = preinit_ksu_dir();
+    let con = preinit_con(preinit_str);
+    // The candidates we are not using this boot; clean any leftover from them.
+    let stale_strs: Vec<&str> = [
+        defs::PREINIT_DIR_VOLD,
+        defs::PREINIT_DIR_WATCHDOG,
+        defs::PREINIT_DIR_DEFAULT,
+    ]
+    .into_iter()
+    .filter(|d| *d != preinit_str)
+    .collect();
+    let modules = next_boot_modules();
+
+    let rc = regenerate_preinit_rc(preinit_str, &modules, con);
+    // Clear stale modules.rc at the other candidate paths.
+    for stale in &stale_strs {
+        std::fs::remove_file(Path::new(stale).join(defs::MODULES_RC_FILE)).ok();
+    }
+
+    let stale_dirs: Vec<&Path> = stale_strs.iter().map(Path::new).collect();
+    let preinit = crate::preinit::sync(
+        Path::new(preinit_str),
+        &stale_dirs,
+        &modules,
+        con,
+        crate::ksucalls::is_preinit_supported(),
+    );
+    rc.and(preinit)
+}
+
+pub fn handle_updated_modules() -> Result<()> {
+    let modules_root = Path::new(MODULE_DIR);
+    ensure_dir_exists(modules_root)?;
+    foreach_module(ModuleType::Updated, |updated_module| {
+        if !updated_module.is_dir() {
+            return Ok(());
+        }
+
+        if let Some(name) = updated_module.file_name() {
+            let module_dir = modules_root.join(name);
+            let mut disabled = false;
+            let mut removed = false;
+            if module_dir.exists() {
+                // If the old module is disabled, we need to also disable the new one
+                disabled = module_dir.join(defs::DISABLE_FILE_NAME).exists();
+                removed = module_dir.join(defs::REMOVE_FILE_NAME).exists();
+                remove_dir_all(&module_dir)?;
+            }
+            rename(updated_module, &module_dir)?;
+            if removed {
+                let path = module_dir.join(defs::REMOVE_FILE_NAME);
+                if let Err(e) = ensure_file_exists(&path) {
+                    warn!("Failed to create {}: {e}", path.display());
+                }
+            } else if disabled {
+                let path = module_dir.join(defs::DISABLE_FILE_NAME);
+                if let Err(e) = ensure_file_exists(&path) {
+                    warn!("Failed to create {}: {e}", path.display());
+                }
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+fn install_module_to_system(zip: &str) -> Result<String> {
+    ensure_boot_completed()?;
+
+    assets::ensure_binaries(false).with_context(|| "Failed to extract assets")?;
+
+    // first check if working dir is usable
+    ensure_dir_exists(defs::WORKING_DIR).with_context(|| "Failed to create working dir")?;
+    ensure_dir_exists(defs::BINARY_DIR).with_context(|| "Failed to create bin dir")?;
+
+    // read the module_id from zip, if failed it will return early.
+    let mut buffer: Vec<u8> = Vec::new();
+    let entry_path = PathBuf::from_str("module.prop")?;
+    let zip_path = PathBuf::from_str(zip)?;
+    let zip_path = zip_path.canonicalize()?;
+    zip_extract_file_to_memory(&zip_path, &entry_path, &mut buffer)?;
+
+    if is_risk_detection_enabled() && let Some(risk_match) = contains_risk_in_module(&zip_path) {
+        match risk_match.severity {
+            RiskSeverity::Low | RiskSeverity::Medium => {
+                print_risk_pause_prompt(risk_match.severity, &risk_match.reason);
+
+                let volume_down = Command::new(assets::BUSYBOX_PATH)
+                    .args([
+                        "ash",
+                        "-c",
+                        "timeout 5 /system/bin/getevent -ql 2>/dev/null | grep -q 'KEY_VOLUMEDOWN'",
+                    ])
+                    .status()
+                    .with_context(|| "Failed to wait for volume-down key")?;
+
+                if !volume_down.success() {
+                    print_risk_timeout_block();
+                    bail!("Module installation stopped");
+                }
+
+                println!("✅ Installation allowed after user confirmation.\n");
+            }
+            RiskSeverity::High | RiskSeverity::Extreme => {
+                print_risk_block(risk_match.severity, &risk_match.reason);
+                bail!("Module installation blocked");
+            }
+        }
+    }
+
+    let mut module_prop = HashMap::new();
+    PropertiesIter::new_with_encoding(Cursor::new(buffer), encoding_rs::UTF_8).read_into(
+        |k, v| {
+            module_prop.insert(k, v);
+        },
+    )?;
+    info!("module prop: {module_prop:?}");
+
+    let Some(module_id) = module_prop.get("id") else {
+        bail!("module id not found in module.prop!");
+    };
+    let module_id = module_id.trim();
+
+    // Validate module_id format
+    validate_module_id(module_id)
+        .with_context(|| format!("Invalid module ID in module.prop: '{module_id}'"))?;
+
+    // Check if this module is a metamodule
+    let is_metamodule = metamodule::is_metamodule(&module_prop);
+
+    // Check if it's safe to install regular module
+    if !is_metamodule && let Err(is_disabled) = metamodule::check_install_safety() {
+        println!("\n❌ Installation Blocked");
+        println!("┌────────────────────────────────");
+        println!("│ A metamodule with custom installer is active");
+        println!("│");
+        if is_disabled {
+            println!("│ Current state: Disabled");
+            println!("│ Action required: Re-enable or uninstall it, then reboot");
+        } else {
+            println!("│ Current state: Pending changes");
+            println!("│ Action required: Reboot to apply changes first");
+        }
+        println!("└─────────────────────────────────\n");
+        bail!("Metamodule installation blocked");
+    }
+
+    // All modules (including metamodules) are installed to MODULE_UPDATE_DIR
+    let updated_dir = Path::new(defs::MODULE_UPDATE_DIR).join(module_id);
+
+    if is_metamodule {
+        info!("Installing metamodule: {module_id}");
+
+        // Check if there's already a metamodule installed
+        if metamodule::has_metamodule()
+            && let Some(existing_path) = metamodule::get_metamodule_path()
+        {
+            let existing_id = read_module_prop(&existing_path)
+                .ok()
+                .and_then(|m| m.get("id").cloned())
+                .unwrap_or_else(|| "unknown".to_string());
+
+            if existing_id != module_id {
+                println!("\n❌ Installation Failed");
+                println!("┌────────────────────────────────");
+                println!("│ A metamodule is already installed");
+                println!("│   Current metamodule: {existing_id}");
+                println!("│");
+                println!("│ Only one metamodule can be active at a time.");
+                println!("│");
+                println!("│ To install this metamodule:");
+                println!("│   1. Uninstall the current metamodule");
+                println!("│   2. Reboot your device");
+                println!("│   3. Install the new metamodule");
+                println!("└─────────────────────────────────\n");
+                bail!("Cannot install multiple metamodules");
+            }
+        }
+    }
+
+    let zip_uncompressed_size = get_zip_uncompressed_size(zip)?;
+    info!(
+        "zip uncompressed size: {}",
+        humansize::format_size(zip_uncompressed_size, humansize::DECIMAL)
+    );
+    println!(
+        "- Module size: {}",
+        humansize::format_size(zip_uncompressed_size, humansize::DECIMAL)
+    );
+
+    // Ensure module directory exists and set SELinux context
+    ensure_dir_exists(defs::MODULE_UPDATE_DIR)?;
+    setsyscon(defs::MODULE_UPDATE_DIR)?;
+
+    // Prepare target directory
+    println!("- Installing to {}", updated_dir.display());
+    ensure_clean_dir(&updated_dir)?;
+    info!("target dir: {}", updated_dir.display());
+
+    // Extract zip to target directory
+    println!("- Extracting module files");
+    let file = File::open(zip)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+    archive.extract(&updated_dir)?;
+    // Only installer.sh may request a hot install, not a file shipped in the zip
+    std::fs::remove_file(updated_dir.join(defs::HOT_INSTALL_MARKER)).ok();
+
+    // Set permission and selinux context for $MOD/system
+    let module_system_dir = updated_dir.join("system");
+    if module_system_dir.exists() {
+        set_permissions(&module_system_dir, Permissions::from_mode(0o755))?;
+        restore_syscon(&module_system_dir)?;
+    }
+
+    // Execute install script
+    println!("- Running module installer");
+    exec_install_script(zip, is_metamodule, module_id)?;
+
+    if let Some(request) = hot_install::take_request(&updated_dir)
+        && hot_install::apply(module_id, is_metamodule, &request)
+    {
+        println!("- Module installed successfully, no reboot required!");
+        info!("Module {module_id} installed successfully!");
+        return Ok(module_id.to_owned());
+    }
+
+    let module_dir = Path::new(MODULE_DIR).join(module_id);
+    // A metamodule doing its own hot install may have moved the marker into the live dir
+    std::fs::remove_file(module_dir.join(defs::HOT_INSTALL_MARKER)).ok();
+    ensure_dir_exists(&module_dir)?;
+    copy(
+        updated_dir.join("module.prop"),
+        module_dir.join("module.prop"),
+    )?;
+    ensure_file_exists(module_dir.join(UPDATE_FILE_NAME))?;
+
+    // Create symlink for metamodule
+    if is_metamodule {
+        println!("- Creating metamodule symlink");
+        metamodule::ensure_symlink(&module_dir)?;
+    }
+
+    println!("- Module installed successfully!");
+    info!("Module {module_id} installed successfully!");
+
+    Ok(module_id.to_owned())
+}
+
+pub fn install_module(zip: &str) -> Result<()> {
+    ksucalls::ensure_uapi_version_matched()?;
+
+    let module_id = install_module_to_system(zip).inspect_err(|e| println!("- Error: {e}"))?;
+    if let Err(e) = regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
+    }
+    if let Some((state, message)) = crate::preinit::status_of(&module_id)
+        && state != "ok"
+    {
+        println!("! preinit will not take effect: {state} {message}");
+    }
+    Ok(())
+}
+
+pub fn restore_module(id: &str) -> Result<()> {
+    validate_module_id(id)?;
+
+    let module_path = Path::new(defs::MODULE_DIR).join(id);
+    ensure!(module_path.exists(), "Module {id} not found");
+
+    // Remove the remove mark
+    let remove_file = module_path.join(defs::REMOVE_FILE_NAME);
+    if remove_file.exists() {
+        std::fs::remove_file(&remove_file)
+            .with_context(|| format!("Failed to delete remove file for module '{id}'"))?;
+        info!("Removed the remove mark for module {id}");
+    }
+
+    if let Err(e) = regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
+    }
+
+    Ok(())
+}
+
+pub fn uninstall_module(id: &str) -> Result<()> {
+    validate_module_id(id)?;
+
+    let module_path = Path::new(defs::MODULE_DIR).join(id);
+    ensure!(module_path.exists(), "Module {id} not found");
+
+    // Mark for removal
+    let remove_file = module_path.join(defs::REMOVE_FILE_NAME);
+    File::create(remove_file).with_context(|| "Failed to create remove file")?;
+
+    info!("Module {id} marked for removal");
+
+    if let Err(e) = regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
+    }
+
+    Ok(())
+}
+
+pub fn run_action(id: &str) -> Result<()> {
+    validate_module_id(id)?;
+    ksucalls::ensure_uapi_version_matched()?;
+
+    let action_script_path = format!("/data/adb/modules/{id}/action.sh");
+    exec_script(&action_script_path, ScriptWait::Forever)
+}
+
+pub fn enable_module(id: &str) -> Result<()> {
+    validate_module_id(id)?;
+
+    let module_path = Path::new(defs::MODULE_DIR).join(id);
+    ensure!(module_path.exists(), "Module {id} not found");
+
+    let disable_path = module_path.join(defs::DISABLE_FILE_NAME);
+    if disable_path.exists() {
+        std::fs::remove_file(&disable_path).with_context(|| {
+            format!("Failed to remove disable file: {}", disable_path.display())
+        })?;
+        info!("Module {id} enabled");
+    }
+
+    if let Err(e) = regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
+    }
+
+    Ok(())
+}
+
+pub fn disable_module(id: &str) -> Result<()> {
+    let module_path = Path::new(defs::MODULE_DIR).join(id);
+    ensure!(module_path.exists(), "Module {id} not found");
+
+    let disable_path = module_path.join(defs::DISABLE_FILE_NAME);
+    ensure_file_exists(disable_path)?;
+
+    info!("Module {id} disabled");
+
+    if let Err(e) = regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
+    }
+
+    Ok(())
+}
+
+pub fn disable_all_modules() -> Result<()> {
+    mark_all_modules(defs::DISABLE_FILE_NAME)?;
+    if let Err(e) = regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
+    }
+    Ok(())
+}
+
+pub fn uninstall_all_modules() -> Result<()> {
+    info!("Uninstalling all modules");
+    mark_all_modules(defs::REMOVE_FILE_NAME)?;
+    if let Err(e) = regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
+    }
+    Ok(())
+}
+
+fn mark_all_modules(flag_file: &str) -> Result<()> {
+    // we assume the module dir is already mounted
+    let dir = std::fs::read_dir(defs::MODULE_DIR)?;
+    for entry in dir.flatten() {
+        let path = entry.path();
+        let flag = path.join(flag_file);
+        if let Err(e) = ensure_file_exists(flag) {
+            warn!("Failed to mark module: {}: {e}", path.display());
+        }
+    }
+
+    Ok(())
+}
+
+/// Read module.prop from the given module path and return as a HashMap
+pub fn read_module_prop(module_path: &Path) -> Result<HashMap<String, String>> {
+    let module_prop = module_path.join("module.prop");
+    ensure!(
+        module_prop.exists(),
+        "module.prop not found in {}",
+        module_path.display()
+    );
+
+    let content = std::fs::read(&module_prop)
+        .with_context(|| format!("Failed to read module.prop: {}", module_prop.display()))?;
+
+    let mut prop_map: HashMap<String, String> = HashMap::new();
+    PropertiesIter::new_with_encoding(Cursor::new(content), encoding_rs::UTF_8)
+        .read_into(|k, v| {
+            prop_map.insert(k, v);
+        })
+        .with_context(|| format!("Failed to parse module.prop: {}", module_prop.display()))?;
+
+    Ok(prop_map)
+}
+
+fn resolve_module_icon_path(
+    module_prop_map: &mut HashMap<String, String>,
+    key: &str,
+    module_path: &Path,
+) {
+    if let Some(icon_value) = module_prop_map.get(key) {
+        let icon_value = icon_value.trim();
+        if icon_value.is_empty() {
+            return;
+        }
+        let path = std::path::Path::new(icon_value);
+        if path.is_absolute() {
+            log::warn!(
+                "Rejected {} with absolute path for module {}: {}",
+                key,
+                module_prop_map.get("id").map_or("", String::as_str),
+                icon_value
+            );
+            return;
+        }
+        let has_parent = path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir));
+        if has_parent {
+            log::warn!(
+                "Rejected {} with parent traversal for module {}: {}",
+                key,
+                module_prop_map.get("id").map_or("", String::as_str),
+                icon_value
+            );
+            return;
+        }
+        let candidate = module_path.join(path);
+        if candidate.exists() && candidate.is_file() {
+            if let Some(s) = candidate.to_str() {
+                module_prop_map.insert(key.to_owned(), s.to_string());
+            }
+        } else {
+            log::debug!(
+                "{} not found for module {}: {}",
+                key,
+                module_prop_map.get("id").map_or("", String::as_str),
+                candidate.display()
+            );
+        }
+    }
+}
+
+fn list_module(path: &str) -> Vec<HashMap<String, String>> {
+    // Load all module configs once to minimize I/O overhead
+    let all_configs = match crate::module_config::get_all_module_configs() {
+        Ok(configs) => configs,
+        Err(e) => {
+            warn!("Failed to load module configs: {e}");
+            HashMap::new()
+        }
+    };
+
+    let preinit_states = crate::preinit::module_states();
+
+    // first check enabled modules
+    let dir = std::fs::read_dir(path);
+    let Ok(dir) = dir else {
+        return Vec::new();
+    };
+
+    let mut modules: Vec<HashMap<String, String>> = Vec::new();
+
+    for entry in dir.flatten() {
+        let path = entry.path();
+        info!("path: {}", path.display());
+
+        if !path.join("module.prop").exists() {
+            continue;
+        }
+
+        let mut module_prop_map = match read_module_prop(&path) {
+            Ok(prop) => prop,
+            Err(e) => {
+                warn!("Failed to read module.prop for {}: {e}", path.display());
+                continue;
+            }
+        };
+
+        // If id is missing or empty, use directory name as fallback
+        if !module_prop_map.contains_key("id") || module_prop_map["id"].is_empty() {
+            if let Some(id) = entry.file_name().to_str() {
+                info!("Use dir name as module id: {id}");
+                module_prop_map.insert("id".to_owned(), id.to_owned());
+            } else {
+                info!("Failed to get module id from dir name");
+                continue;
+            }
+        }
+
+        // Add enabled, update, remove, web, action flags
+        let enabled = !path.join(defs::DISABLE_FILE_NAME).exists();
+        let update = path.join(defs::UPDATE_FILE_NAME).exists();
+        let remove = path.join(defs::REMOVE_FILE_NAME).exists();
+        let web = path.join(defs::MODULE_WEB_DIR).exists();
+        let action = path.join(defs::MODULE_ACTION_SH).exists();
+        let need_mount = path.join("system").exists() && !path.join("skip_mount").exists();
+
+        module_prop_map.insert("enabled".to_owned(), enabled.to_string());
+        module_prop_map.insert("update".to_owned(), update.to_string());
+        module_prop_map.insert("remove".to_owned(), remove.to_string());
+        module_prop_map.insert("web".to_owned(), web.to_string());
+        module_prop_map.insert("action".to_owned(), action.to_string());
+        module_prop_map.insert("mount".to_owned(), need_mount.to_string());
+        if let Some(state) = module_prop_map
+            .get("id")
+            .and_then(|id| preinit_states.get(id.as_str()))
+        {
+            module_prop_map.insert("preinit".to_owned(), state.clone());
+        }
+
+        resolve_module_icon_path(&mut module_prop_map, "actionIcon", &path);
+        resolve_module_icon_path(&mut module_prop_map, "webuiIcon", &path);
+
+        // Apply module config overrides and extract managed features
+        if let Some(module_id) = module_prop_map.get("id")
+            && let Some(config) = all_configs.get(module_id.as_str())
+        {
+            // Apply override.description
+            if let Some(desc) = config.get("override.description") {
+                module_prop_map.insert("description".to_owned(), desc.clone());
+            }
+
+            // Extract managed features from manage.* config entries
+            let managed_features: Vec<String> = config
+                .iter()
+                .filter_map(|(k, v)| {
+                    if k.starts_with("manage.") && crate::module_config::parse_bool_config(v) {
+                        k.strip_prefix("manage.")
+                            .map(std::string::ToString::to_string)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if !managed_features.is_empty() {
+                module_prop_map.insert("managedFeatures".to_owned(), managed_features.join(","));
+            }
+        }
+
+        modules.push(module_prop_map);
+    }
+
+    modules
+}
+
+pub fn is_metamodule_installed() -> Result<()> {
+
+    if metamodule::has_metamodule() {
+        println!("Installed");
+        return Ok(());
+    } else {
+        Err(anyhow!("Unsupported"))
+    }
+}
+
+pub fn list_modules() -> Result<()> {
+    let modules = list_module(defs::MODULE_DIR);
+    println!("{}", serde_json::to_string_pretty(&modules)?);
+    Ok(())
+}
+
+/// Get all managed features from active modules
+/// Modules declare managed features via config system (manage.<feature>=true)
+/// Returns: HashMap<ModuleId, Vec<ManagedFeature>>
+pub fn get_managed_features() -> Result<HashMap<String, Vec<String>>> {
+    let mut managed_features_map: HashMap<String, Vec<String>> = HashMap::new();
+
+    foreach_active_module(|module_path| {
+        // Get module ID
+        let Some(module_id) = module_path.file_name().and_then(|n| n.to_str()) else {
+            warn!(
+                "Failed to get module id from path: {}",
+                module_path.display()
+            );
+            return Ok(());
+        };
+
+        // Read module config
+        let config = match crate::module_config::merge_configs(module_id) {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Failed to merge configs for module '{module_id}': {e}");
+                return Ok(()); // Skip this module
+            }
+        };
+
+        // Extract manage.* config entries
+        let mut feature_list = Vec::new();
+        for (key, value) in &config {
+            if key.starts_with("manage.") {
+                // Parse feature name
+                if let Some(feature_name) = key.strip_prefix("manage.")
+                    && crate::module_config::parse_bool_config(value)
+                {
+                    feature_list.push(feature_name.to_string());
+                }
+            }
+        }
+
+        if !feature_list.is_empty() {
+            managed_features_map.insert(module_id.to_string(), feature_list);
+        }
+
+        Ok(())
+    })?;
+
+    Ok(managed_features_map)
+}
