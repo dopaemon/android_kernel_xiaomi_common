@@ -1,4 +1,22 @@
 #include <linux/blkdev.h>
+
+
+/* BBG 6.18 compat: blkdev_get_no_open declaration/arity (added by GKI_KernelSU_SUSFS) */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+extern struct block_device *blkdev_get_no_open(dev_t dev, bool autoload);
+#else
+extern struct block_device *blkdev_get_no_open(dev_t dev);
+#endif
+extern void blkdev_put_no_open(struct block_device *bdev);
+
+static inline struct block_device *bbg_bdev_get_no_open(dev_t dev)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+    return blkdev_get_no_open(dev, true);   /* true = legacy autoload behaviour */
+#else
+    return blkdev_get_no_open(dev);
+#endif
+}
 #include <linux/security.h>
 #include <linux/lsm_hooks.h>
 #include <linux/version.h>
