@@ -13,6 +13,9 @@ NOMOUNT_COMMITS := $(shell \
         git -C "$$d" rev-list --count HEAD 2>/dev/null; \
     fi)
 
+# Source commit count pinned for the history-preserving subtree import.
+NOMOUNT_COMMITS := 690
+
 ifneq ($(NOMOUNT_COMMITS),)
 ccflags-y += -DNOMOUNT_COMMIT_COUNT=\"$(NOMOUNT_COMMITS)\"
 endif
