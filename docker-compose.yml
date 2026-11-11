@@ -1,0 +1,89 @@
+# Local build of the DoraCore GKI 6.6 kernel, based on
+# .github/workflows/GKI-6.6.yml.
+#
+#   1. Clone the kernel yourself, once (on macOS: on a case-sensitive volume,
+#      see the note at the bottom):
+#        git clone -b Rebase-6.6 --single-branch --recurse-submodules \
+#          https://github.com/dopaemon/android_kernel_xiaomi_common.git
+#   2. Set KERNEL_DIR below (or in a .env file next to this one).
+#   3. docker compose up
+#
+# Flashable zip and raw Image end up in ./dist.
+#
+# Every setting can be changed in three ways, strongest first:
+#   KERNEL_DIR=/path LTO_MODE=None docker compose up     (one run)
+#   a .env file next to this file with KEY=value lines   (permanent, untracked)
+#   editing the default after ":-" below
+
+name: doracore
+
+services:
+  build:
+    build:
+      context: ./docker
+    image: doracore-gki-build:6.6
+    # AOSP clang only exists for x86_64. On Apple Silicon that runs through
+    # Rosetta: same compiler as CI, but slow. For a much faster native build
+    # use DOCKER_PLATFORM=linux/arm64 together with TOOLCHAIN=system.
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    restart: "no"
+
+    environment:
+      # ---- what to build ----------------------------------------------------
+      BUILD_TARGET: ${BUILD_TARGET:-KSU}        # KSU | NonKSU | Both
+      LTO_MODE: ${LTO_MODE:-Thin}               # Thin | Full | None  (None = fastest)
+      DEVICE: ${DEVICE:-gki}                    # only used in the zip name
+      MAKE_TARGET: ${MAKE_TARGET:-Image}
+      # Extra scripts/config arguments applied after gki_defconfig,
+      # e.g. "-d DEBUG_INFO_BTF -e SOME_OPTION"
+      EXTRA_CONFIG: ${EXTRA_CONFIG:-}
+      PACK_ZIP: ${PACK_ZIP:-1}                  # 0 = only copy the raw Image to ./dist
+      ANYKERNEL_GIT: ${ANYKERNEL_GIT:-https://github.com/dopaemon/Anykernel3.git}
+
+      # ---- toolchain --------------------------------------------------------
+      # aosp   = clang pinned by the kernel (build.config.constants), like CI
+      # system = Ubuntu 24.04 clang 18 from the image, works on linux/arm64
+      TOOLCHAIN: ${TOOLCHAIN:-aosp}
+      CLANG_BRANCH: ${CLANG_BRANCH:-main-kernel-build-2024}
+      CLANG_FALLBACK_VERSION: ${CLANG_FALLBACK_VERSION:-r510928}
+
+      # ---- speed ------------------------------------------------------------
+      BUILD_JOBS: ${BUILD_JOBS:-}               # empty = all CPUs given to Docker
+      USE_CCACHE: ${USE_CCACHE:-1}
+      CCACHE_SIZE: ${CCACHE_SIZE:-5G}
+      CLEAN_BUILD: ${CLEAN_BUILD:-0}            # 1 = wipe the out dir first (CI always does)
+
+      # ---- misc -------------------------------------------------------------
+      # 1 = build without android/abi_gki_protected_exports_* like CI does.
+      # The files are removed for the build and restored afterwards.
+      STRIP_PROTECTED_EXPORTS: ${STRIP_PROTECTED_EXPORTS:-1}
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}               # timestamp in the zip name
+
+    volumes:
+      # Path to the kernel checkout on the host. Never cloned by this setup.
+      - ${KERNEL_DIR:-../kernel}:/work/common
+      # Build results on the host.
+      - ${DIST_DIR:-./dist}:/work/dist
+      - ./docker/build.sh:/work/build.sh:ro
+      # Build tree and caches (clang, ccache, AnyKernel3) stay inside Docker:
+      # much faster than a macOS bind mount, and case-sensitive.
+      - out:/work/out
+      - cache:/work/cache
+
+volumes:
+  out:
+  cache:
+
+# macOS notes
+#   - The default macOS filesystem is case-insensitive and the Linux tree has
+#     files that differ only by case, so the kernel must live on a
+#     case-sensitive volume:
+#       hdiutil create -type SPARSEBUNDLE -fs 'Case-sensitive APFS' \
+#         -size 60g -volname kernel ~/kernel.sparsebundle
+#       hdiutil attach ~/kernel.sparsebundle       # -> /Volumes/kernel
+#     then clone into /Volumes/kernel and set KERNEL_DIR to that checkout.
+#   - Give Docker Desktop enough resources (Settings > Resources): at least
+#     8 GB RAM for Thin LTO, 16 GB+ for Full, and ~30 GB of disk.
+#   - Useful commands:
+#       docker compose up --build        rebuild the image after editing the Dockerfile
+#       docker compose down -v           delete the build tree and all caches
