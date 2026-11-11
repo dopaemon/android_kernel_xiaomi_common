@@ -241,7 +241,8 @@ struct fsnotify_group {
 			struct ucounts *ucounts;
 		} inotify_data;
 #endif
-#ifdef CONFIG_FANOTIFY
+/* Hidden from genksyms to keep GKI KMI symbol CRCs stable */
+#if defined(CONFIG_FANOTIFY) && !defined(__GENKSYMS__)
 		struct fanotify_group_private_data {
 			/* Hash table of events for merge */
 			struct hlist_head *merge_hash;

@@ -51,7 +51,8 @@ enum ucount_type {
 	UCOUNT_INOTIFY_INSTANCES,
 	UCOUNT_INOTIFY_WATCHES,
 #endif
-#ifdef CONFIG_FANOTIFY
+/* Hidden from genksyms to keep GKI KMI symbol CRCs stable */
+#if defined(CONFIG_FANOTIFY) && !defined(__GENKSYMS__)
 	UCOUNT_FANOTIFY_GROUPS,
 	UCOUNT_FANOTIFY_MARKS,
 #endif
