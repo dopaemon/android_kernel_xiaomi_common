@@ -1,0 +1,521 @@
+name: GKI 6.6 | DoraCore Kernel Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      KERNEL_BRANCH:
+        description: 'DoraCore Branch'
+        required: true
+        default: 'Rebase-6.6'
+        type: choice
+        options:
+        - Rebase-6.6
+      KERNEL_GIT:
+        description: 'Kernel Source Code'
+        required: true
+        default: 'https://github.com/dopaemon/android_kernel_xiaomi_common.git'
+      BUILD_TARGET:
+        description: 'Specify your Build Target'
+        required: true
+        default: 'KSU'
+        type: choice
+        options:
+        - NonKSU
+        - KSU
+        - Both
+      LTO_MODE:
+        description: 'Clang LTO Mode'
+        required: true
+        default: 'Thin'
+        type: choice
+        options:
+        - Thin
+        - Full
+        - None
+      USING_CCACHE:
+        description: 'Using CCACHE'
+        required: true
+        default: 'Enable'
+        type: choice
+        options:
+        - Enable
+        - Disable
+      CLEAN_CCACHE:
+        description: 'Clean CCACHE'
+        required: true
+        default: 'Disable'
+        type: choice
+        options:
+        - Enable
+        - Disable
+      RELEASE:
+        description: 'Status Release'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+        - draft
+        - prerelease
+        - release
+
+env:
+  # Generic GKI image: the 6.6 tree carries no per-device vendor configs.
+  DEVICE: gki
+  # AOSP prebuilts branch that ships the clang pinned by android15-6.6.
+  CLANG_BRANCH: main-kernel-build-2024
+  CLANG_FALLBACK_VERSION: r510928
+
+jobs:
+  cache-clear:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Clean CCACHE
+        if: github.event.inputs.CLEAN_CCACHE == 'Enable'
+        uses: easimon/wipe-cache@main
+
+  create_release:
+    runs-on: ubuntu-latest
+
+    outputs:
+      tag: ${{ steps.set-tag.outputs.tag }}
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    permissions:
+      contents: write
+      discussions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set tag as timestamp
+        id: set-tag
+        run: echo "tag=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.set-tag.outputs.tag }}
+          name: DoraCore Build ${{ steps.set-tag.outputs.tag }}
+          draft: ${{ github.event.inputs.RELEASE == 'draft' }}
+          prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
+          make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
+          body: |
+            Build: DoraCore Kernel For GKI Linux 6.6.y
+            Linux: Linux 6.6.y
+            Type: GKI (android15-6.6)
+            Developer: dopaemon
+            Credits: ArianK16a, bachnxuan, Gelbpunkt, ztc1997, pzqqt, KernelToast, Arter97, ramabondanp, Gosth15, Flopster101, bheatleyyy, keosh1, n08i40k, ParsaAslaniYC, ...
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: [cache-clear, create_release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    permissions:
+      contents: write
+      discussions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Free Disk Space
+        if: true
+        uses: endersonmenezes/free-disk-space@v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: true
+          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+          remove_packages_one_command: true
+          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+          rm_cmd: "rmz"
+          rmz_version: "3.1.1"
+          testing: true
+
+      - name: Setup & Tune Swap Space
+        run: |
+          set -euo pipefail
+          sudo swapoff -a || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 32G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=32768
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon -p 32767 /swapfile
+          sudo sysctl -w vm.swappiness=200
+          sudo sysctl -w vm.page-cluster=0
+          echo "===== Swap Tuning ====="
+          cat /proc/sys/vm/swappiness
+          cat /proc/sys/vm/page-cluster
+          swapon --show --bytes
+
+      - name: Check Initial Disk Space
+        run: |
+          echo "===== Initial Total Disk Space in GB ====="
+          df -BG
+
+      - name: Build Environment
+        run: |
+          TARGET="${{ github.event.inputs.BUILD_TARGET }}"
+          echo "BUILD_DATE=$(TZ=Asia/Ho_Chi_Minh date +'%Y-%m%d-%H%M')" >> $GITHUB_ENV
+          echo "NOW=$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+          sudo apt-mark hold firefox
+          sudo apt-mark hold libc-bin
+          sudo apt purge man-db
+          sudo rm -rf /var/lib/man-db/auto-update
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            curl bison flex make binutils git perl gcc python3 \
+            python-is-python3 bc libssl-dev libelf-dev dwarves \
+            cpio aria2 zip unzip ccache binutils-aarch64-linux-gnu \
+            tar which wget
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          mkdir -p $GITHUB_WORKSPACE/android-kernel && cd $GITHUB_WORKSPACE/android-kernel
+          if [ "$TARGET" != "Both" ]; then
+             git clone -b master --depth=1 --single-branch https://github.com/dopaemon/Anykernel3.git ./AnyKernel3
+          else
+             git clone -b volume --depth=1 --single-branch https://github.com/dopaemon/Anykernel3.git ./AnyKernel3
+          fi
+          rm -rf ./AnyKernel3/.git
+          # The AnyKernel3 template is shared with the 5.10 builds.
+          sed -i 's/GKI 5\.10/GKI 6.6/g' ./AnyKernel3/anykernel.sh
+          sed -i 's/5\.10\.y/6.6.y/g' ./AnyKernel3/banner
+
+      - name: Clone Kernel
+        run: |
+          # History is not needed: the in-tree KernelSU-Next pins its own
+          # version, and setlocalversion only reads HEAD.
+          git clone -b "${{ github.event.inputs.KERNEL_BRANCH }}" \
+                    --single-branch \
+                    --depth=1 \
+                    --no-tags \
+                    --recurse-submodules \
+                    --shallow-submodules \
+                    "${{ github.event.inputs.KERNEL_GIT }}" \
+                    $GITHUB_WORKSPACE/android-kernel/common
+          cd $GITHUB_WORKSPACE/android-kernel/common
+          echo "Kernel: $(make -s kernelversion) @ $(git rev-parse --short=12 HEAD)"
+
+      - name: Detect Clang Version
+        id: clang
+        run: |
+          CLANG_VERSION="$(sed -n 's/^CLANG_VERSION=//p' $GITHUB_WORKSPACE/android-kernel/common/build.config.constants | head -n 1)"
+          CLANG_VERSION="${CLANG_VERSION:-$CLANG_FALLBACK_VERSION}"
+          echo "version=$CLANG_VERSION" >> $GITHUB_OUTPUT
+          echo "CLANG_VERSION=$CLANG_VERSION" >> $GITHUB_ENV
+          echo "CLANG_DIR=$GITHUB_WORKSPACE/android-kernel/prebuilts-master/clang/host/linux-x86/clang-$CLANG_VERSION" >> $GITHUB_ENV
+
+      - name: Cache Clang
+        if: github.event.inputs.USING_CCACHE == 'Enable'
+        id: cache-clang
+        uses: actions/cache@v4
+        with:
+          path: android-kernel/prebuilts-master/clang/host/linux-x86/clang-${{ steps.clang.outputs.version }}
+          key: gki66-clang-${{ steps.clang.outputs.version }}
+
+      - name: Download Clang if cache missed
+        if: steps.cache-clang.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          rm -rf "$CLANG_DIR"
+          mkdir -p "$(dirname "$CLANG_DIR")"
+          # Only the pinned toolchain directory, not the whole prebuilts branch.
+          # A sparse partial clone is used because the gitiles +archive tarball
+          # stream can be cut off mid-transfer without curl reporting an error.
+          git clone -b "$CLANG_BRANCH" \
+                    --single-branch \
+                    --depth=1 \
+                    --no-tags \
+                    --filter=blob:none \
+                    --sparse \
+                    https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+                    "$RUNNER_TEMP/clang-prebuilts"
+          git -C "$RUNNER_TEMP/clang-prebuilts" sparse-checkout set "clang-${CLANG_VERSION}"
+          mv "$RUNNER_TEMP/clang-prebuilts/clang-${CLANG_VERSION}" "$CLANG_DIR"
+          rm -rf "$RUNNER_TEMP/clang-prebuilts"
+          [ -x "$CLANG_DIR/bin/clang" ] || { echo "clang-${CLANG_VERSION} not found in ${CLANG_BRANCH}" >&2; exit 1; }
+
+      - name: Setup Enviroment
+        run: |
+          CLANG_VERSION_TEXT="$($CLANG_DIR/bin/clang --version | head -n 1)"
+          LLD_VERSION_TEXT="$($CLANG_DIR/bin/ld.lld --version | head -n 1)"
+          echo "Prebuilts Infomation:"
+          echo "Clang Version: $CLANG_VERSION_TEXT"
+          echo "LLD Version: $LLD_VERSION_TEXT"
+          echo "Pahole Version: $(pahole --version)"
+
+      - name: First Setup CCACHE
+        run: |
+          CCACHE_DIR="${{ github.workspace }}/ccache"
+          mkdir -p $CCACHE_DIR
+          sudo chmod 7777 $CCACHE_DIR
+          echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}" >> $GITHUB_ENV
+
+      - name: Get Cache CCACHE
+        if: github.event.inputs.USING_CCACHE == 'Enable'
+        id: cache-ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: gki66-ccache-${{ env.DEVICE }}-${{ github.event.inputs.KERNEL_BRANCH }}-${{ github.event.inputs.LTO_MODE }}
+          restore-keys: |
+            gki66-ccache-${{ env.DEVICE }}-${{ github.event.inputs.KERNEL_BRANCH }}-
+
+      - name: Complete Setup CCACHE
+        run: |
+          ccache --set-config=cache_dir=${{ env.CCACHE_DIR }}
+          ccache --set-config=max_size=5G
+          ccache --set-config=sloppiness=time_macros,include_file_ctime,include_file_mtime,file_stat_matches
+          ccache --set-config=hash_dir=false
+          ccache -s
+
+      - name: CCACHE Infomation
+        run: |
+          echo "First Status ccache:"
+          ccache -s
+          if [ "${{ steps.cache-ccache.outputs.cache-hit }}" == 'true' ]; then
+            echo "\n\n"
+            echo "CCACHE Infomation:"
+            ccache -sv
+          fi
+
+      - name: Build Selected Variants
+        run: |
+          set -euo pipefail
+          TARGET="${{ github.event.inputs.BUILD_TARGET }}"
+          LTO_MODE="${{ github.event.inputs.LTO_MODE }}"
+          KERNEL_DIR="$GITHUB_WORKSPACE/android-kernel/common"
+          OUT_DIR="$GITHUB_WORKSPACE/android-kernel/out"
+          BUILD_JOBS="$(nproc --all)"
+          if [ "$BUILD_JOBS" -gt 4 ]; then
+             BUILD_JOBS=4
+          fi
+
+          case "$TARGET" in
+            KSU) VARIANTS="KSU" ;;
+            NonKSU) VARIANTS="NonKSU" ;;
+            Both) VARIANTS="KSU NonKSU" ;;
+            *) echo "Unsupported BUILD_TARGET: $TARGET" >&2; exit 1 ;;
+          esac
+
+          case "$LTO_MODE" in
+            Thin) LTO_ARGS="-d LTO_NONE -d LTO_CLANG_FULL -e LTO_CLANG_THIN" ;;
+            Full) LTO_ARGS="-d LTO_NONE -d LTO_CLANG_THIN -e LTO_CLANG_FULL" ;;
+            None) LTO_ARGS="-d LTO_CLANG_THIN -d LTO_CLANG_FULL -e LTO_NONE" ;;
+            *) echo "Unsupported LTO_MODE: $LTO_MODE" >&2; exit 1 ;;
+          esac
+
+          export PATH="$CLANG_DIR/bin:$PATH"
+
+          MAKE_ARGS=(
+            -j"$BUILD_JOBS"
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            CROSS_COMPILE=aarch64-linux-gnu-
+            "CC=ccache clang"
+            LD=ld.lld
+            HOSTLD=ld.lld
+            O="$OUT_DIR"
+          )
+
+          log_resource_snapshot() {
+            local mem_total_kb mem_avail_kb mem_used_kb mem_used_mib mem_total_mib mem_used_pct
+            local swap_total_kb swap_free_kb swap_used_kb swap_used_mib swap_total_mib swap_used_pct
+            local disk_usage
+
+            mem_total_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+            mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+            mem_used_kb=$((mem_total_kb - mem_avail_kb))
+            mem_used_mib=$((mem_used_kb / 1024))
+            mem_total_mib=$((mem_total_kb / 1024))
+            mem_used_pct=$((100 * mem_used_kb / mem_total_kb))
+
+            swap_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
+            swap_free_kb=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
+            if [ "$swap_total_kb" -gt 0 ]; then
+              swap_used_kb=$((swap_total_kb - swap_free_kb))
+              swap_used_mib=$((swap_used_kb / 1024))
+              swap_total_mib=$((swap_total_kb / 1024))
+              swap_used_pct=$((100 * swap_used_kb / swap_total_kb))
+            else
+              swap_used_mib=0
+              swap_total_mib=0
+              swap_used_pct=0
+            fi
+
+            disk_usage=$(df -P -BG "$GITHUB_WORKSPACE" | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}')
+            printf '[monitor] %s | RAM %s/%s MiB (%s%%) | SWAP %s/%s MiB (%s%%) | DISK %s\n' \
+              "$(date +'%F %T')" \
+              "$mem_used_mib" "$mem_total_mib" "$mem_used_pct" \
+              "$swap_used_mib" "$swap_total_mib" "$swap_used_pct" \
+              "$disk_usage"
+          }
+
+          run_make_keepalive() {
+            local log_file="$1"
+            local make_pid keepalive_pid make_rc=0
+            shift
+
+            # Subshell with pipefail so the exit status is make's, not tee's.
+            ( set -o pipefail; "$@" 2>&1 | tee "$log_file" ) &
+            make_pid=$!
+
+            while kill -0 "$make_pid" 2>/dev/null; do
+              log_resource_snapshot
+              sleep 30
+            done &
+            keepalive_pid=$!
+
+            wait "$make_pid" || make_rc=$?
+            kill "$keepalive_pid" 2>/dev/null || true
+            wait "$keepalive_pid" 2>/dev/null || true
+
+            return "$make_rc"
+          }
+
+          build_variant() {
+            local variant="$1"
+            local ksu_switch ksu_expect image_name zip_name
+
+            case "$variant" in
+              KSU)
+                ksu_switch="-e"
+                ksu_expect="CONFIG_KSU=y"
+                image_name=Image-kernelsu
+                ;;
+              NonKSU)
+                ksu_switch="-d"
+                ksu_expect="# CONFIG_KSU is not set"
+                image_name=Image-standard
+                ;;
+              *) echo "Unsupported variant: $variant" >&2; exit 1 ;;
+            esac
+
+            rm -rf "$OUT_DIR"
+            export CCACHE_LOGFILE="${{ github.workspace }}/$DEVICE-$variant-ccache.log"
+            export CCACHE_COMPILERCHECK="none"
+            export CCACHE_BASEDIR="${{ github.workspace }}"
+            export CCACHE_NOHASHDIR="true"
+            export CCACHE_HARDLINK="true"
+            export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+            export CCACHE_MAXSIZE="5G"
+
+            cd "$KERNEL_DIR"
+            git add -A
+            git reset --hard HEAD
+
+            # This build cannot sign modules with the GKI key, so the stock
+            # system_dlkm modules would be refused the protected exports.
+            rm -f ./android/abi_gki_protected_exports_*
+
+            make "${MAKE_ARGS[@]}" gki_defconfig
+
+            scripts/config --file "$OUT_DIR/.config" \
+              "$ksu_switch" KSU \
+              $LTO_ARGS
+
+            make "${MAKE_ARGS[@]}" olddefconfig
+
+            if ! grep -qxF "$ksu_expect" "$OUT_DIR/.config"; then
+               echo "Variant $variant: expected '$ksu_expect' in .config" >&2
+               exit 1
+            fi
+            echo "===== Variant $variant ====="
+            grep -E '^(# )?CONFIG_(KSU|KSU_SUSFS|LTO_NONE|LTO_CLANG_THIN|LTO_CLANG_FULL|LOCALVERSION)[= ]' "$OUT_DIR/.config" || true
+
+            run_make_keepalive "$OUT_DIR/build-$DEVICE-$variant.log" \
+              make "${MAKE_ARGS[@]}" Image
+
+            [ -f "$OUT_DIR/arch/arm64/boot/Image" ] || exit 1
+            echo "Kernel Release: $(cat "$OUT_DIR/include/config/kernel.release")"
+            cp "$OUT_DIR/build-$DEVICE-$variant.log" "$GITHUB_WORKSPACE/"
+
+            cd "$GITHUB_WORKSPACE/android-kernel/AnyKernel3"
+            if [ "$TARGET" = "Both" ]; then
+               cp "$OUT_DIR/arch/arm64/boot/Image" "./$image_name"
+            else
+               zip_name="DoraCore-${DEVICE}-${variant}-6.6-A15-${BUILD_DATE}.zip"
+               cp "$OUT_DIR/arch/arm64/boot/Image" ./Image
+               zip -r9 "$zip_name" *
+               mv "$zip_name" "$GITHUB_WORKSPACE/"
+               FULL_DIR="$GITHUB_WORKSPACE/${zip_name}"
+               echo "FULL_DIR=${FULL_DIR}" >> "$GITHUB_ENV"
+               rm -f ./Image
+            fi
+
+            rm -rf "$OUT_DIR"
+          }
+
+          for variant in $VARIANTS; do
+            build_variant "$variant"
+          done
+
+          if [ "$TARGET" = "Both" ]; then
+             ZIP_NAME="DoraCore-${DEVICE}-6.6-A15-${BUILD_DATE}.zip"
+             cd "$GITHUB_WORKSPACE/android-kernel/AnyKernel3"
+             zip -r9 "$ZIP_NAME" *
+             mv "$ZIP_NAME" "$GITHUB_WORKSPACE/"
+             FULL_DIR="$GITHUB_WORKSPACE/${ZIP_NAME}"
+             echo "FULL_DIR=${FULL_DIR}" >> "$GITHUB_ENV"
+          fi
+
+          ccache -s
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create_release.outputs.tag }}
+          draft: ${{ github.event.inputs.RELEASE == 'draft' }}
+          prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
+          make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
+          files: DoraCore*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Telegram
+        continue-on-error: true
+        env:
+          TG_SENDER_TG_CHAT_ID: ${{ secrets.TG_SENDER_TG_CHAT_ID }}
+          TG_SENDER_TG_BOT_TOKEN: ${{ secrets.TG_SENDER_TG_BOT_TOKEN }}
+        run: |
+          if [ -n "${TG_SENDER_TG_BOT_TOKEN:-}" ] && [ -n "${TG_SENDER_TG_CHAT_ID:-}" ]; then
+            caption=$(printf "<b>DoraCore Kernel 6.6 | CI/CD</b>\n\n• Device: %s\n• Tag: %s\n• Build Time: %s" "$DEVICE" "${{ needs.create_release.outputs.tag }}" "${{ env.NOW }}")
+            if [ -n "${FULL_DIR:-}" ] && [ -f "$FULL_DIR" ]; then
+              curl -s -F "chat_id=${TG_SENDER_TG_CHAT_ID}" \
+                   -F "caption=${caption}" \
+                   -F "parse_mode=HTML" \
+                   -F "document=@${FULL_DIR}" \
+                   "https://api.telegram.org/bot${TG_SENDER_TG_BOT_TOKEN}/sendDocument" || true
+            else
+              curl -s -F "chat_id=${TG_SENDER_TG_CHAT_ID}" \
+                   -F "text=${caption}" \
+                   -F "parse_mode=HTML" \
+                   "https://api.telegram.org/bot${TG_SENDER_TG_BOT_TOKEN}/sendMessage" || true
+            fi
+          fi
+
+      - name: Upload Build Logs to artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.DEVICE }}-build-logs
+          path: |
+            ${{ github.workspace }}/*-*-ccache.log
+            ${{ github.workspace }}/build-*.log
+            ${{ github.workspace }}/android-kernel/out/build-*.log
+          if-no-files-found: ignore
