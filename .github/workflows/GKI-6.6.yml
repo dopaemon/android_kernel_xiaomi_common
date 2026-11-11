@@ -117,7 +117,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.set-tag.outputs.tag }}
-          name: DoraCore Build ${{ steps.set-tag.outputs.tag }}
+          name: DoraCore Kernel 6.6.y Build ${{ steps.set-tag.outputs.tag }}
           draft: ${{ github.event.inputs.RELEASE == 'draft' }}
           prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
           make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
