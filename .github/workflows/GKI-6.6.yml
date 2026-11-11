@@ -14,6 +14,25 @@ on:
         description: 'Kernel Source Code'
         required: true
         default: 'https://github.com/dopaemon/android_kernel_xiaomi_common.git'
+      BUILD_DEVICE:
+        description: 'Device package target (shared GKI config; no device-specific DTBO)'
+        required: true
+        default: 'gki'
+        type: choice
+        options:
+        - all
+        - mayfly
+        - cupid
+        - unicorn
+        - zeus
+        - diting
+        - marble
+        - mondrian
+        - thor
+        - zizhan
+        - ziyi
+        - ingres
+        - gki
       BUILD_TARGET:
         description: 'Specify your Build Target'
         required: true
@@ -59,8 +78,6 @@ on:
         - release
 
 env:
-  # Generic GKI image: the 6.6 tree carries no per-device vendor configs.
-  DEVICE: gki
   # AOSP prebuilts branch that ships the clang pinned by android15-6.6.
   CLANG_BRANCH: main-kernel-build-2024
   CLANG_FALLBACK_VERSION: r510928
@@ -117,8 +134,13 @@ jobs:
     needs: [cache-clear, create_release]
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ${{ fromJSON(github.event.inputs.BUILD_DEVICE == 'all' && '["mayfly","cupid","unicorn","zeus","diting","marble","mondrian","thor","zizhan","ziyi","ingres","gki"]' || format('["{0}"]', github.event.inputs.BUILD_DEVICE)) }}
 
     env:
+      DEVICE: ${{ matrix.device }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     permissions:
