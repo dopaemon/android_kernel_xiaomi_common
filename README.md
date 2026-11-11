@@ -21,6 +21,10 @@
 ```bash
 git clone -b Rebase --single-branch --recurse-submodules https://github.com/dopaemon/android_kernel_xiaomi_common.git
 ```
+* **Rebase 6.6.y:**
+```bash
+git clone -b Rebase-6.6 --single-branch --recurse-submodules https://github.com/dopaemon/android_kernel_xiaomi_common.git
+```
 
 # By
 * [**dopaemon**](https://github.com/dopaemon)
