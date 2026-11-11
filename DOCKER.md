@@ -206,8 +206,10 @@ vào container.
   trong cây kernel của bạn được giữ nguyên và được build luôn.
 - **Protected exports**: workflow xoá hẳn
   `android/abi_gki_protected_exports_*` khỏi bản clone tạm. Ở đây file bị xoá
-  tạm trong lúc build rồi khôi phục khi build xong, lỗi hoặc Ctrl-C. Vì vậy
-  tên kernel có đuôi `-dirty`, giống bản CI.
+  tạm trong lúc build rồi khôi phục khi build xong, lỗi hoặc Ctrl-C.
+- **Tên kernel** không có commit sha hay đuôi `-dirty`/`+`, ví dụ
+  `6.6.144-DoraCore`: defconfig tắt `CONFIG_LOCALVERSION_AUTO` và `make` được
+  truyền `LOCALVERSION=` rỗng (workflow cũng vậy).
 - **Build tăng dần**: thư mục out được giữ lại. Đặt `CLEAN_BUILD=1` để build
   sạch như CI.
 - **Số job**: dùng tất cả CPU thay vì giới hạn 4 như runner GitHub.

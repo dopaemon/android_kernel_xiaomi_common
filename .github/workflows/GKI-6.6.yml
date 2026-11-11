@@ -352,6 +352,8 @@ jobs:
             "CC=ccache clang"
             LD=ld.lld
             HOSTLD=ld.lld
+            # Set (even empty) so setlocalversion does not append "+" or "-dirty".
+            LOCALVERSION=
             O="$OUT_DIR"
           )
 

@@ -180,6 +180,8 @@ build_variant() {
     CROSS_COMPILE=aarch64-linux-gnu-
     LD=ld.lld
     HOSTLD=ld.lld
+    # Set (even empty) so setlocalversion does not append "+" or "-dirty".
+    LOCALVERSION=
     O="$out_dir"
   )
   if [ "$USE_CCACHE" = "1" ]; then
