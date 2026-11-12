@@ -77,6 +77,7 @@ Currently, these files are in /proc/sys/vm:
 - vfs_cache_pressure
 - watermark_boost_factor
 - watermark_scale_factor
+- workingset_protection
 - zone_reclaim_mode
 
 
@@ -1076,6 +1077,16 @@ going to sleep prematurely (kswapd_low_wmark_hit_quickly) can indicate
 that the number of free pages kswapd maintains for latency reasons is
 too small for the allocation bursts occurring in the system. This knob
 can then be used to tune kswapd aggressiveness accordingly.
+
+
+workingset_protection
+====================
+
+Enables le9uo working set protection. When set to 1, reclaim honors
+anon_min_ratio, clean_low_ratio and clean_min_ratio. Set to 0 to disable
+this protection.
+
+The default value is 1 (enabled).
 
 
 zone_reclaim_mode
