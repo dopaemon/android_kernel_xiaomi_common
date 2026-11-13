@@ -450,10 +450,6 @@ HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
-# Cache default C/C++ compilers when available; use CCACHE= to disable.
-CCACHE ?= $(shell command -v ccache 2>/dev/null)
-CCACHE := $(strip $(CCACHE))
-
 ifneq ($(LLVM),)
 ifneq ($(filter %/,$(LLVM)),)
 LLVM_PREFIX := $(LLVM)
@@ -461,11 +457,11 @@ else ifneq ($(filter -%,$(LLVM)),)
 LLVM_SUFFIX := $(LLVM)
 endif
 
-HOSTCC	= $(if $(CCACHE),$(CCACHE) )$(LLVM_PREFIX)clang$(LLVM_SUFFIX)
-HOSTCXX	= $(if $(CCACHE),$(CCACHE) )$(LLVM_PREFIX)clang++$(LLVM_SUFFIX)
+HOSTCC	= $(LLVM_PREFIX)clang$(LLVM_SUFFIX)
+HOSTCXX	= $(LLVM_PREFIX)clang++$(LLVM_SUFFIX)
 else
-HOSTCC	= $(if $(CCACHE),$(CCACHE) )gcc
-HOSTCXX	= $(if $(CCACHE),$(CCACHE) )g++
+HOSTCC	= gcc
+HOSTCXX	= g++
 endif
 HOSTRUSTC = rustc
 HOSTPKG_CONFIG	= pkg-config
@@ -502,7 +498,7 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC		= $(if $(CCACHE),$(CCACHE) )$(LLVM_PREFIX)clang$(LLVM_SUFFIX)
+CC		= $(LLVM_PREFIX)clang$(LLVM_SUFFIX)
 LD		= $(LLVM_PREFIX)ld.lld$(LLVM_SUFFIX)
 AR		= $(LLVM_PREFIX)llvm-ar$(LLVM_SUFFIX)
 NM		= $(LLVM_PREFIX)llvm-nm$(LLVM_SUFFIX)
@@ -511,7 +507,7 @@ OBJDUMP		= $(LLVM_PREFIX)llvm-objdump$(LLVM_SUFFIX)
 READELF		= $(LLVM_PREFIX)llvm-readelf$(LLVM_SUFFIX)
 STRIP		= $(LLVM_PREFIX)llvm-strip$(LLVM_SUFFIX)
 else
-CC		= $(if $(CCACHE),$(CCACHE) )$(CROSS_COMPILE)gcc
+CC		= $(CROSS_COMPILE)gcc
 LD		= $(CROSS_COMPILE)ld
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
