@@ -1,6 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0+ OR BSD-3-Clause */
 /*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -12,27 +11,26 @@
 #ifndef ZSTD_COMPRESS_SEQUENCES_H
 #define ZSTD_COMPRESS_SEQUENCES_H
 
-#include "zstd_compress_internal.h" /* SeqDef */
 #include "../common/fse.h" /* FSE_repeat, FSE_CTable */
-#include "../common/zstd_internal.h" /* SymbolEncodingType_e, ZSTD_strategy */
+#include "../common/zstd_internal.h" /* symbolEncodingType_e, ZSTD_strategy */
 
 typedef enum {
     ZSTD_defaultDisallowed = 0,
     ZSTD_defaultAllowed = 1
-} ZSTD_DefaultPolicy_e;
+} ZSTD_defaultPolicy_e;
 
-SymbolEncodingType_e
+symbolEncodingType_e
 ZSTD_selectEncodingType(
         FSE_repeat* repeatMode, unsigned const* count, unsigned const max,
         size_t const mostFrequent, size_t nbSeq, unsigned const FSELog,
         FSE_CTable const* prevCTable,
         short const* defaultNorm, U32 defaultNormLog,
-        ZSTD_DefaultPolicy_e const isDefaultAllowed,
+        ZSTD_defaultPolicy_e const isDefaultAllowed,
         ZSTD_strategy const strategy);
 
 size_t
 ZSTD_buildCTable(void* dst, size_t dstCapacity,
-                FSE_CTable* nextCTable, U32 FSELog, SymbolEncodingType_e type,
+                FSE_CTable* nextCTable, U32 FSELog, symbolEncodingType_e type,
                 unsigned* count, U32 max,
                 const BYTE* codeTable, size_t nbSeq,
                 const S16* defaultNorm, U32 defaultNormLog, U32 defaultMax,
@@ -44,7 +42,7 @@ size_t ZSTD_encodeSequences(
             FSE_CTable const* CTable_MatchLength, BYTE const* mlCodeTable,
             FSE_CTable const* CTable_OffsetBits, BYTE const* ofCodeTable,
             FSE_CTable const* CTable_LitLength, BYTE const* llCodeTable,
-            SeqDef const* sequences, size_t nbSeq, int longOffsets, int bmi2);
+            seqDef const* sequences, size_t nbSeq, int longOffsets, int bmi2);
 
 size_t ZSTD_fseBitCost(
     FSE_CTable const* ctable,
