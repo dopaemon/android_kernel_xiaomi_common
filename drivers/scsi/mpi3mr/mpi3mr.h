@@ -63,7 +63,7 @@ extern atomic64_t event_counter;
 #define MPI3MR_DRIVER_AUTHOR	"Broadcom Inc. <mpi3mr-linuxdrv.pdl@broadcom.com>"
 #define MPI3MR_DRIVER_DESC	"MPI3 Storage Controller Device Driver"
 
-#define MPI3MR_NAME_LENGTH	32
+#define MPI3MR_NAME_LENGTH	64
 #define IOCNAME			"%s: "
 
 #define MPI3MR_DEFAULT_MAX_IO_SIZE	(1 * 1024 * 1024)
@@ -287,6 +287,10 @@ enum mpi3mr_reset_reason {
 	MPI3MR_RESET_FROM_CFG_REQ_TIMEOUT = 29,
 	MPI3MR_RESET_FROM_SAS_TRANSPORT_TIMEOUT = 30,
 };
+
+#define MPI3MR_RESET_REASON_OSTYPE_LINUX	1
+#define MPI3MR_RESET_REASON_OSTYPE_SHIFT	28
+#define MPI3MR_RESET_REASON_IOCNUM_SHIFT	20
 
 /* Queue type definitions */
 enum queue_type {
@@ -989,6 +993,7 @@ struct scmd_priv {
  * @ts_update_counter: Timestamp update counter
  * @reset_in_progress: Reset in progress flag
  * @unrecoverable: Controller unrecoverable flag
+ * @io_admin_reset_sync: Manage state of I/O ops during an admin reset process
  * @prev_reset_result: Result of previous reset
  * @reset_mutex: Controller reset mutex
  * @reset_waitq: Controller reset  wait queue
@@ -1126,7 +1131,7 @@ struct mpi3mr_ioc {
 	spinlock_t fwevt_lock;
 	struct list_head fwevt_list;
 
-	char watchdog_work_q_name[20];
+	char watchdog_work_q_name[50];
 	struct workqueue_struct *watchdog_work_q;
 	struct delayed_work watchdog_work;
 	spinlock_t watchdog_lock;
@@ -1162,6 +1167,7 @@ struct mpi3mr_ioc {
 	u32 ts_update_counter;
 	u8 reset_in_progress;
 	u8 unrecoverable;
+	u8 io_admin_reset_sync;
 	int prev_reset_result;
 	struct mutex reset_mutex;
 	wait_queue_head_t reset_waitq;
@@ -1312,7 +1318,7 @@ void mpi3mr_start_watchdog(struct mpi3mr_ioc *mrioc);
 void mpi3mr_stop_watchdog(struct mpi3mr_ioc *mrioc);
 
 int mpi3mr_soft_reset_handler(struct mpi3mr_ioc *mrioc,
-			      u32 reset_reason, u8 snapdump);
+			      u16 reset_reason, u8 snapdump);
 void mpi3mr_ioc_disable_intr(struct mpi3mr_ioc *mrioc);
 void mpi3mr_ioc_enable_intr(struct mpi3mr_ioc *mrioc);
 
