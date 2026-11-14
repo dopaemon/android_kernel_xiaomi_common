@@ -1327,6 +1327,7 @@ static void f_midi_free(struct usb_function *f)
 	mutex_lock(&opts->lock);
 	android_clear_midi_device_info(&opts->android_midi_info);
 	if (!--midi->free_ref) {
+		cancel_work_sync(&midi->work);
 		kfree(midi->id);
 		kfifo_free(&midi->in_req_fifo);
 		kfree(midi);
