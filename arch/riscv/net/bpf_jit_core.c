@@ -177,8 +177,7 @@ skip_init_ctx:
 	prog->jited_len = prog_size - cfi_get_offset();
 
 	if (!prog->is_func || extra_pass) {
-		if (WARN_ON(bpf_jit_binary_pack_finalize(prog, jit_data->ro_header,
-							 jit_data->header))) {
+		if (WARN_ON(bpf_jit_binary_pack_finalize(jit_data->ro_header, jit_data->header))) {
 			/* ro_header has been freed */
 			jit_data->ro_header = NULL;
 			prog = orig_prog;
@@ -270,7 +269,8 @@ void bpf_jit_free(struct bpf_prog *prog)
 		 * before freeing it.
 		 */
 		if (jit_data) {
-			bpf_jit_binary_pack_finalize(prog, jit_data->ro_header, jit_data->header);
+			bpf_jit_binary_pack_finalize(jit_data->ro_header, jit_data->header);
+			kfree(jit_data->ctx.offset);
 			kfree(jit_data);
 		}
 		hdr = bpf_jit_binary_pack_hdr(prog);
