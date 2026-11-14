@@ -1149,6 +1149,7 @@
   drm_dev_printk
   drm_dev_unplug
   drm_do_get_edid
+  drm_event_cancel_free
   drm_event_reserve_init
   drm_framebuffer_init
   drm_gem_dmabuf_mmap
