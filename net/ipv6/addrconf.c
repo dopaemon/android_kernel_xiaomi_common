@@ -4838,7 +4838,7 @@ static int modify_prefix_route(struct inet6_ifaddr *ifp,
 		if (!expires)
 			fib6_clean_expires(f6i);
 		else
-			fib6_set_expires(f6i, expires);
+			fib6_set_expires(f6i, jiffies + clock_t_to_jiffies(expires));
 
 		fib6_info_release(f6i);
 	}
