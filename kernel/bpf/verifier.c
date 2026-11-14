@@ -489,6 +489,25 @@ static struct btf_record *reg_btf_record(const struct bpf_reg_state *reg)
 	return rec;
 }
 
+static bool mask_raw_tp_reg_cond(const struct bpf_verifier_env *env, struct bpf_reg_state *reg) {
+	return reg->type == (PTR_TO_BTF_ID | PTR_TRUSTED | PTR_MAYBE_NULL) &&
+	       bpf_prog_is_raw_tp(env->prog) && !reg->ref_obj_id;
+}
+
+static bool mask_raw_tp_reg(const struct bpf_verifier_env *env, struct bpf_reg_state *reg)
+{
+	if (!mask_raw_tp_reg_cond(env, reg))
+		return false;
+	reg->type &= ~PTR_MAYBE_NULL;
+	return true;
+}
+
+static void unmask_raw_tp_reg(struct bpf_reg_state *reg, bool result)
+{
+	if (result)
+		reg->type |= PTR_MAYBE_NULL;
+}
+
 static bool subprog_is_global(const struct bpf_verifier_env *env, int subprog)
 {
 	struct bpf_func_info_aux *aux = env->prog->aux->func_info_aux;
@@ -5412,8 +5431,15 @@ static int check_map_kptr_access(struct bpf_verifier_env *env, u32 regno,
 				PTR_MAYBE_NULL | PTR_UNTRUSTED);
 	} else if (class == BPF_STX) {
 		val_reg = reg_state(env, value_regno);
-		if (!register_is_null(val_reg) &&
-		    map_kptr_match_type(env, kptr_field, val_reg, value_regno))
+		if (register_is_null(val_reg)) {
+			/*
+			 * This store is valid only because the scalar is known to be
+			 * zero. Mark it precise so another scalar cannot be pruned
+			 * against this state.
+			 */
+			return mark_chain_precision(env, value_regno);
+		}
+		if (map_kptr_match_type(env, kptr_field, val_reg, value_regno))
 			return -EACCES;
 	} else if (class == BPF_ST) {
 		if (insn->imm) {
@@ -6426,6 +6452,7 @@ static int check_ptr_to_btf_access(struct bpf_verifier_env *env,
 	const char *field_name = NULL;
 	enum bpf_type_flag flag = 0;
 	u32 btf_id = 0;
+	bool mask;
 	int ret;
 
 	if (!env->allow_ptr_leaks) {
@@ -6501,7 +6528,21 @@ static int check_ptr_to_btf_access(struct bpf_verifier_env *env,
 
 	if (ret < 0)
 		return ret;
-
+	/* For raw_tp progs, we allow dereference of PTR_MAYBE_NULL
+	 * trusted PTR_TO_BTF_ID, these are the ones that are possibly
+	 * arguments to the raw_tp. Since internal checks in for trusted
+	 * reg in check_ptr_to_btf_access would consider PTR_MAYBE_NULL
+	 * modifier as problematic, mask it out temporarily for the
+	 * check. Don't apply this to pointers with ref_obj_id > 0, as
+	 * those won't be raw_tp args.
+	 *
+	 * We may end up applying this relaxation to other trusted
+	 * PTR_TO_BTF_ID with maybe null flag, since we cannot
+	 * distinguish PTR_MAYBE_NULL tagged for arguments vs normal
+	 * tagging, but that should expand allowed behavior, and not
+	 * cause regression for existing behavior.
+	 */
+	mask = mask_raw_tp_reg(env, reg);
 	if (ret != PTR_TO_BTF_ID) {
 		/* just mark; */
 
@@ -6562,8 +6603,13 @@ static int check_ptr_to_btf_access(struct bpf_verifier_env *env,
 		clear_trusted_flags(&flag);
 	}
 
-	if (atype == BPF_READ && value_regno >= 0)
+	if (atype == BPF_READ && value_regno >= 0) {
 		mark_btf_ld_reg(env, regs, value_regno, ret, reg->btf, btf_id, flag);
+		/* We've assigned a new type to regno, so don't undo masking. */
+		if (regno == value_regno)
+			mask = false;
+	}
+	unmask_raw_tp_reg(reg, mask);
 
 	return 0;
 }
@@ -6915,7 +6961,7 @@ static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regn
 		if (!err && t == BPF_READ && value_regno >= 0)
 			mark_reg_unknown(env, regs, value_regno);
 	} else if (base_type(reg->type) == PTR_TO_BTF_ID &&
-		   !type_may_be_null(reg->type)) {
+		   (mask_raw_tp_reg_cond(env, reg) || !type_may_be_null(reg->type))) {
 		err = check_ptr_to_btf_access(env, regs, regno, off, size, t,
 					      value_regno);
 	} else if (reg->type == CONST_PTR_TO_MAP) {
@@ -8496,6 +8542,7 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 arg,
 	enum bpf_reg_type type = reg->type;
 	u32 *arg_btf_id = NULL;
 	int err = 0;
+	bool mask;
 
 	if (arg_type == ARG_DONTCARE)
 		return 0;
@@ -8525,22 +8572,26 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 arg,
 			return err;
 	}
 
-	if (register_is_null(reg) && type_may_be_null(arg_type))
+	if (register_is_null(reg) && type_may_be_null(arg_type)) {
 		/* A NULL register has a SCALAR_VALUE type, so skip
 		 * type checking.
 		 */
+		err = mark_chain_precision(env, regno);
+		if (err)
+			return err;
 		goto skip_type_check;
+	}
 
 	/* arg_btf_id and arg_size are in a union. */
 	if (base_type(arg_type) == ARG_PTR_TO_BTF_ID ||
 	    base_type(arg_type) == ARG_PTR_TO_SPIN_LOCK)
 		arg_btf_id = fn->arg_btf_id[arg];
 
+	mask = mask_raw_tp_reg(env, reg);
 	err = check_reg_type(env, regno, arg_type, arg_btf_id, meta);
-	if (err)
-		return err;
 
-	err = check_func_arg_reg_off(env, reg, regno, arg_type);
+	err = err ?: check_func_arg_reg_off(env, reg, regno, arg_type);
+	unmask_raw_tp_reg(reg, mask);
 	if (err)
 		return err;
 
@@ -9435,10 +9486,12 @@ int map_set_for_each_callback_args(struct bpf_verifier_env *env,
 	callee->regs[BPF_REG_2].type = PTR_TO_MAP_KEY;
 	__mark_reg_known_zero(&callee->regs[BPF_REG_2]);
 	callee->regs[BPF_REG_2].map_ptr = caller->regs[BPF_REG_1].map_ptr;
+	callee->regs[BPF_REG_2].map_uid = caller->regs[BPF_REG_1].map_uid;
 
 	callee->regs[BPF_REG_3].type = PTR_TO_MAP_VALUE;
 	__mark_reg_known_zero(&callee->regs[BPF_REG_3]);
 	callee->regs[BPF_REG_3].map_ptr = caller->regs[BPF_REG_1].map_ptr;
+	callee->regs[BPF_REG_3].map_uid = caller->regs[BPF_REG_1].map_uid;
 
 	/* pointer to stack or null */
 	callee->regs[BPF_REG_4] = caller->regs[BPF_REG_3];
@@ -9520,6 +9573,7 @@ static int set_timer_callback_state(struct bpf_verifier_env *env,
 				    int insn_idx)
 {
 	struct bpf_map *map_ptr = caller->regs[BPF_REG_1].map_ptr;
+	u32 map_uid = caller->regs[BPF_REG_1].map_uid;
 
 	/* bpf_timer_set_callback(struct bpf_timer *timer, void *callback_fn);
 	 * callback_fn(struct bpf_map *map, void *key, void *value);
@@ -9527,14 +9581,17 @@ static int set_timer_callback_state(struct bpf_verifier_env *env,
 	callee->regs[BPF_REG_1].type = CONST_PTR_TO_MAP;
 	__mark_reg_known_zero(&callee->regs[BPF_REG_1]);
 	callee->regs[BPF_REG_1].map_ptr = map_ptr;
+	callee->regs[BPF_REG_1].map_uid = map_uid;
 
 	callee->regs[BPF_REG_2].type = PTR_TO_MAP_KEY;
 	__mark_reg_known_zero(&callee->regs[BPF_REG_2]);
 	callee->regs[BPF_REG_2].map_ptr = map_ptr;
+	callee->regs[BPF_REG_2].map_uid = map_uid;
 
 	callee->regs[BPF_REG_3].type = PTR_TO_MAP_VALUE;
 	__mark_reg_known_zero(&callee->regs[BPF_REG_3]);
 	callee->regs[BPF_REG_3].map_ptr = map_ptr;
+	callee->regs[BPF_REG_3].map_uid = map_uid;
 
 	/* unused */
 	__mark_reg_not_init(env, &callee->regs[BPF_REG_4]);
@@ -10142,6 +10199,9 @@ static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn
 			verbose(env, "get_local_storage() doesn't support non-zero flags\n");
 			return -EINVAL;
 		}
+		err = mark_chain_precision(env, BPF_REG_2);
+		if (err)
+			return err;
 		break;
 	case BPF_FUNC_for_each_map_elem:
 		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
@@ -11345,6 +11405,7 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_kfunc_call_
 		enum bpf_arg_type arg_type = ARG_DONTCARE;
 		u32 regno = i + 1, ref_id, type_size;
 		bool is_ret_buf_sz = false;
+		bool mask = false;
 		int kf_arg_type;
 
 		t = btf_type_skip_modifiers(btf, args[i].type, NULL);
@@ -11407,11 +11468,14 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_kfunc_call_
 			return -EINVAL;
 		}
 
+		mask = mask_raw_tp_reg(env, reg);
 		if ((is_kfunc_trusted_args(meta) || is_kfunc_rcu(meta)) &&
 		    (register_is_null(reg) || type_may_be_null(reg->type))) {
 			verbose(env, "Possibly NULL pointer passed to trusted arg%d\n", i);
+			unmask_raw_tp_reg(reg, mask);
 			return -EACCES;
 		}
+		unmask_raw_tp_reg(reg, mask);
 
 		if (reg->ref_obj_id) {
 			if (is_kfunc_release(meta) && meta->ref_obj_id) {
@@ -11438,17 +11502,24 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_kfunc_call_
 			if (!is_kfunc_trusted_args(meta) && !is_kfunc_rcu(meta))
 				break;
 
+			/* Allow passing maybe NULL raw_tp arguments to
+			 * kfuncs for compatibility. Don't apply this to
+			 * arguments with ref_obj_id > 0.
+			 */
+			mask = mask_raw_tp_reg(env, reg);
 			if (!is_trusted_reg(reg)) {
 				if (!is_kfunc_rcu(meta)) {
 					verbose(env, "R%d must be referenced or trusted\n", regno);
+					unmask_raw_tp_reg(reg, mask);
 					return -EINVAL;
 				}
 				if (!is_rcu_reg(reg)) {
 					verbose(env, "R%d must be a rcu pointer\n", regno);
+					unmask_raw_tp_reg(reg, mask);
 					return -EINVAL;
 				}
 			}
-
+			unmask_raw_tp_reg(reg, mask);
 			fallthrough;
 		case KF_ARG_PTR_TO_CTX:
 			/* Trusted arguments have the same offset checks as release arguments */
@@ -11473,7 +11544,9 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_kfunc_call_
 
 		if (is_kfunc_release(meta) && reg->ref_obj_id)
 			arg_type |= OBJ_RELEASE;
+		mask = mask_raw_tp_reg(env, reg);
 		ret = check_func_arg_reg_off(env, reg, regno, arg_type);
+		unmask_raw_tp_reg(reg, mask);
 		if (ret < 0)
 			return ret;
 
@@ -11634,6 +11707,7 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_kfunc_call_
 				return ret;
 			break;
 		case KF_ARG_PTR_TO_BTF_ID:
+			mask = mask_raw_tp_reg(env, reg);
 			/* Only base_type is checked, further checks are done here */
 			if ((base_type(reg->type) != PTR_TO_BTF_ID ||
 			     (bpf_type_has_unsafe_modifiers(reg->type) && !is_rcu_reg(reg))) &&
@@ -11642,9 +11716,11 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_kfunc_call_
 				verbose(env, "expected %s or socket\n",
 					reg_type_str(env, base_type(reg->type) |
 							  (type_flag(reg->type) & BPF_REG_TRUSTED_MODIFIERS)));
+				unmask_raw_tp_reg(reg, mask);
 				return -EINVAL;
 			}
 			ret = process_kf_arg_ptr_to_btf_id(env, reg, ref_t, ref_tname, ref_id, meta, i);
+			unmask_raw_tp_reg(reg, mask);
 			if (ret < 0)
 				return ret;
 			break;
@@ -12531,7 +12607,7 @@ static int sanitize_check_bounds(struct bpf_verifier_env *env,
  */
 static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 				   struct bpf_insn *insn,
-				   const struct bpf_reg_state *ptr_reg,
+				   struct bpf_reg_state *ptr_reg,
 				   const struct bpf_reg_state *off_reg)
 {
 	struct bpf_verifier_state *vstate = env->cur_state;
@@ -12545,6 +12621,7 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 	struct bpf_sanitize_info info = {};
 	u8 opcode = BPF_OP(insn->code);
 	u32 dst = insn->dst_reg;
+	bool mask;
 	int ret;
 
 	dst_reg = &regs[dst];
@@ -12571,11 +12648,14 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 		return -EACCES;
 	}
 
+	mask = mask_raw_tp_reg(env, ptr_reg);
 	if (ptr_reg->type & PTR_MAYBE_NULL) {
 		verbose(env, "R%d pointer arithmetic on %s prohibited, null-check it first\n",
 			dst, reg_type_str(env, ptr_reg->type));
+		unmask_raw_tp_reg(ptr_reg, mask);
 		return -EACCES;
 	}
+	unmask_raw_tp_reg(ptr_reg, mask);
 
 	switch (base_type(ptr_reg->type)) {
 	case PTR_TO_FLOW_KEYS:
@@ -13887,22 +13967,26 @@ static void find_good_pkt_pointers(struct bpf_verifier_state *vstate,
 	}));
 }
 
-static int is_branch32_taken(struct bpf_reg_state *reg, u32 val, u8 opcode)
+static int is_branch32_taken(struct bpf_reg_state *reg1, u32 val, u8 opcode)
 {
-	struct tnum subreg = tnum_subreg(reg->var_off);
+	struct tnum subreg = tnum_subreg(reg1->var_off);
 	s32 sval = (s32)val;
 
 	switch (opcode) {
 	case BPF_JEQ:
 		if (tnum_is_const(subreg))
 			return !!tnum_equals_const(subreg, val);
-		else if (val < reg->u32_min_value || val > reg->u32_max_value)
+		else if (val < reg1->u32_min_value || val > reg1->u32_max_value)
+			return 0;
+		else if (sval < reg1->s32_min_value || sval > reg1->s32_max_value)
 			return 0;
 		break;
 	case BPF_JNE:
 		if (tnum_is_const(subreg))
 			return !tnum_equals_const(subreg, val);
-		else if (val < reg->u32_min_value || val > reg->u32_max_value)
+		else if (val < reg1->u32_min_value || val > reg1->u32_max_value)
+			return 1;
+		else if (sval < reg1->s32_min_value || sval > reg1->s32_max_value)
 			return 1;
 		break;
 	case BPF_JSET:
@@ -13912,51 +13996,51 @@ static int is_branch32_taken(struct bpf_reg_state *reg, u32 val, u8 opcode)
 			return 0;
 		break;
 	case BPF_JGT:
-		if (reg->u32_min_value > val)
+		if (reg1->u32_min_value > val)
 			return 1;
-		else if (reg->u32_max_value <= val)
+		else if (reg1->u32_max_value <= val)
 			return 0;
 		break;
 	case BPF_JSGT:
-		if (reg->s32_min_value > sval)
+		if (reg1->s32_min_value > sval)
 			return 1;
-		else if (reg->s32_max_value <= sval)
+		else if (reg1->s32_max_value <= sval)
 			return 0;
 		break;
 	case BPF_JLT:
-		if (reg->u32_max_value < val)
+		if (reg1->u32_max_value < val)
 			return 1;
-		else if (reg->u32_min_value >= val)
+		else if (reg1->u32_min_value >= val)
 			return 0;
 		break;
 	case BPF_JSLT:
-		if (reg->s32_max_value < sval)
+		if (reg1->s32_max_value < sval)
 			return 1;
-		else if (reg->s32_min_value >= sval)
+		else if (reg1->s32_min_value >= sval)
 			return 0;
 		break;
 	case BPF_JGE:
-		if (reg->u32_min_value >= val)
+		if (reg1->u32_min_value >= val)
 			return 1;
-		else if (reg->u32_max_value < val)
+		else if (reg1->u32_max_value < val)
 			return 0;
 		break;
 	case BPF_JSGE:
-		if (reg->s32_min_value >= sval)
+		if (reg1->s32_min_value >= sval)
 			return 1;
-		else if (reg->s32_max_value < sval)
+		else if (reg1->s32_max_value < sval)
 			return 0;
 		break;
 	case BPF_JLE:
-		if (reg->u32_max_value <= val)
+		if (reg1->u32_max_value <= val)
 			return 1;
-		else if (reg->u32_min_value > val)
+		else if (reg1->u32_min_value > val)
 			return 0;
 		break;
 	case BPF_JSLE:
-		if (reg->s32_max_value <= sval)
+		if (reg1->s32_max_value <= sval)
 			return 1;
-		else if (reg->s32_min_value > sval)
+		else if (reg1->s32_min_value > sval)
 			return 0;
 		break;
 	}
@@ -13965,75 +14049,79 @@ static int is_branch32_taken(struct bpf_reg_state *reg, u32 val, u8 opcode)
 }
 
 
-static int is_branch64_taken(struct bpf_reg_state *reg, u64 val, u8 opcode)
+static int is_branch64_taken(struct bpf_reg_state *reg1, u64 val, u8 opcode)
 {
 	s64 sval = (s64)val;
 
 	switch (opcode) {
 	case BPF_JEQ:
-		if (tnum_is_const(reg->var_off))
-			return !!tnum_equals_const(reg->var_off, val);
-		else if (val < reg->umin_value || val > reg->umax_value)
+		if (tnum_is_const(reg1->var_off))
+			return !!tnum_equals_const(reg1->var_off, val);
+		else if (val < reg1->umin_value || val > reg1->umax_value)
+			return 0;
+		else if (sval < reg1->smin_value || sval > reg1->smax_value)
 			return 0;
 		break;
 	case BPF_JNE:
-		if (tnum_is_const(reg->var_off))
-			return !tnum_equals_const(reg->var_off, val);
-		else if (val < reg->umin_value || val > reg->umax_value)
+		if (tnum_is_const(reg1->var_off))
+			return !tnum_equals_const(reg1->var_off, val);
+		else if (val < reg1->umin_value || val > reg1->umax_value)
+			return 1;
+		else if (sval < reg1->smin_value || sval > reg1->smax_value)
 			return 1;
 		break;
 	case BPF_JSET:
-		if ((~reg->var_off.mask & reg->var_off.value) & val)
+		if ((~reg1->var_off.mask & reg1->var_off.value) & val)
 			return 1;
-		if (!((reg->var_off.mask | reg->var_off.value) & val))
+		if (!((reg1->var_off.mask | reg1->var_off.value) & val))
 			return 0;
 		break;
 	case BPF_JGT:
-		if (reg->umin_value > val)
+		if (reg1->umin_value > val)
 			return 1;
-		else if (reg->umax_value <= val)
+		else if (reg1->umax_value <= val)
 			return 0;
 		break;
 	case BPF_JSGT:
-		if (reg->smin_value > sval)
+		if (reg1->smin_value > sval)
 			return 1;
-		else if (reg->smax_value <= sval)
+		else if (reg1->smax_value <= sval)
 			return 0;
 		break;
 	case BPF_JLT:
-		if (reg->umax_value < val)
+		if (reg1->umax_value < val)
 			return 1;
-		else if (reg->umin_value >= val)
+		else if (reg1->umin_value >= val)
 			return 0;
 		break;
 	case BPF_JSLT:
-		if (reg->smax_value < sval)
+		if (reg1->smax_value < sval)
 			return 1;
-		else if (reg->smin_value >= sval)
+		else if (reg1->smin_value >= sval)
 			return 0;
 		break;
 	case BPF_JGE:
-		if (reg->umin_value >= val)
+		if (reg1->umin_value >= val)
 			return 1;
-		else if (reg->umax_value < val)
+		else if (reg1->umax_value < val)
 			return 0;
 		break;
 	case BPF_JSGE:
-		if (reg->smin_value >= sval)
+		if (reg1->smin_value >= sval)
 			return 1;
-		else if (reg->smax_value < sval)
+		else if (reg1->smax_value < sval)
 			return 0;
 		break;
 	case BPF_JLE:
-		if (reg->umax_value <= val)
+		if (reg1->umax_value <= val)
 			return 1;
-		else if (reg->umin_value > val)
+		else if (reg1->umin_value > val)
 			return 0;
 		break;
 	case BPF_JSLE:
-		if (reg->smax_value <= sval)
+		if (reg1->smax_value <= sval)
 			return 1;
-		else if (reg->smin_value > sval)
+		else if (reg1->smin_value > sval)
 			return 0;
 		break;
 	}
@@ -14048,11 +14136,11 @@ static int is_branch64_taken(struct bpf_reg_state *reg, u64 val, u8 opcode)
  * -1 - unknown. Example: "if (reg < 5)" is unknown when register value
  *      range [0,10]
  */
-static int is_branch_taken(struct bpf_reg_state *reg, u64 val, u8 opcode,
+static int is_branch_taken(struct bpf_reg_state *reg1, u64 val, u8 opcode,
 			   bool is_jmp32)
 {
-	if (__is_pointer_value(false, reg)) {
-		if (!reg_not_null(reg))
+	if (__is_pointer_value(false, reg1)) {
+		if (!reg_not_null(reg1))
 			return -1;
 
 		/* If pointer is valid tests against zero will fail so we can
@@ -14072,8 +14160,8 @@ static int is_branch_taken(struct bpf_reg_state *reg, u64 val, u8 opcode,
 	}
 
 	if (is_jmp32)
-		return is_branch32_taken(reg, val, opcode);
-	return is_branch64_taken(reg, val, opcode);
+		return is_branch32_taken(reg1, val, opcode);
+	return is_branch64_taken(reg1, val, opcode);
 }
 
 static int flip_opcode(u32 opcode)
@@ -18465,6 +18553,7 @@ static int convert_ctx_accesses(struct bpf_verifier_env *env)
 		 * for this case.
 		 */
 		case PTR_TO_BTF_ID | MEM_ALLOC | PTR_UNTRUSTED:
+		case PTR_TO_BTF_ID | PTR_TRUSTED | PTR_MAYBE_NULL:
 			if (type == BPF_READ) {
 				if (BPF_MODE(insn->code) == BPF_MEM)
 					insn->code = BPF_LDX | BPF_PROBE_MEM |
