@@ -493,6 +493,9 @@ alloc_workqueue(const char *fmt, unsigned int flags, int max_active, ...);
 #define create_singlethread_workqueue(name)				\
 	alloc_ordered_workqueue("%s", __WQ_LEGACY | WQ_MEM_RECLAIM, name)
 
+#define from_work(var, callback_work, work_fieldname)	\
+	container_of(callback_work, typeof(*var), work_fieldname)
+
 extern void destroy_workqueue(struct workqueue_struct *wq);
 
 struct workqueue_attrs *alloc_workqueue_attrs(void);
@@ -613,14 +616,14 @@ static inline bool schedule_work_on(int cpu, struct work_struct *work)
 }
 
 /**
- * schedule_work - put work task in global workqueue
+ * schedule_work - put work task in per-CPU workqueue
  * @work: job to be done
  *
- * Returns %false if @work was already on the kernel-global workqueue and
+ * Returns %false if @work was already on the system per-CPU workqueue and
  * %true otherwise.
  *
- * This puts a job in the kernel-global workqueue if it was not already
- * queued and leaves it in the same position on the kernel-global
+ * This puts a job in the system per-CPU workqueue if it was not already
+ * queued and leaves it in the same position on the system per-CPU
  * workqueue otherwise.
  *
  * Shares the same memory-ordering properties of queue_work(), cf. the
@@ -671,12 +674,12 @@ extern void __warn_flushing_systemwide_wq(void)
 })
 
 /**
- * schedule_delayed_work_on - queue work in global workqueue on CPU after delay
+ * schedule_delayed_work_on - queue work in per-CPU workqueue on CPU after delay
  * @cpu: cpu to use
  * @dwork: job to be done
  * @delay: number of jiffies to wait
  *
- * After waiting for a given time this puts a job in the kernel-global
+ * After waiting for a given time this puts a job in the system per-CPU
  * workqueue on the specified CPU.
  */
 static inline bool schedule_delayed_work_on(int cpu, struct delayed_work *dwork,
@@ -686,11 +689,11 @@ static inline bool schedule_delayed_work_on(int cpu, struct delayed_work *dwork,
 }
 
 /**
- * schedule_delayed_work - put work task in global workqueue after delay
+ * schedule_delayed_work - put work task in per-CPU workqueue after delay
  * @dwork: job to be done
  * @delay: number of jiffies to wait or 0 for immediate execution
  *
- * After waiting for a given time this puts a job in the kernel-global
+ * After waiting for a given time this puts a job in the system per-CPU
  * workqueue.
  */
 static inline bool schedule_delayed_work(struct delayed_work *dwork,
