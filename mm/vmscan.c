@@ -221,7 +221,11 @@ static u64 workingset_protection_prev_totalram __read_mostly = 0;
 /*
  * From 0 .. MAX_SWAPPINESS.  Higher means more swappy.
  */
+#ifdef CONFIG_CACHY
+int vm_swappiness = 20;
+#else
 int vm_swappiness = 60;
+#endif
 
 LIST_HEAD(shrinker_list);
 DECLARE_RWSEM(shrinker_rwsem);
@@ -4997,7 +5001,11 @@ static bool lruvec_is_reclaimable(struct lruvec *lruvec, struct scan_control *sc
 }
 
 /* to protect the working set of the last N jiffies */
+#ifdef CONFIG_CACHY
+static unsigned long lru_gen_min_ttl __read_mostly = 1000;
+#else
 static unsigned long lru_gen_min_ttl __read_mostly;
+#endif
 
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
