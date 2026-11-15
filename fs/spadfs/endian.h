@@ -1,0 +1,7 @@
+#ifndef _SPADFS_COMMON_ENDIAN_H
+#define _SPADFS_COMMON_ENDIAN_H
+
+#define SPADFS_LITTLE_ENDIAN
+/*#define SPADFS_BIG_ENDIAN*/
+
+#endif

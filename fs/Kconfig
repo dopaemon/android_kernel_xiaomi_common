@@ -49,6 +49,7 @@ source "fs/btrfs/Kconfig"
 source "fs/nilfs2/Kconfig"
 source "fs/f2fs/Kconfig"
 source "fs/zonefs/Kconfig"
+source "fs/spadfs/Kconfig"
 
 endif # BLOCK
 

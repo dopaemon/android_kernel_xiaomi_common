@@ -1,0 +1,2 @@
+config SPADFS_FS
+	tristate "SPADFS file system support"
