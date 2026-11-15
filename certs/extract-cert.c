@@ -21,6 +21,11 @@
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#if !defined(OPENSSL_IS_BORINGSSL) && OPENSSL_VERSION_MAJOR >= 3
+#define USE_PKCS11_PROVIDER
+#include <openssl/provider.h>
+#include <openssl/store.h>
+#endif
 #include <openssl/engine.h>
 
 /*
@@ -56,7 +61,7 @@ static void display_openssl_errors(int l)
 	}
 }
 
-#ifndef OPENSSL_IS_BORINGSSL
+#if !defined(OPENSSL_IS_BORINGSSL) && !defined(USE_PKCS11_PROVIDER)
 static void drain_openssl_errors(void)
 {
 	const char *file;
@@ -98,6 +103,41 @@ static void write_cert(X509 *x509)
 		fprintf(stderr, "Extracted cert: %s\n", buf);
 }
 
+#ifdef USE_PKCS11_PROVIDER
+static X509 *load_cert_pkcs11(const char *cert_src)
+{
+	X509 *cert = NULL;
+	OSSL_STORE_CTX *store;
+
+	if (!OSSL_PROVIDER_try_load(NULL, "pkcs11", true))
+		ERR(1, "OSSL_PROVIDER_try_load(pkcs11)");
+	if (!OSSL_PROVIDER_try_load(NULL, "default", true))
+		ERR(1, "OSSL_PROVIDER_try_load(default)");
+
+	store = OSSL_STORE_open(cert_src, NULL, NULL, NULL, NULL);
+	ERR(!store, "OSSL_STORE_open");
+
+	while (!OSSL_STORE_eof(store)) {
+		OSSL_STORE_INFO *info = OSSL_STORE_load(store);
+
+		if (!info) {
+			ERR(OSSL_STORE_error(store), "OSSL_STORE_load");
+			display_openssl_errors(__LINE__);
+			continue;
+		}
+		if (OSSL_STORE_INFO_get_type(info) == OSSL_STORE_INFO_CERT) {
+			cert = OSSL_STORE_INFO_get1_CERT(info);
+			ERR(!cert, "OSSL_STORE_INFO_get1_CERT");
+		}
+		OSSL_STORE_INFO_free(info);
+		if (cert)
+			break;
+	}
+	OSSL_STORE_close(store);
+	return cert;
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	char *cert_src;
@@ -128,7 +168,12 @@ int main(int argc, char **argv)
 		fclose(f);
 		exit(0);
 	} else if (!strncmp(cert_src, "pkcs11:", 7)) {
-#ifdef OPENSSL_IS_BORINGSSL
+#ifdef USE_PKCS11_PROVIDER
+		X509 *cert = load_cert_pkcs11(cert_src);
+
+		ERR(!cert, "load_cert_pkcs11 failed");
+		write_cert(cert);
+#elif defined(OPENSSL_IS_BORINGSSL)
 		ERR(1, "BoringSSL does not support extracting from PKCS#11");
 		exit(1);
 #else

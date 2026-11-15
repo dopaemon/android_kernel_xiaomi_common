@@ -27,6 +27,11 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#if !defined(OPENSSL_IS_BORINGSSL) && OPENSSL_VERSION_MAJOR >= 3
+#define USE_PKCS11_PROVIDER
+#include <openssl/provider.h>
+#include <openssl/store.h>
+#endif
 #include <openssl/engine.h>
 
 /*
@@ -141,10 +146,51 @@ static int pem_pw_cb(char *buf, int len, int w, void *v)
 	return pwlen;
 }
 
+#ifdef USE_PKCS11_PROVIDER
+static EVP_PKEY *read_private_key_pkcs11(const char *private_key_name)
+{
+	EVP_PKEY *private_key = NULL;
+	OSSL_STORE_CTX *store;
+
+	if (!OSSL_PROVIDER_try_load(NULL, "pkcs11", true))
+		ERR(1, "OSSL_PROVIDER_try_load(pkcs11)");
+	if (!OSSL_PROVIDER_try_load(NULL, "default", true))
+		ERR(1, "OSSL_PROVIDER_try_load(default)");
+
+	store = OSSL_STORE_open(private_key_name, NULL, NULL, NULL, NULL);
+	ERR(!store, "OSSL_STORE_open");
+
+	while (!OSSL_STORE_eof(store)) {
+		OSSL_STORE_INFO *info = OSSL_STORE_load(store);
+
+		if (!info) {
+			ERR(OSSL_STORE_error(store), "OSSL_STORE_load");
+			display_openssl_errors(__LINE__);
+			continue;
+		}
+		if (OSSL_STORE_INFO_get_type(info) == OSSL_STORE_INFO_PKEY) {
+			private_key = OSSL_STORE_INFO_get1_PKEY(info);
+			ERR(!private_key, "OSSL_STORE_INFO_get1_PKEY");
+		}
+		OSSL_STORE_INFO_free(info);
+		if (private_key)
+			break;
+	}
+	OSSL_STORE_close(store);
+	ERR(!private_key, "%s", private_key_name);
+	return private_key;
+}
+#endif
+
 static EVP_PKEY *read_private_key(const char *private_key_name)
 {
 	EVP_PKEY *private_key;
 	BIO *b;
+
+#ifdef USE_PKCS11_PROVIDER
+	if (!strncmp(private_key_name, "pkcs11:", 7))
+		return read_private_key_pkcs11(private_key_name);
+#endif
 
 #ifndef OPENSSL_NO_ENGINE
 	if (!strncmp(private_key_name, "pkcs11:", 7)) {
