@@ -180,7 +180,7 @@ unsigned long highest_memmap_pfn __read_mostly;
 
 #ifdef CONFIG_UKSM
 unsigned long uksm_zero_pfn __read_mostly;
-EXPORT_SYMBOL_GPL(uksm_zero_pfn);
+EXPORT_SYMBOL(uksm_zero_pfn);
 struct page *empty_uksm_zero_page;
 
 static int __init setup_uksm_zero_page(void)

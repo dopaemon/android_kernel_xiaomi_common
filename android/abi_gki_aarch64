@@ -3,3 +3,4 @@
   module_layout
   __put_task_struct
   utf8_data_table
+  uksm_zero_pfn

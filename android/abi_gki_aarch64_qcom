@@ -2384,6 +2384,7 @@
   ufshcd_uic_hibern8_exit
   __uio_register_device
   uio_unregister_device
+  uksm_zero_pfn
   unlock_page
   unpin_user_pages
   unregister_blkdev
