@@ -108,7 +108,28 @@ void collect_procs_ksm(struct page *page, struct list_head *to_kill,
 long ksm_process_profit(struct mm_struct *);
 #endif /* CONFIG_PROC_FS */
 
-#else  /* !CONFIG_KSM */
+#elif defined(CONFIG_UKSM)
+int ksm_madvise(struct vm_area_struct *vma, unsigned long start,
+		unsigned long end, int advice, unsigned long *vm_flags);
+struct folio *ksm_might_need_to_copy(struct folio *folio,
+			struct vm_area_struct *vma, unsigned long addr);
+void rmap_walk_ksm(struct folio *folio, struct rmap_walk_control *rwc);
+void folio_migrate_ksm(struct folio *newfolio, struct folio *folio);
+#ifdef CONFIG_MEMORY_FAILURE
+void collect_procs_ksm(struct page *page, struct list_head *to_kill,
+		       int force_early);
+#endif
+
+static inline void ksm_add_vma(struct vm_area_struct *vma) {}
+static inline int ksm_disable(struct mm_struct *mm) { return 0; }
+static inline int ksm_fork(struct mm_struct *mm, struct mm_struct *oldmm)
+{
+	return 0;
+}
+static inline void ksm_exit(struct mm_struct *mm) {}
+static inline void ksm_might_unmap_zero_page(struct mm_struct *mm, pte_t pte) {}
+
+#else  /* !CONFIG_KSM && !CONFIG_UKSM */
 
 static inline void ksm_add_vma(struct vm_area_struct *vma)
 {
@@ -162,5 +183,7 @@ static inline void folio_migrate_ksm(struct folio *newfolio, struct folio *old)
 }
 #endif /* CONFIG_MMU */
 #endif /* !CONFIG_KSM */
+
+#include <linux/uksm.h>
 
 #endif /* __LINUX_KSM_H */

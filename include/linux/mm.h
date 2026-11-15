@@ -4054,7 +4054,7 @@ static inline void num_poisoned_pages_sub(unsigned long pfn, long i)
 }
 #endif
 
-#if defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_KSM)
+#if defined(CONFIG_MEMORY_FAILURE) && (defined(CONFIG_KSM) || defined(CONFIG_UKSM))
 void add_to_kill_ksm(struct task_struct *tsk, struct page *p,
 		     struct vm_area_struct *vma, struct list_head *to_kill,
 		     unsigned long ksm_addr);

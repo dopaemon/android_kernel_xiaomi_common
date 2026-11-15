@@ -3,6 +3,7 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/uksm.h>
 #include <linux/hugetlb.h>
 #include <linux/mman.h>
 #include <linux/mmzone.h>
@@ -122,6 +123,10 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 		    global_node_page_state(NR_PAGETABLE));
 	show_val_kb(m, "SecPageTables:  ",
 		    global_node_page_state(NR_SECONDARY_PAGETABLE));
+#ifdef CONFIG_UKSM
+	show_val_kb(m, "KsmZeroPages:     ",
+		    atomic_long_read(&uksm_zero_pages));
+#endif
 
 	show_val_kb(m, "NFS_Unstable:   ", 0);
 	show_val_kb(m, "Bounce:         ",

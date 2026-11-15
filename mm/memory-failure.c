@@ -490,7 +490,7 @@ static void add_to_kill_anon_file(struct task_struct *tsk, struct page *p,
 	__add_to_kill(tsk, p, vma, to_kill, 0, FSDAX_INVALID_PGOFF);
 }
 
-#ifdef CONFIG_KSM
+#if defined(CONFIG_KSM) || defined(CONFIG_UKSM)
 static bool task_in_to_kill_list(struct list_head *to_kill,
 				 struct task_struct *tsk)
 {

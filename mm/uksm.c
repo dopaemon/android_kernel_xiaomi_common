@@ -78,7 +78,6 @@
 #include <linux/pagewalk.h>
 
 #include <asm/tlbflush.h>
-#include <linux/sysms_finder.h>
 #include "internal.h"
 
 
@@ -497,6 +496,8 @@ static struct kmem_cache *tree_node_cache;
 #define SCAN_LADDER_SIZE 4
 static struct scan_rung uksm_scan_ladder[SCAN_LADDER_SIZE];
 
+atomic_long_t uksm_zero_pages = ATOMIC_LONG_INIT(0);
+
 /* The evaluation rounds uksmd has finished */
 static unsigned long long uksm_eval_round = 1;
 
@@ -552,7 +553,7 @@ static unsigned int uksm_sleep_saved;
 /* Max percentage of cpu utilization ksmd can take to scan in one batch */
 static unsigned int uksm_max_cpu_percentage;
 
-static int uksm_cpu_governor = CONFIG_UKSM_CPU_GOVERNOR;
+static int uksm_cpu_governor;
 
 static char *uksm_cpu_governor_str[5] = { "full", "medium", "low", "quiet", "android" };
 
@@ -1345,7 +1346,8 @@ failout_up:
  */
 static inline int vma_can_enter(struct vm_area_struct *vma)
 {
-	return uksm_flags_can_scan(vma->vm_flags);
+	return (vma->vm_flags & VM_MERGEABLE) &&
+		uksm_flags_can_scan(vma->vm_flags);
 }
 
 /*
@@ -1356,7 +1358,6 @@ static inline int vma_can_enter(struct vm_area_struct *vma)
 void uksm_add_vma_new(struct vm_area_struct *vma, const char *where)
 {
 	struct vma_slot *slot;
-	unsigned long new_flags = vma->vm_flags;
 	unsigned long vm_pages = vma_pages(vma);
 
 	if (!vma_can_enter(vma)) {
@@ -1371,8 +1372,6 @@ void uksm_add_vma_new(struct vm_area_struct *vma, const char *where)
 	}
 
 	vma->uksm_vma_slot = slot;
-	new_flags |= VM_MERGEABLE;
-	vm_flags_reset(vma, new_flags);
 	slot->vma = vma;
 	slot->mm = vma->vm_mm;
 	slot->ctime_j = jiffies;
@@ -1763,7 +1762,7 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 				(page_to_pfn(kpage) == zero_pfn)) {
 		entry = pte_mkspecial(entry);
 		dec_mm_counter(mm, MM_ANONPAGES);
-		inc_zone_page_state(page, NR_UKSM_ZERO_PAGES);
+		atomic_long_inc(&uksm_zero_pages);
 	} else {
 		get_page(kpage);
 		folio_add_anon_rmap_pte(kfolio, kpage, vma, addr, RMAP_NONE);
@@ -2719,9 +2718,10 @@ static void hold_anon_vma(struct rmap_item *rmap_item,
  *
  */
 static void stable_tree_append(struct rmap_item *rmap_item,
-			       struct ksm_stable_node *stable_node, int logdedup)
+			       struct ksm_stable_node *stable_node, int logdedup,
+			       struct node_vma *new_node_vma)
 {
-	struct node_vma *node_vma = NULL, *new_node_vma, *node_vma_cont = NULL;
+	struct node_vma *node_vma = NULL, *node_vma_cont = NULL;
 	unsigned long key = (unsigned long)rmap_item->slot;
 	unsigned long factor = rmap_item->slot->rung->step;
 
@@ -2749,6 +2749,7 @@ static void stable_tree_append(struct rmap_item *rmap_item,
 
 	if (node_vma) {
 		if (node_vma->key == key) {
+			free_node_vma(new_node_vma);
 			node_vma_cont = hlist_entry_safe(node_vma->hlist.next, struct node_vma, hlist);
 			goto node_vma_ok;
 		} else if (node_vma->key > key) {
@@ -2757,17 +2758,6 @@ static void stable_tree_append(struct rmap_item *rmap_item,
 	}
 
 node_vma_new:
-	/* no same vma already in node, alloc a new node_vma */
-	new_node_vma = alloc_node_vma();
-	/*
-	 * Fail to allocate node_vma may cause merging ratio decrease,
-	 * but it can be recovered later when memory is available.
-	 * We should not trigger BUG_ON in such situation.
-	 */
-	if (!new_node_vma) {
-		/* Skip appending this rmap_item to stable_node */
-		return;
-	}
 	new_node_vma->head = stable_node;
 	new_node_vma->slot = rmap_item->slot;
 
@@ -2835,7 +2825,7 @@ static int break_ksm_pmd_entry(pmd_t *pmdp, unsigned long addr, unsigned long en
 		}
 		/* return 1 if the page is an normal ksm page or KSM-placed zero page */
 		found = (page && PageKsm(page)) ||
-			(pte_present(pte) && is_ksm_zero_pte(pte));
+			(pte_present(pte) && is_uksm_zero_pfn(pte_pfn(pte)));
 		if (found) {
 			*found_addr = addr;
 			goto out_unlock;
@@ -3032,6 +3022,7 @@ static void cmp_and_merge_page(struct rmap_item *rmap_item, u32 hash)
 	int err;
 	unsigned int success1, success2;
 	struct ksm_stable_node *snode;
+	struct node_vma *node1 = NULL, *node2 = NULL;
 	int cmp;
 	struct rb_node *parent = NULL, **new;
 
@@ -3041,6 +3032,11 @@ static void cmp_and_merge_page(struct rmap_item *rmap_item, u32 hash)
 	/* We first start with searching the page inside the stable tree */
 	kpage = stable_tree_search(rmap_item, hash);
 	if (kpage) {
+		node1 = alloc_node_vma();
+		if (!node1) {
+			put_page(kpage);
+			return;
+		}
 		err = try_to_merge_with_uksm_page(rmap_item, kpage,
 						 hash);
 		if (!err) {
@@ -3052,12 +3048,14 @@ static void cmp_and_merge_page(struct rmap_item *rmap_item, u32 hash)
 			 */
 			lock_page(kpage);
 			snode = page_stable_node(kpage);
-			stable_tree_append(rmap_item, snode, 1);
+			stable_tree_append(rmap_item, snode, 1, node1);
 			unlock_page(kpage);
 			put_page(kpage);
 			return; /* success */
 		}
 		put_page(kpage);
+		free_node_vma(node1);
+		node1 = NULL;
 
 		/*
 		 * if it's a collision and it has been search in sub-rbtree
@@ -3072,6 +3070,10 @@ static void cmp_and_merge_page(struct rmap_item *rmap_item, u32 hash)
 	tree_rmap_item =
 		unstable_tree_search_insert(rmap_item, hash);
 	if (tree_rmap_item) {
+		node1 = alloc_node_vma();
+		node2 = alloc_node_vma();
+		if (!node1 || !node2)
+			goto put_up_out;
 		err = try_to_merge_two_pages(rmap_item, tree_rmap_item, hash);
 		/*
 		 * As soon as we merge this page, we want to remove the
@@ -3090,15 +3092,19 @@ static void cmp_and_merge_page(struct rmap_item *rmap_item, u32 hash)
 			 * Do not log dedup for tree item, it's not counted as
 			 * scanned in this round.
 			 */
-			if (success2)
-				stable_tree_append(tree_rmap_item, snode, 0);
+			if (success2) {
+				stable_tree_append(tree_rmap_item, snode, 0, node2);
+				node2 = NULL;
+			}
 
 			/*
 			 * The order of these two stable append is important:
 			 * we are scanning rmap_item.
 			 */
-			if (success1)
-				stable_tree_append(rmap_item, snode, 1);
+			if (success1) {
+				stable_tree_append(rmap_item, snode, 1, node1);
+				node1 = NULL;
+			}
 
 			/*
 			 * The original kpage may be unlocked inside
@@ -3145,6 +3151,10 @@ static void cmp_and_merge_page(struct rmap_item *rmap_item, u32 hash)
 			remove_rmap_item_from_tree(tree_rmap_item);
 		}
 put_up_out:
+		if (node1)
+			free_node_vma(node1);
+		if (node2)
+			free_node_vma(node2);
 		put_page(tree_rmap_item->page);
 		mmap_read_unlock(tree_rmap_item->slot->vma->vm_mm);
 	}
@@ -3749,29 +3759,26 @@ static inline void rung_rm_slot(struct vma_slot *slot)
 static inline void rung_add_new_slots(struct scan_rung *rung,
 			struct vma_slot **slots, unsigned long num)
 {
-	int err;
-	struct vma_slot *slot;
-	unsigned long i;
 	struct sradix_tree_root *root = &rung->vma_root;
-
-	err = sradix_tree_enter(root, (void **)slots, num);
-	if (err) {
-		/*
-		 * If we fail to enter vma slots due to out-of-memory,
-		 * we drop the slots to avoid kernel panic. This can happen
-		 * during memory pressure, and is better than crashing the kernel.
-		 */
-		pr_err("UKSM: Failed to enter vma slots with error %d\n", err);
-		return;
-	}
+	bool was_empty = !root->num;
+	unsigned long i;
 
 	for (i = 0; i < num; i++) {
-		slot = slots[i];
-		slot->rung = rung;
-		BUG_ON(vma_fully_scanned(slot));
+		if (sradix_tree_enter(root, (void **)&slots[i], 1)) {
+			/* Skip uninserted live slots until their VMA changes. */
+			spin_lock(&vma_slot_list_lock);
+			for (; i < num; i++) {
+				if (list_empty(&slots[i]->slot_list))
+					list_add_tail(&slots[i]->slot_list, &vma_slot_noadd);
+			}
+			spin_unlock(&vma_slot_list_lock);
+			break;
+		}
+		slots[i]->rung = rung;
+		BUG_ON(vma_fully_scanned(slots[i]));
 	}
 
-	if (rung->vma_root.num == num)
+	if (was_empty && root->num)
 		reset_current_scan(rung, 0, 1);
 }
 
@@ -4554,10 +4561,6 @@ static void uksm_vma_enter(struct vma_slot **slots, unsigned long num)
 	struct scan_rung *rung;
 
 	rung = &uksm_scan_ladder[0];
-	/* 
-	 * sradix_tree_enter() may fail due to memory allocation,
-	 * we should handle this error gracefully instead of panic.
-	 */
 	rung_add_new_slots(rung, slots, num);
 }
 
@@ -4888,7 +4891,7 @@ rm_slot:
 
 static int ksmd_should_run(void)
 {
-	return uksm_run & UKSM_RUN_MERGE & check_game_pid();
+	return uksm_run & UKSM_RUN_MERGE;
 }
 
 static int uksm_scan_thread(void *nothing)
@@ -4977,6 +4980,43 @@ again:
 	if (!search_new_forks++)
 		goto again;
 }
+
+#ifdef CONFIG_MEMORY_FAILURE
+struct uksm_kill_info {
+	struct page *page;
+	struct list_head *to_kill;
+	int force_early;
+};
+
+static bool uksm_collect_process(struct folio *folio, struct vm_area_struct *vma,
+				unsigned long address, void *arg)
+{
+	struct uksm_kill_info *info = arg;
+	struct task_struct *tsk;
+
+	rcu_read_lock();
+	for_each_process(tsk) {
+		struct task_struct *t = task_early_kill(tsk, info->force_early);
+
+		if (t && t->mm == vma->vm_mm)
+			add_to_kill_ksm(t, info->page, vma, info->to_kill, address);
+	}
+	rcu_read_unlock();
+	return true;
+}
+
+void collect_procs_ksm(struct page *page, struct list_head *to_kill,
+		       int force_early)
+{
+	struct uksm_kill_info info = { page, to_kill, force_early };
+	struct rmap_walk_control rwc = {
+		.rmap_one = uksm_collect_process,
+		.arg = &info,
+	};
+
+	rmap_walk_ksm(page_folio(page), &rwc);
+}
+#endif
 
 #ifdef CONFIG_MIGRATION
 /* Common ksm interface but may be specific to uksm */
@@ -5683,25 +5723,26 @@ static void __init uksm_slab_free(void)
 int ksm_madvise(struct vm_area_struct *vma, unsigned long start,
 		unsigned long end, int advice, unsigned long *vm_flags)
 {
-	/* force ignore the advice */
-	if (*vm_flags & (VM_MERGEABLE | VM_SHARED  | VM_MAYSHARE   |
-			 VM_PFNMAP    | VM_IO      | VM_DONTEXPAND |
-			 VM_HUGETLB | VM_MIXEDMAP))
-		return 0;		/* just ignore the advice */
+	int err;
 
-	if (vma_is_dax(vma))
+	switch (advice) {
+	case MADV_MERGEABLE:
+		uksm_vm_flags_mod(vm_flags);
 		return 0;
 
-#ifdef VM_SAO
-	if (*vm_flags & VM_SAO)
-		return 0;
-#endif
-#ifdef VM_SPARC_ADI
-	if (*vm_flags & VM_SPARC_ADI)
-		return 0;
-#endif
+	case MADV_UNMERGEABLE:
+		if (!(*vm_flags & VM_MERGEABLE) || !uksm_flags_can_scan(*vm_flags))
+			return 0;		/* just ignore the advice */
 
-	*vm_flags |= VM_MERGEABLE;
+		if (vma->anon_vma) {
+			err = unmerge_uksm_pages(vma, start, end, true);
+			if (err)
+				return err;
+		}
+
+		*vm_flags &= ~VM_MERGEABLE;
+		break;
+	}
 
 	return 0;
 }
@@ -5713,6 +5754,9 @@ struct folio *ksm_might_need_to_copy(struct folio *folio,
 	struct page *page = folio_page(folio, 0);
 	struct anon_vma *anon_vma = folio_anon_vma(folio);
 	struct folio *new_folio;
+
+	if (folio_test_large(folio))
+		return folio;
 
 	if (PageKsm(page)) {
 		if (page_stable_node(page))
@@ -5744,49 +5788,17 @@ struct folio *ksm_might_need_to_copy(struct folio *folio,
 		folio_set_dirty(new_folio);
 		__folio_mark_uptodate(new_folio);
 		__folio_set_locked(new_folio);
-#ifdef CONFIG_SWAP
-		count_vm_event(KSM_SWPIN_COPY);
-#endif
 	}
 
 	return new_folio;
 }
-
-/* Copied from mm/ksm.c and required from 5.1 */
-#ifdef UNDEFINED
-bool reuse_ksm_page(struct page *page,
-		    struct vm_area_struct *vma,
-		    unsigned long address)
-{
-#ifdef CONFIG_DEBUG_VM
-	if (WARN_ON(is_zero_pfn(page_to_pfn(page))) ||
-			WARN_ON(!page_mapped(page)) ||
-			WARN_ON(!PageLocked(page))) {
-		dump_page(page, "reuse_ksm_page");
-		return false;
-	}
-#endif
-
-	if (PageSwapCache(page) || !page_stable_node(page))
-		return false;
-	/* Prohibit parallel get_ksm_page() */
-	if (!page_ref_freeze(page, 1))
-		return false;
-
-	folio_move_anon_rmap(page_folio(page), vma);
-	page->index = linear_page_index(vma, address);
-	page_ref_unfreeze(page, 1);
-
-	return true;
-}
-#endif
 
 static int __init uksm_init(void)
 {
 	struct task_struct *uksm_thread;
 	int err;
 
-	uksm_sleep_jiffies = msecs_to_jiffies(CONFIG_UKSM_SLEEP_MS);
+	uksm_sleep_jiffies = msecs_to_jiffies(100);
 	uksm_sleep_saved = uksm_sleep_jiffies;
 
 	slot_tree_init();
@@ -5810,22 +5822,6 @@ static int __init uksm_init(void)
 		pr_err("uksm: creating kthread failed\n");
 		err = PTR_ERR(uksm_thread);
 		goto out_free;
-	}
-
-	/* Set uksmd thread CPU affinity to CPUs 0-5 and priority to 19 */
-	{
-		cpumask_var_t cpus_mask;
-		if (alloc_cpumask_var(&cpus_mask, GFP_KERNEL)) {
-			cpumask_clear(cpus_mask);
-			cpumask_set_cpu(0, cpus_mask);
-			cpumask_set_cpu(1, cpus_mask);
-			cpumask_set_cpu(2, cpus_mask);
-			cpumask_set_cpu(3, cpus_mask);
-			cpumask_set_cpu(4, cpus_mask);
-			cpumask_set_cpu(5, cpus_mask);
-			set_cpus_allowed_ptr(uksm_thread, cpus_mask);
-			free_cpumask_var(cpus_mask);
-		}
 	}
 
 #ifdef CONFIG_SYSFS
@@ -5856,43 +5852,8 @@ out_free0:
 out_free1:
 	kfree(random_nums);
 out_free2:
-	kfree(uksm_scan_ladder);
 	return err;
 }
 
-/* Functions used in ksm.c, but not part of uksm.c. */
-void ksm_add_vma(struct vm_area_struct *vma)
-{
-}
-
-int ksm_enable_merge_any(struct mm_struct *mm)
-{
-	return 0;
-}
-
-int ksm_disable_merge_any(struct mm_struct *mm)
-{
-	return 0;
-}
-
-int ksm_disable(struct mm_struct *mm)
-{
-	return 0;
-}
-
-void collect_procs_ksm(struct folio *folio, struct page *page,
-		struct list_head *to_kill, int force_early)
-{
-}
-
-long ksm_process_profit(struct mm_struct *mm)
-{
-	return 0;
-}
-
-#ifdef MODULE
-subsys_initcall(ksm_init);
-#else
 late_initcall(uksm_init);
-#endif
 

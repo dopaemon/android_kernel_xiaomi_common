@@ -727,7 +727,7 @@ static __always_inline int __PageMovable(struct page *page)
 				PAGE_MAPPING_MOVABLE;
 }
 
-#ifdef CONFIG_KSM
+#if defined(CONFIG_KSM) || defined(CONFIG_UKSM)
 /*
  * A KSM page is one of those write-protected "shared pages" or "merged pages"
  * which KSM maps into multiple mms, wherever identical anonymous page content

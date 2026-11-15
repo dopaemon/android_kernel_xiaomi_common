@@ -755,7 +755,11 @@ struct vm_area_struct {
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
 
+#ifdef CONFIG_UKSM
+	ANDROID_KABI_USE(1, struct vma_slot *uksm_vma_slot);
+#else
 	ANDROID_KABI_RESERVE(1);
+#endif
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);

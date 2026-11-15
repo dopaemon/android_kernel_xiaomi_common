@@ -829,6 +829,17 @@ config KSM
 	  until a program has madvised that an area is MADV_MERGEABLE, and
 	  root has set /sys/kernel/mm/ksm/run to 1 (if CONFIG_SYSFS is set).
 
+config UKSM
+	bool "Ultra-KSM for automatic page merging"
+	depends on MMU && !KSM
+	help
+	  Automatically scan anonymous mappings for identical pages and merge
+	  them until a process writes to a shared page. Control scanning via
+	  /sys/kernel/mm/uksm/. This replaces KSM without enabling its per-mm
+	  accounting fields, preserving the Android GKI memory layouts.
+	  See Documentation/vm/uksm.txt and https://github.com/sroeschus/uksm.
+
+
 config DEFAULT_MMAP_MIN_ADDR
 	int "Low address space to protect from user allocation"
 	depends on MMU

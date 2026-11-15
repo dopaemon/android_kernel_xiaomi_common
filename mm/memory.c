@@ -178,6 +178,25 @@ EXPORT_SYMBOL(zero_pfn);
 
 unsigned long highest_memmap_pfn __read_mostly;
 
+#ifdef CONFIG_UKSM
+unsigned long uksm_zero_pfn __read_mostly;
+EXPORT_SYMBOL_GPL(uksm_zero_pfn);
+struct page *empty_uksm_zero_page;
+
+static int __init setup_uksm_zero_page(void)
+{
+	empty_uksm_zero_page = alloc_pages(__GFP_ZERO & ~__GFP_MOVABLE, 0);
+	if (!empty_uksm_zero_page)
+		panic("Oh boy, that early out of memory?");
+
+	SetPageReserved(empty_uksm_zero_page);
+	uksm_zero_pfn = page_to_pfn(empty_uksm_zero_page);
+
+	return 0;
+}
+core_initcall(setup_uksm_zero_page);
+#endif
+
 /*
  * CONFIG_MMU architectures set up ZERO_PAGE in their paging_init()
  */
@@ -992,8 +1011,10 @@ copy_present_ptes(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma
 	int err, nr;
 
 	page = vm_normal_page(src_vma, addr, pte);
-	if (unlikely(!page))
+	if (unlikely(!page)) {
+		uksm_map_zero_page(pte);
 		goto copy_pte;
+	}
 
 	folio = page_folio(page);
 
@@ -1557,6 +1578,7 @@ static inline int zap_present_ptes(struct mmu_gather *tlb,
 			zap_install_uffd_wp_if_needed(vma, addr, pte, 1,
 						      details, ptent);
 		ksm_might_unmap_zero_page(mm, ptent);
+		uksm_unmap_zero_page(ptent);
 		return 1;
 	}
 
@@ -3013,6 +3035,7 @@ static inline int __wp_page_copy_user(struct page *dst, struct page *src,
 			memory_failure_queue(page_to_pfn(src), 0);
 			return -EHWPOISON;
 		}
+		uksm_cow_page(vma, src);
 		return 0;
 	}
 
@@ -3341,6 +3364,8 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 			return err == -EHWPOISON ? VM_FAULT_HWPOISON : 0;
 		}
 		kmsan_copy_page_meta(&new_folio->page, vmf->page);
+	} else {
+		uksm_cow_pte(vma, vmf->orig_pte);
 	}
 
 	__folio_mark_uptodate(new_folio);
@@ -3362,6 +3387,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 			}
 		} else {
 			ksm_might_unmap_zero_page(mm, vmf->orig_pte);
+			uksm_unmap_zero_page(vmf->orig_pte);
 			inc_mm_counter(mm, MM_ANONPAGES);
 		}
 		flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));

@@ -171,7 +171,9 @@ static int madvise_update_vma(struct vm_area_struct *vma,
 success:
 	/* vm_flags is protected by the mmap_lock held in write mode. */
 	vma_start_write(vma);
+	uksm_remove_vma(vma, "madvise_update_vma");
 	vm_flags_reset(vma, new_flags);
+	uksm_add_vma_new(vma, "madvise_update_vma");
 	if (!vma->vm_file || vma_is_anon_shmem(vma)) {
 		error = replace_anon_vma_name(vma, anon_name);
 		if (error)
@@ -1253,7 +1255,7 @@ madvise_behavior_valid(int behavior)
 	case MADV_PAGEOUT:
 	case MADV_POPULATE_READ:
 	case MADV_POPULATE_WRITE:
-#ifdef CONFIG_KSM
+#if defined(CONFIG_KSM) || defined(CONFIG_UKSM)
 	case MADV_MERGEABLE:
 	case MADV_UNMERGEABLE:
 #endif

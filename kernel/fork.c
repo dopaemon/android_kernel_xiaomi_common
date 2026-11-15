@@ -526,6 +526,9 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 	 * will be reinitialized.
 	 */
 	data_race(memcpy(new, orig, sizeof(*new)));
+#ifdef CONFIG_UKSM
+	new->uksm_vma_slot = NULL;
+#endif
 	if (!vma_lock_alloc(new)) {
 		kmem_cache_free(vm_area_cachep, new);
 		return NULL;
@@ -539,6 +542,10 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 
 void __vm_area_free(struct vm_area_struct *vma)
 {
+#ifdef CONFIG_UKSM
+	BUG_ON(vma->uksm_vma_slot != NULL);
+#endif
+
 	vma_numab_state_free(vma);
 	free_anon_vma_name(vma);
 	vma_lock_free(vma);
@@ -779,6 +786,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 		 * allocation is not necessary here, so it cannot fail.
 		 */
 		vma_iter_bulk_store(&vmi, tmp);
+		uksm_add_vma_new(tmp, "dup_mmap");
 
 		mm->map_count++;
 		if (!(tmp->vm_flags & VM_WIPEONFORK))
