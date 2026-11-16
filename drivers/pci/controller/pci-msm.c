@@ -5672,7 +5672,7 @@ static int msm_pcie_get_gpio(struct msm_pcie_dev_t *pcie_dev)
 	}
 
 	pcie_dev->wake_n = 0;
-	if (pcie_dev->gpio[MSM_PCIE_GPIO_WAKE].num)
+	if (gpio_is_valid(pcie_dev->gpio[MSM_PCIE_GPIO_WAKE].num))
 		pcie_dev->wake_n =
 			gpio_to_irq(pcie_dev->gpio[MSM_PCIE_GPIO_WAKE].num);
 
@@ -6390,7 +6390,7 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 
 	usleep_range(dev->ep_latency * 1000, dev->ep_latency * 1000);
 
-	if (dev->gpio[MSM_PCIE_GPIO_EP].num)
+	if (gpio_is_valid(dev->gpio[MSM_PCIE_GPIO_EP].num))
 		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_EP].num,
 				dev->gpio[MSM_PCIE_GPIO_EP].on);
 
@@ -6619,7 +6619,7 @@ link_fail:
 	if (msm_pcie_keep_resources_on & BIT(dev->rc_idx))
 		goto out;
 
-	if (dev->gpio[MSM_PCIE_GPIO_EP].num)
+	if (gpio_is_valid(dev->gpio[MSM_PCIE_GPIO_EP].num))
 		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_EP].num,
 				1 - dev->gpio[MSM_PCIE_GPIO_EP].on);
 
@@ -6705,7 +6705,7 @@ static void msm_pcie_disable(struct msm_pcie_dev_t *dev)
 	msm_pcie_vreg_deinit(dev);
 	msm_pcie_pipe_clk_deinit(dev);
 
-	if (dev->gpio[MSM_PCIE_GPIO_EP].num)
+	if (gpio_is_valid(dev->gpio[MSM_PCIE_GPIO_EP].num))
 		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_EP].num,
 				1 - dev->gpio[MSM_PCIE_GPIO_EP].on);
 
