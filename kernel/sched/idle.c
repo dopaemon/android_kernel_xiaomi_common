@@ -429,10 +429,12 @@ static void check_preempt_curr_idle(struct rq *rq, struct task_struct *p, int fl
 
 static void put_prev_task_idle(struct rq *rq, struct task_struct *prev)
 {
+	scx_update_idle(rq, false);
 }
 
 static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool first)
 {
+	scx_update_idle(rq, true);
 	update_idle_core(rq);
 	schedstat_inc(rq->sched_goidle);
 	update_idle_rq_clock_pelt(rq);

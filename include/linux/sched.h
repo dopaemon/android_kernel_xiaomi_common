@@ -73,6 +73,8 @@ struct task_dma_buf_info;
 struct task_group;
 struct user_event_mm;
 
+#include <linux/sched/ext.h>
+
 /*
  * Task state bitmask. NOTE! These bits are also
  * encoded in fs/proc/array.c: get_task_state().
@@ -1572,7 +1574,11 @@ struct task_struct {
 		unsigned	user_dumpable:1;
 		});
 
+#ifdef CONFIG_SCHED_CLASS_EXT
+	ANDROID_KABI_USE(3, struct sched_ext_entity *scx);
+#else
 	ANDROID_KABI_RESERVE(3);
+#endif
 	ANDROID_KABI_RESERVE(4);
 	ANDROID_KABI_RESERVE(5);
 

@@ -1374,6 +1374,10 @@ scripts: scripts_basic scripts_dtc
 # archprepare is used in arch Makefiles and when processed asm symlink,
 # version.h and scripts_basic is processed / created.
 
+PHONY += tools_clean
+tools_clean:
+	$(Q)$(MAKE) -sC $(srctree)/tools sched_ext_clean
+
 PHONY += prepare archprepare
 
 archprepare: outputmakefile archheaders archscripts scripts include/config/kernel.release \
@@ -1681,7 +1685,7 @@ PHONY += $(mrproper-dirs) mrproper
 $(mrproper-dirs):
 	$(Q)$(MAKE) $(clean)=$(patsubst _mrproper_%,%,$@)
 
-mrproper: clean objtool_mrproper $(mrproper-dirs)
+mrproper: clean objtool_mrproper $(mrproper-dirs) tools_clean
 	$(call cmd,rmfiles)
 	@find . $(RCS_FIND_IGNORE) \
 		\( -name '*.rmeta' \) \

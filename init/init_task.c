@@ -6,6 +6,7 @@
 #include <linux/sched/sysctl.h>
 #include <linux/sched/rt.h>
 #include <linux/sched/task.h>
+#include <linux/sched/ext.h>
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
@@ -61,6 +62,19 @@ unsigned long init_shadow_call_stack[SCS_SIZE / sizeof(long)]
  * Set up the first task table, touch at your own risk!. Base=0,
  * limit=0x1fffff (=2MB)
  */
+#ifdef CONFIG_SCHED_CLASS_EXT
+static struct sched_ext_entity init_scx = {
+	.task = &init_task,
+	.dsq_node.fifo	= LIST_HEAD_INIT(init_scx.dsq_node.fifo),
+	.watchdog_node	= LIST_HEAD_INIT(init_scx.watchdog_node),
+	.sticky_cpu	= -1,
+	.holding_cpu	= -1,
+	.ops_state	= ATOMIC_INIT(0),
+	.runnable_at	= INITIAL_JIFFIES,
+	.slice		= SCX_SLICE_DFL,
+};
+#endif
+
 struct task_struct init_task
 #ifdef CONFIG_ARCH_TASK_STRUCT_ON_STACK
 	__init_task_data
@@ -101,6 +115,9 @@ struct task_struct init_task
 #endif
 #ifdef CONFIG_CGROUP_SCHED
 	.sched_task_group = &root_task_group,
+#endif
+#ifdef CONFIG_SCHED_CLASS_EXT
+	.scx = &init_scx,
 #endif
 	.ptraced	= LIST_HEAD_INIT(init_task.ptraced),
 	.ptrace_entry	= LIST_HEAD_INIT(init_task.ptrace_entry),
