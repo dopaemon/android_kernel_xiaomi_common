@@ -443,6 +443,7 @@ static int blk_mq_init_sched_shared_tags(struct request_queue *queue)
 int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
 {
 	unsigned int flags = q->tag_set->flags;
+	unsigned int memflags;
 	struct blk_mq_hw_ctx *hctx;
 	struct elevator_queue *eq;
 	unsigned long i;
@@ -472,9 +473,9 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
 	if (ret)
 		goto err_free_map_and_rqs;
 
-	mutex_lock(&q->debugfs_mutex);
+	memflags = blk_debugfs_lock(q);
 	blk_mq_debugfs_register_sched(q);
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock(q, memflags);
 
 	queue_for_each_hw_ctx(q, hctx, i) {
 		if (e->ops.init_hctx) {
@@ -487,9 +488,9 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
 				return ret;
 			}
 		}
-		mutex_lock(&q->debugfs_mutex);
+		memflags = blk_debugfs_lock(q);
 		blk_mq_debugfs_register_sched_hctx(q, hctx);
-		mutex_unlock(&q->debugfs_mutex);
+		blk_debugfs_unlock(q, memflags);
 	}
 
 	return 0;
@@ -530,9 +531,9 @@ void blk_mq_exit_sched(struct request_queue *q, struct elevator_queue *e)
 	unsigned int flags = 0;
 
 	queue_for_each_hw_ctx(q, hctx, i) {
-		mutex_lock(&q->debugfs_mutex);
+		blk_debugfs_lock_nomemsave(q);
 		blk_mq_debugfs_unregister_sched_hctx(hctx);
-		mutex_unlock(&q->debugfs_mutex);
+		blk_debugfs_unlock_nomemrestore(q);
 
 		if (e->type->ops.exit_hctx && hctx->sched_data) {
 			e->type->ops.exit_hctx(hctx, i);
@@ -541,9 +542,9 @@ void blk_mq_exit_sched(struct request_queue *q, struct elevator_queue *e)
 		flags = hctx->flags;
 	}
 
-	mutex_lock(&q->debugfs_mutex);
+	blk_debugfs_lock_nomemsave(q);
 	blk_mq_debugfs_unregister_sched(q);
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock_nomemrestore(q);
 
 	if (e->type->ops.exit_sched)
 		e->type->ops.exit_sched(e);

@@ -567,4 +567,35 @@ static inline int req_ref_read(struct request *req)
 	return atomic_read(&req->ref);
 }
 
+/*
+ * debugfs directory and file creation can trigger fs reclaim, which can enter
+ * back into the block layer request_queue. This can cause deadlock if the
+ * queue is frozen. Use NOIO context together with debugfs_mutex to prevent fs
+ * reclaim from triggering block I/O.
+ */
+static inline void blk_debugfs_lock_nomemsave(struct request_queue *q)
+{
+	mutex_lock(&q->debugfs_mutex);
+}
+
+static inline void blk_debugfs_unlock_nomemrestore(struct request_queue *q)
+{
+	mutex_unlock(&q->debugfs_mutex);
+}
+
+static inline unsigned int __must_check blk_debugfs_lock(struct request_queue *q)
+{
+	unsigned int memflags = memalloc_noio_save();
+
+	blk_debugfs_lock_nomemsave(q);
+	return memflags;
+}
+
+static inline void blk_debugfs_unlock(struct request_queue *q,
+				      unsigned int memflags)
+{
+	blk_debugfs_unlock_nomemrestore(q);
+	memalloc_noio_restore(memflags);
+}
+
 #endif /* BLK_INTERNAL_H */

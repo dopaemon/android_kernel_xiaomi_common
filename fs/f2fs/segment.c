@@ -2804,7 +2804,7 @@ static int get_new_segment(struct f2fs_sb_info *sbi,
 #endif
 
 	if (pinning) {
-		max_secno = sbi->pinned_area_max_secno;
+		max_secno = min(sbi->pinned_area_max_secno, MAIN_SECS(sbi));
 		hint = 0;
 	}
 
@@ -4649,7 +4649,7 @@ void f2fs_flush_sit_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	down_write(&sit_i->sentry_lock);
 
-	if (!sit_i->dirty_sentries)
+	if (!sit_i->dirty_sentries && to_journal)
 		goto out;
 
 	/*

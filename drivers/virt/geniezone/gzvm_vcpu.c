@@ -133,17 +133,20 @@ static long gzvm_vcpu_run(struct gzvm_vcpu *vcpu, void __user *argp)
 {
 	bool need_userspace = false;
 	u64 exit_reason;
+	struct gzvm_vcpu_run run;
 
-	if (copy_from_user(vcpu->run, argp, sizeof(struct gzvm_vcpu_run)))
+	if (copy_from_user(&run, argp, sizeof(run)))
 		return -EFAULT;
 
-	for (int i = 0; i < ARRAY_SIZE(vcpu->run->padding1); i++) {
-		if (vcpu->run->padding1[i])
+	for (int i = 0; i < ARRAY_SIZE(run.padding1); i++) {
+		if (run.padding1[i])
 			return -EINVAL;
 	}
 
-	if (vcpu->run->immediate_exit == 1)
+	if (run.immediate_exit == 1)
 		return -EINTR;
+
+	memcpy(vcpu->run, &run, sizeof(run));
 
 	while (!need_userspace && !signal_pending(current)) {
 		gzvm_arch_vcpu_run(vcpu, &exit_reason);
@@ -220,6 +223,9 @@ static long gzvm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 	if (vcpu->gzvm->mm != current->mm)
 		return -EIO;
 
+	if (mutex_lock_killable(&vcpu->lock))
+		return -EINTR;
+
 	switch (ioctl) {
 	case GZVM_RUN:
 		ret = gzvm_vcpu_run(vcpu, argp);
@@ -236,6 +242,7 @@ static long gzvm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		break;
 	}
 
+	mutex_unlock(&vcpu->lock);
 	return ret;
 }
 
