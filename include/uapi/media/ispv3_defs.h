@@ -75,7 +75,7 @@ struct ispv3_mfnr_capture_info {
 	__u8 is_transfer_ds;
 };
 
-//=====================================================
+/* ===================================================== */
 
 enum isp_interface_type {
 	ISP_INTERFACE_INVALID = 0,
@@ -106,11 +106,11 @@ struct ispv3_config_setting {
 	enum isp_access_mode access_mode;
 	__u32 data_num;
 	union {
-		//single mode read&write
+		/* single mode read&write */
 		struct ispv3_reg_array *reg_array_buf;
-		//burst mode read&write
+		/* burst mode read&write */
 		struct ispv3_reg_burst_setting reg_burst_setting;
-		//burst mode memset
+		/* burst mode memset */
 		struct ispv3_reg_array reg_array;
 	};
 };
