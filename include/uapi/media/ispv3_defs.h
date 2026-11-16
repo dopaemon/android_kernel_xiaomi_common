@@ -56,9 +56,9 @@
  * @handle:              Control command payload
  */
 struct ispv3_control {
-	uint32_t        op_code;
-	uint32_t        size;
-	uint64_t        handle;
+	__u32        op_code;
+	__u32        size;
+	__u64        handle;
 };
 
 /* ISP IOCTL */
@@ -67,11 +67,11 @@ struct ispv3_control {
 
 
 struct ispv3_mfnr_capture_info {
-	int32_t full_keyframe_fd;
-	int32_t full_refframe_fd[MFNR_REF_FRAME_NUM];
-	int32_t ds_keyframe_fd;
-	int32_t ds_refframe_fd[MFNR_REF_FRAME_NUM];
-	int32_t result_fd;
+	__s32 full_keyframe_fd;
+	__s32 full_refframe_fd[MFNR_REF_FRAME_NUM];
+	__s32 ds_keyframe_fd;
+	__s32 ds_refframe_fd[MFNR_REF_FRAME_NUM];
+	__s32 result_fd;
 	__u8 is_transfer_ds;
 };
 
@@ -86,8 +86,8 @@ enum isp_interface_type {
 };
 
 struct ispv3_reg_array {
-	uint32_t reg_addr;
-	uint32_t reg_data;
+	__u32 reg_addr;
+	__u32 reg_data;
 };
 
 enum isp_access_mode {
@@ -97,14 +97,14 @@ enum isp_access_mode {
 };
 
 struct ispv3_reg_burst_setting {
-	uint32_t reg_addr;
-	uint64_t data_buf;
+	__u32 reg_addr;
+	__u64 data_buf;
 };
 
 struct ispv3_config_setting {
 	enum isp_interface_type bus_type;
 	enum isp_access_mode access_mode;
-	uint32_t data_num;
+	__u32 data_num;
 	union {
 		//single mode read&write
 		struct ispv3_reg_array *reg_array_buf;
@@ -117,9 +117,9 @@ struct ispv3_config_setting {
 struct ispv3_info {
 	int		ispv3_fd;
 	int		fd_mem;
-	uint32_t	*ispv3_miport_reg_pointer;
-	uint32_t	*ispv3_mitop_reg_pointer;
-	uint32_t	*ispv3_mitop_ocram_pointer;
-	uint32_t	*ispv3_ddr_pointer;
+	__u32	*ispv3_miport_reg_pointer;
+	__u32	*ispv3_mitop_reg_pointer;
+	__u32	*ispv3_mitop_ocram_pointer;
+	__u32	*ispv3_ddr_pointer;
 };
 #endif
