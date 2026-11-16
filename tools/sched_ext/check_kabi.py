@@ -171,3 +171,32 @@ init = block(core, "void __init sched_init(")
 assert "root_task_group.scx_weight" not in block(init, "if (ptr)")
 assert "root_task_group.scx_weight = CGROUP_WEIGHT_DFL;" in init
 print("PASS: memory-accounted task sidecars and default cgroup weights")
+
+online = block(ext, "int scx_tg_online(")
+early_root = block(online, "if (tg == &root_task_group)")
+assert "tg->scx_flags |= SCX_TG_ONLINE;" in early_root
+assert "return 0;" in early_root
+assert online.index("if (tg == &root_task_group)") < online.index("percpu_down_read(")
+assert "percpu_" not in early_root
+assert "percpu_down_read(&scx_cgroup_rwsem);" in online
+assert "percpu_up_read(&scx_cgroup_rwsem);" in online
+print("PASS: early root cgroup avoids per-CPU locking")
+
+enable = block(ext, "static int scx_ops_enable(")
+prepare = enable[enable.index("ret = scx_ops_prepare_task(p, task_group(p));"):]
+failure = block(prepare, "if (ret)")
+assert failure.index("p->comm, p->pid") < failure.index("put_task_struct(p)")
+cancel = block(ext, "void scx_cancel_fork(")
+assert (cancel.index("task_rq_lock(p, &rf)") <
+        cancel.index("scx_ops_disable_task(p)") <
+        cancel.index("task_rq_unlock(rq, p, &rf)") <
+        cancel.index("percpu_up_read(&scx_fork_rwsem)"))
+assert "div_s64((s64)(runnable_at - jiffies) * MSEC_PER_SEC, HZ)" in ext
+print("PASS: enable failure task lifetime, fork cancellation locking and diagnostic units")
+
+helper = block(ext, "static struct kthread_worker *scx_create_rt_helper(")
+assert "if (!IS_ERR(helper))" in helper
+creation = block(enable, "if (!scx_ops_helper)")
+assert "ret = PTR_ERR(helper);" in block(creation, "if (IS_ERR(helper))")
+assert creation.index("goto err_unlock;") < creation.index("WRITE_ONCE(scx_ops_helper, helper)")
+print("PASS: helper creation rejects error pointers before publication")

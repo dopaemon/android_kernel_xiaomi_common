@@ -2395,8 +2395,14 @@ void scx_post_fork(struct task_struct *p)
 
 void scx_cancel_fork(struct task_struct *p)
 {
-	if (scx_enabled())
+	if (scx_enabled()) {
+		struct rq_flags rf;
+		struct rq *rq;
+
+		rq = task_rq_lock(p, &rf);
 		scx_ops_disable_task(p);
+		task_rq_unlock(rq, p, &rf);
+	}
 	percpu_up_read(&scx_fork_rwsem);
 }
 
@@ -2488,6 +2494,12 @@ int scx_tg_online(struct task_group *tg)
 	int ret = 0;
 
 	WARN_ON_ONCE(tg->scx_flags & (SCX_TG_ONLINE | SCX_TG_INITED));
+
+	/* The root comes online before per-CPU areas are initialized. */
+	if (tg == &root_task_group) {
+		tg->scx_flags |= SCX_TG_ONLINE;
+		return 0;
+	}
 
 	percpu_down_read(&scx_cgroup_rwsem);
 
@@ -3184,7 +3196,7 @@ static struct kthread_worker *scx_create_rt_helper(const char *name)
 	struct kthread_worker *helper;
 
 	helper = kthread_create_worker(0, name);
-	if (helper)
+	if (!IS_ERR(helper))
 		sched_set_fifo(helper->task);
 	return helper;
 }
@@ -3198,12 +3210,14 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 	mutex_lock(&scx_ops_enable_mutex);
 
 	if (!scx_ops_helper) {
-		WRITE_ONCE(scx_ops_helper,
-			   scx_create_rt_helper("sched_ext_ops_helper"));
-		if (!scx_ops_helper) {
-			ret = -ENOMEM;
+		struct kthread_worker *helper;
+
+		helper = scx_create_rt_helper("sched_ext_ops_helper");
+		if (IS_ERR(helper)) {
+			ret = PTR_ERR(helper);
 			goto err_unlock;
 		}
+		WRITE_ONCE(scx_ops_helper, helper);
 	}
 
 	if (scx_ops_enable_state() != SCX_OPS_DISABLED) {
@@ -3321,12 +3335,12 @@ static int scx_ops_enable(struct sched_ext_ops *ops)
 
 		ret = scx_ops_prepare_task(p, task_group(p));
 		if (ret) {
+			pr_err("sched_ext: ops.prep_enable() failed (%d) for %s[%d] while loading\n",
+			       ret, p->comm, p->pid);
 			put_task_struct(p);
 			spin_lock_irq(&scx_tasks_lock);
 			scx_task_iter_exit(&sti);
 			spin_unlock_irq(&scx_tasks_lock);
-			pr_err("sched_ext: ops.prep_enable() failed (%d) for %s[%d] while loading\n",
-			       ret, p->comm, p->pid);
 			goto err_disable_unlock;
 		}
 
@@ -3890,7 +3904,7 @@ void print_scx_info(const char *log_lvl, struct task_struct *p)
 	if (!copy_from_kernel_nofault(&runnable_at, &p->scx->runnable_at,
 				      sizeof(runnable_at)))
 		scnprintf(runnable_at_buf, sizeof(runnable_at_buf), "%+lldms",
-			  (s64)(runnable_at - jiffies) * (HZ / MSEC_PER_SEC));
+			  div_s64((s64)(runnable_at - jiffies) * MSEC_PER_SEC, HZ));
 
 	/* Print everything onto one line to conserve console spce. */
 	printk("%sSched_ext: %s (%s%s), task: runnable_at=%s",
