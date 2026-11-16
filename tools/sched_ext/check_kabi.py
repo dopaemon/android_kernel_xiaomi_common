@@ -200,3 +200,9 @@ creation = block(enable, "if (!scx_ops_helper)")
 assert "ret = PTR_ERR(helper);" in block(creation, "if (IS_ERR(helper))")
 assert creation.index("goto err_unlock;") < creation.index("WRITE_ONCE(scx_ops_helper, helper)")
 print("PASS: helper creation rejects error pointers before publication")
+
+public_ext = source("include/linux/sched/ext.h")
+assert "#include <linux/rhashtable-types.h>" in public_ext
+assert "#include <linux/rhashtable.h>" not in public_ext
+assert "#ifndef __GENKSYMS__\n#include <linux/rhashtable.h>\n#endif" in ext
+print("PASS: SCX keeps bucket_table opaque to scheduler genksyms")

@@ -11,7 +11,7 @@
 
 #ifdef CONFIG_SCHED_CLASS_EXT
 
-#include <linux/rhashtable.h>
+#include <linux/rhashtable-types.h>
 #include <linux/llist.h>
 
 struct cgroup;

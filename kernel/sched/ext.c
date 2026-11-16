@@ -6,6 +6,11 @@
  * Copyright (c) 2022 Tejun Heo <tj@kernel.org>
  * Copyright (c) 2022 David Vernet <dvernet@meta.com>
  */
+/* Keep bucket_table opaque in the existing scheduler symbol CRCs. */
+#ifndef __GENKSYMS__
+#include <linux/rhashtable.h>
+#endif
+
 DEFINE_PER_CPU(struct scx_rq, scx_runqueues);
 
 #define SCX_OP_IDX(op)		(offsetof(struct sched_ext_ops, op) / sizeof(void (*)(void)))
