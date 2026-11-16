@@ -290,6 +290,8 @@ static unsigned int lrng_chacha20_drng_selftest(void)
 		0x9c, 0x95, 0xa1, 0xfd };
 
 	BUILD_BUG_ON(sizeof(seed) % sizeof(u32));
+	BUILD_BUG_ON(sizeof(chacha20) -
+		     offsetof(struct chacha20_block, key) != 48);
 
 	memset(&chacha20, 0, sizeof(chacha20));
 	lrng_cc20_init_rfc7539(&chacha20);
@@ -304,7 +306,8 @@ static unsigned int lrng_chacha20_drng_selftest(void)
 		goto err;
 
 	/* Clear state of DRNG */
-	memset(&chacha20.key.u[0], 0, 48);
+	memset((u8 *)&chacha20 + offsetof(struct chacha20_block, key), 0,
+	       sizeof(chacha20) - offsetof(struct chacha20_block, key));
 
 	/* Reseed with 2 key blocks */
 	ret = drng_cb->drng_seed(&chacha20, seed, sizeof(expected_oneblock));
@@ -318,7 +321,8 @@ static unsigned int lrng_chacha20_drng_selftest(void)
 		goto err;
 
 	/* Clear state of DRNG */
-	memset(&chacha20.key.u[0], 0, 48);
+	memset((u8 *)&chacha20 + offsetof(struct chacha20_block, key), 0,
+	       sizeof(chacha20) - offsetof(struct chacha20_block, key));
 
 	/* Reseed with 1 key block and one byte */
 	ret = drng_cb->drng_seed(&chacha20, seed,
