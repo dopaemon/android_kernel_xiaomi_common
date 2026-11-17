@@ -106,7 +106,7 @@ bool cass_cpu_allowed(struct task_struct *p, int cpu)
 static __always_inline
 bool cass_cpu_better(const struct cass_cpu_cand *a,
 		     const struct cass_cpu_cand *b, unsigned long p_util,
-		     int this_cpu, int prev_cpu, bool sync)
+		     unsigned long uc_min, int this_cpu, int prev_cpu, bool sync)
 {
 #define cass_cmp(a, b) ({ res = (a) - (b); })
 #define cass_eq(a, b) ({ res = (a) == (b); })
@@ -305,7 +305,7 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync)
 		 * cidx still needs to be changed to the other candidate slot.
 		 */
 		if (best == curr ||
-		    cass_cpu_better(curr, best, p_util, this_cpu, prev_cpu,
+		    cass_cpu_better(curr, best, p_util, uc_min, this_cpu, prev_cpu,
 				    sync)) {
 			best = curr;
 			cidx ^= 1;
