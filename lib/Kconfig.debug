@@ -1162,6 +1162,26 @@ config BOOTPARAM_HARDLOCKUP_PANIC
 
 	  Say N if unsure.
 
+config BOOT_WATCHDOG
+	bool "Panic if boot is not acknowledged by userspace"
+	help
+	  Debugging aid for boot hangs on devices without a serial console.
+	  If userspace does not write 0 to
+	  /sys/module/boot_watchdog/parameters/timeout within
+	  BOOT_WATCHDOG_TIMEOUT seconds, dump blocked tasks, CPU backtraces and
+	  workqueues, then panic so that persistent kmsg dumpers such as
+	  ramoops or mtdoops save the log of the hung boot.
+
+	  The timeout can be overridden with boot_watchdog.timeout=.
+
+	  Say N unless you are debugging a boot hang.
+
+config BOOT_WATCHDOG_TIMEOUT
+	int "Boot watchdog timeout in seconds"
+	depends on BOOT_WATCHDOG
+	range 0 3600
+	default 240
+
 config DETECT_HUNG_TASK
 	bool "Detect Hung Tasks"
 	depends on DEBUG_KERNEL
