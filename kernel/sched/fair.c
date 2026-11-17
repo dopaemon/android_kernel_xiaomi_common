@@ -187,9 +187,10 @@ static unsigned int sysctl_numa_balancing_promote_rate_limit = 65536;
 
 #ifdef CONFIG_SCHED_CASS
 /*
- * When set, CASS selects the runqueue even when a vendor scheduler module has
- * claimed the android_rvh_select_task_rq_{fair,rt} vendor hooks. When clear,
- * the vendor hooks get the first say and CASS is only used as a fallback.
+ * When set, CASS selects the runqueue for CFS tasks even when a vendor
+ * scheduler module has claimed the android_rvh_select_task_rq_fair vendor hook.
+ * When clear, the vendor hook gets the first say and CASS is only used as a fallback.
+ * RT tasks are always handled by the native/vendor RT scheduler.
  */
 static unsigned int __read_mostly sysctl_sched_cass_override_vendor = 1;
 #endif

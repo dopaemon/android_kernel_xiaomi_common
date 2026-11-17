@@ -67,9 +67,6 @@ void cass_cpu_util(struct cass_cpu_cand *c, int this_cpu, bool sync)
 
 	/*
 	 * Account for lost capacity due to time spent in RT/DL tasks and IRQs.
-	 * Capacity is considered lost to RT tasks even when @p is an RT task in
-	 * order to produce consistently balanced task placement results between
-	 * CFS and RT tasks when CASS selects a CPU for them.
 	 */
 	c->cap = c->cap_max - min(c->hard_util, c->cap_max - 1);
 
@@ -130,9 +127,14 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 		     fits_capacity(p_util, b->cap_max)))
 		goto done;
 
-	/* Prefer the CPU that isn't the single fastest one in the system */
-	if (cass_cmp(cass_prime_cpu(b), cass_prime_cpu(a)))
-		goto done;
+	/*
+	 * Prefer the CPU that isn't the single fastest one in the system (Prime CPU),
+	 * unless the task is boosted or has significant utilization demanding maximum performance.
+	 */
+	if (!uc_min && p_util < SCHED_CAPACITY_SCALE / 2) {
+		if (cass_cmp(cass_prime_cpu(b), cass_prime_cpu(a)))
+			goto done;
+	}
 
 	/* Prefer the CPU with lower relative utilization */
 	if (cass_cmp(b->util, a->util))
@@ -169,24 +171,22 @@ done:
 	return res > 0;
 }
 
-static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt)
+static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync)
 {
 	/* Initialize @best such that @best always has a valid CPU at the end */
-	struct cass_cpu_cand cands[2], *best = cands;
+	struct cass_cpu_cand cands[2] = {}, *best = cands;
 	int this_cpu = raw_smp_processor_id();
 	unsigned long p_util, uc_min;
 	bool has_idle = false;
 	int cidx = 0, cpu;
 
-	/*
-	 * Get the utilization and uclamp minimum threshold for this task. Note
-	 * that RT tasks don't have per-entity load tracking.
-	 */
-	p_util = rt ? 0 : task_util_est(p);
+	/* Get the utilization and uclamp minimum threshold for this CFS task */
+	p_util = task_util_est(p);
 	uc_min = uclamp_eff_value(p, UCLAMP_MIN);
 
 	/* Let the caller fall back if the vendor scheduler rejects all CPUs */
 	cands[0].cpu = -1;
+	cands[1].cpu = -1;
 
 	/*
 	 * Find the best CPU to wake @p on. Although idle_get_state() requires
@@ -231,12 +231,13 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 			 * A non-idle candidate may be better for energy
 			 * efficiency when @p is uclamp boosted above @curr's
 			 * minimum capacity, or when the only idle candidate
-			 * found so far is the prime CPU. Otherwise, prefer idle
-			 * candidates.
+			 * found so far is the prime CPU (unless the task is demanding).
+			 * Otherwise, prefer idle candidates.
 			 */
 			if (!has_idle &&
 			    uc_min <= arch_scale_min_freq_capacity(cpu) &&
-			    !cass_prime_cpu(curr)) {
+			    (!cass_prime_cpu(curr) || uc_min > 0 ||
+			     p_util >= SCHED_CAPACITY_SCALE / 2)) {
 				/* Discard any previous non-idle candidate */
 				best = curr;
 				has_idle = true;
@@ -315,7 +316,7 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 }
 
 static int cass_select_task_rq(struct task_struct *p, int prev_cpu,
-			       int wake_flags, bool rt)
+			       int wake_flags)
 {
 	bool sync;
 	int cpu;
@@ -341,11 +342,11 @@ static int cass_select_task_rq(struct task_struct *p, int prev_cpu,
 		return cpumask_first(p->cpus_ptr);
 
 	/* cass_best_cpu() needs the CFS task's utilization, so sync it up */
-	if (!rt && !(wake_flags & WF_FORK))
+	if (!(wake_flags & WF_FORK))
 		sync_entity_load_avg(&p->se);
 
 	sync = (wake_flags & WF_SYNC) && !(current->flags & PF_EXITING);
-	cpu = cass_best_cpu(p, prev_cpu, sync, rt);
+	cpu = cass_best_cpu(p, prev_cpu, sync);
 
 	/* select_task_rq() falls back to a valid CPU if this one isn't */
 	return cpu >= 0 ? cpu : prev_cpu;
@@ -353,13 +354,13 @@ static int cass_select_task_rq(struct task_struct *p, int prev_cpu,
 
 /*
  * Vendor modules (e.g. QTI WALT) take over runqueue selection through the
- * android_rvh_select_task_rq_{fair,rt} restricted vendor hooks. By default CASS
- * selects the runqueue anyway and leaves everything else (load tracking, CPU
- * frequency, core_ctl, load balancing) to the vendor scheduler, while still
- * honoring CPUs it halted via cass_cpu_allowed(). Clearing
- * kernel.sched_cass_override_vendor restores the stock behavior of invoking
- * the vendor hooks first and only falling back to CASS when none of them
- * picked a CPU.
+ * android_rvh_select_task_rq_fair restricted vendor hook. By default CASS
+ * selects the runqueue for CFS tasks anyway and leaves everything else (load
+ * tracking, CPU frequency, core_ctl, load balancing, RT task placement) to
+ * the vendor scheduler, while still honoring CPUs it halted via
+ * cass_cpu_allowed(). Clearing kernel.sched_cass_override_vendor restores
+ * the stock behavior of invoking the vendor hook first and only falling back
+ * to CASS when it did not pick a CPU.
  */
 static int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 				    int wake_flags)
@@ -378,20 +379,5 @@ static int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 			return target_cpu;
 	}
 
-	return cass_select_task_rq(p, prev_cpu, wake_flags, false);
-}
-
-int cass_select_task_rq_rt(struct task_struct *p, int prev_cpu, int wake_flags)
-{
-	int target_cpu = -1;
-
-	if (!READ_ONCE(sysctl_sched_cass_override_vendor)) {
-		trace_android_rvh_select_task_rq_rt(p, prev_cpu,
-						    wake_flags & 0xF,
-						    wake_flags, &target_cpu);
-		if (target_cpu >= 0)
-			return target_cpu;
-	}
-
-	return cass_select_task_rq(p, prev_cpu, wake_flags, true);
+	return cass_select_task_rq(p, prev_cpu, wake_flags);
 }
