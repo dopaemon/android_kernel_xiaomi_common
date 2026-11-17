@@ -185,6 +185,15 @@ static unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
 static unsigned int sysctl_numa_balancing_promote_rate_limit = 65536;
 #endif
 
+#ifdef CONFIG_SCHED_CASS
+/*
+ * When set, CASS selects the runqueue even when a vendor scheduler module has
+ * claimed the android_rvh_select_task_rq_{fair,rt} vendor hooks. When clear,
+ * the vendor hooks get the first say and CASS is only used as a fallback.
+ */
+static unsigned int __read_mostly sysctl_sched_cass_override_vendor = 1;
+#endif
+
 #ifdef CONFIG_SYSCTL
 static struct ctl_table sched_fair_sysctls[] = {
 	{
@@ -214,6 +223,17 @@ static struct ctl_table sched_fair_sysctls[] = {
 		.extra1		= SYSCTL_ZERO,
 	},
 #endif /* CONFIG_NUMA_BALANCING */
+#ifdef CONFIG_SCHED_CASS
+	{
+		.procname	= "sched_cass_override_vendor",
+		.data		= &sysctl_sched_cass_override_vendor,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+#endif
 	{}
 };
 

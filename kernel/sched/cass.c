@@ -92,6 +92,19 @@ bool cass_prime_cpu(const struct cass_cpu_cand *c)
 	       arch_scale_cpu_capacity(nr_cpu_ids - 2) != SCHED_CAPACITY_SCALE;
 }
 
+/*
+ * Returns true if @p may be placed on @cpu according to the vendor scheduler.
+ * QTI WALT uses this hook to keep tasks off of CPUs that core_ctl has halted.
+ */
+static __always_inline
+bool cass_cpu_allowed(struct task_struct *p, int cpu)
+{
+	bool allowed = true;
+
+	trace_android_rvh_is_cpu_allowed(p, cpu, &allowed);
+	return allowed;
+}
+
 /* Returns true if @a is a better CPU than @b */
 static __always_inline
 bool cass_cpu_better(const struct cass_cpu_cand *a,
@@ -172,6 +185,9 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 	p_util = rt ? 0 : task_util_est(p);
 	uc_min = uclamp_eff_value(p, UCLAMP_MIN);
 
+	/* Let the caller fall back if the vendor scheduler rejects all CPUs */
+	cands[0].cpu = -1;
+
 	/*
 	 * Find the best CPU to wake @p on. Although idle_get_state() requires
 	 * an RCU read lock, an RCU read lock isn't needed because we're not
@@ -188,6 +204,10 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 		struct cass_cpu_cand *curr = &cands[cidx];
 		struct cpuidle_state *idle_state;
 		struct rq *rq = cpu_rq(cpu);
+
+		/* Skip CPUs that the vendor scheduler doesn't allow, if any */
+		if (!cass_cpu_allowed(p, cpu))
+			continue;
 
 		/* Get the original, maximum _possible_ capacity of this CPU */
 		curr->cap_orig = arch_scale_cpu_capacity(cpu);
@@ -298,6 +318,7 @@ static int cass_select_task_rq(struct task_struct *p, int prev_cpu,
 			       int wake_flags, bool rt)
 {
 	bool sync;
+	int cpu;
 
 	/* Don't balance on exec since we don't know what @p will look like */
 	if (wake_flags & WF_EXEC)
@@ -324,15 +345,21 @@ static int cass_select_task_rq(struct task_struct *p, int prev_cpu,
 		sync_entity_load_avg(&p->se);
 
 	sync = (wake_flags & WF_SYNC) && !(current->flags & PF_EXITING);
-	return cass_best_cpu(p, prev_cpu, sync, rt);
+	cpu = cass_best_cpu(p, prev_cpu, sync, rt);
+
+	/* select_task_rq() falls back to a valid CPU if this one isn't */
+	return cpu >= 0 ? cpu : prev_cpu;
 }
 
 /*
  * Vendor modules (e.g. QTI WALT) take over runqueue selection through the
- * android_rvh_select_task_rq_{fair,rt} restricted vendor hooks. Keep invoking
- * them exactly like the stock select_task_rq_{fair,rt}() do, so that a loaded
- * vendor scheduler keeps working unchanged, and only fall back to CASS when no
- * vendor hook picked a CPU.
+ * android_rvh_select_task_rq_{fair,rt} restricted vendor hooks. By default CASS
+ * selects the runqueue anyway and leaves everything else (load tracking, CPU
+ * frequency, core_ctl, load balancing) to the vendor scheduler, while still
+ * honoring CPUs it halted via cass_cpu_allowed(). Clearing
+ * kernel.sched_cass_override_vendor restores the stock behavior of invoking
+ * the vendor hooks first and only falling back to CASS when none of them
+ * picked a CPU.
  */
 static int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 				    int wake_flags)
@@ -341,7 +368,8 @@ static int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 	int sd_flag = wake_flags & 0xF;
 	int target_cpu = -1;
 
-	if (trace_android_rvh_select_task_rq_fair_enabled()) {
+	if (!READ_ONCE(sysctl_sched_cass_override_vendor) &&
+	    trace_android_rvh_select_task_rq_fair_enabled()) {
 		if (!(sd_flag & SD_BALANCE_FORK))
 			sync_entity_load_avg(&p->se);
 		trace_android_rvh_select_task_rq_fair(p, prev_cpu, sd_flag,
@@ -357,10 +385,13 @@ int cass_select_task_rq_rt(struct task_struct *p, int prev_cpu, int wake_flags)
 {
 	int target_cpu = -1;
 
-	trace_android_rvh_select_task_rq_rt(p, prev_cpu, wake_flags & 0xF,
-					    wake_flags, &target_cpu);
-	if (target_cpu >= 0)
-		return target_cpu;
+	if (!READ_ONCE(sysctl_sched_cass_override_vendor)) {
+		trace_android_rvh_select_task_rq_rt(p, prev_cpu,
+						    wake_flags & 0xF,
+						    wake_flags, &target_cpu);
+		if (target_cpu >= 0)
+			return target_cpu;
+	}
 
 	return cass_select_task_rq(p, prev_cpu, wake_flags, true);
 }
