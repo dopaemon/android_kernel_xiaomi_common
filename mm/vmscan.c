@@ -6046,6 +6046,7 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 {
 	struct blk_plug plug;
 	unsigned long reclaimed = sc->nr_reclaimed;
+	unsigned long scanned = sc->nr_scanned;
 
 	VM_WARN_ON_ONCE(!root_reclaim(sc));
 
@@ -6081,6 +6082,16 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 	clear_mm_walk();
 
 	blk_finish_plug(&plug);
+
+	/*
+	 * Record the reclaim efficiency of the whole tree, like shrink_node()
+	 * does for the classic LRU. Without this, global vmpressure never sees
+	 * kswapd or direct reclaim progress when the multi-gen LRU is enabled.
+	 */
+	if (!sc->proactive)
+		vmpressure(sc->gfp_mask, sc->target_mem_cgroup, true,
+			   sc->nr_scanned - scanned,
+			   sc->nr_reclaimed - reclaimed, sc->order);
 done:
 	if (sc->nr_reclaimed > reclaimed)
 		pgdat->kswapd_failures = 0;
