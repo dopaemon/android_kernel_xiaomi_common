@@ -261,8 +261,7 @@ static void scan_and_kill(void)
 		do_send_sig_info(SIGKILL, SEND_SIG_PRIV, vtsk, PIDTYPE_TGID);
 
 		/*
-		 * Mark the thread group dead so that other kernel code knows,
-		 * and then elevate the thread group to SCHED_RR with minimum RT
+		 * Elevate the thread group to SCHED_RR with minimum RT
 		 * priority. The entire group needs to be elevated because
 		 * there's no telling which threads have references to the mm as
 		 * well as which thread will happen to put the final reference
@@ -271,8 +270,6 @@ static void scan_and_kill(void)
 		 * long time for exit_mmap() to complete.
 		 */
 		rcu_read_lock();
-		for_each_thread(vtsk, t)
-			set_tsk_thread_flag(t, TIF_MEMDIE);
 		for_each_thread(vtsk, t)
 			set_task_rt_prio(t, 1);
 		rcu_read_unlock();
