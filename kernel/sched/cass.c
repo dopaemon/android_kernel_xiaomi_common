@@ -47,7 +47,7 @@ void cass_cpu_util(struct cass_cpu_cand *c, int this_cpu, bool sync)
 	/* Get this CPU's utilization from CFS tasks */
 	c->util = READ_ONCE(cfs_rq->avg.util_avg);
 	if (sched_feat(UTIL_EST)) {
-		est = READ_ONCE(cfs_rq->avg.util_est.enqueued);
+		est = READ_ONCE(cfs_rq->avg.util_est);
 		if (est > c->util) {
 			/* Don't deduct @current's util from estimated util */
 			sync = false;
@@ -300,8 +300,16 @@ static int cass_select_task_rq(struct task_struct *p, int prev_cpu,
 	bool sync;
 
 	/* Don't balance on exec since we don't know what @p will look like */
-	if (wake_flags & SD_BALANCE_EXEC)
+	if (wake_flags & WF_EXEC)
 		return prev_cpu;
+
+	/* Honor explicit requests to wake @p on the current CPU */
+	if ((wake_flags & WF_TTWU) && (wake_flags & WF_CURRENT_CPU)) {
+		int this_cpu = smp_processor_id();
+
+		if (cpumask_test_cpu(this_cpu, p->cpus_ptr))
+			return this_cpu;
+	}
 
 	/*
 	 * If there aren't any valid CPUs which are active, then just return the
@@ -312,20 +320,47 @@ static int cass_select_task_rq(struct task_struct *p, int prev_cpu,
 		return cpumask_first(p->cpus_ptr);
 
 	/* cass_best_cpu() needs the CFS task's utilization, so sync it up */
-	if (!rt && !(wake_flags & SD_BALANCE_FORK))
+	if (!rt && !(wake_flags & WF_FORK))
 		sync_entity_load_avg(&p->se);
 
 	sync = (wake_flags & WF_SYNC) && !(current->flags & PF_EXITING);
 	return cass_best_cpu(p, prev_cpu, sync, rt);
 }
 
+/*
+ * Vendor modules (e.g. QTI WALT) take over runqueue selection through the
+ * android_rvh_select_task_rq_{fair,rt} restricted vendor hooks. Keep invoking
+ * them exactly like the stock select_task_rq_{fair,rt}() do, so that a loaded
+ * vendor scheduler keeps working unchanged, and only fall back to CASS when no
+ * vendor hook picked a CPU.
+ */
 static int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 				    int wake_flags)
 {
+	/* SD_flags and WF_flags share the first nibble */
+	int sd_flag = wake_flags & 0xF;
+	int target_cpu = -1;
+
+	if (trace_android_rvh_select_task_rq_fair_enabled()) {
+		if (!(sd_flag & SD_BALANCE_FORK))
+			sync_entity_load_avg(&p->se);
+		trace_android_rvh_select_task_rq_fair(p, prev_cpu, sd_flag,
+						      wake_flags, &target_cpu);
+		if (target_cpu >= 0)
+			return target_cpu;
+	}
+
 	return cass_select_task_rq(p, prev_cpu, wake_flags, false);
 }
 
 int cass_select_task_rq_rt(struct task_struct *p, int prev_cpu, int wake_flags)
 {
+	int target_cpu = -1;
+
+	trace_android_rvh_select_task_rq_rt(p, prev_cpu, wake_flags & 0xF,
+					    wake_flags, &target_cpu);
+	if (target_cpu >= 0)
+		return target_cpu;
+
 	return cass_select_task_rq(p, prev_cpu, wake_flags, true);
 }
