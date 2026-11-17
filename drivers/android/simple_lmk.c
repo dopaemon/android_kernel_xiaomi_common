@@ -21,6 +21,9 @@
 /* Kill up to this many victims per reclaim */
 #define MAX_VICTIMS 1024
 
+/* Consider up to this many processes as potential victims per reclaim */
+#define MAX_CANDIDATES 8192
+
 /* Timeout in jiffies for each reclaim */
 #define RECLAIM_EXPIRES msecs_to_jiffies(CONFIG_ANDROID_SIMPLE_LMK_TIMEOUT_MSEC)
 
@@ -31,7 +34,16 @@ struct victim_info {
 };
 
 static struct victim_info victims[MAX_VICTIMS] __cacheline_aligned_in_smp;
-static struct task_struct *task_bucket[SHRT_MAX + 1] __cacheline_aligned;
+/*
+ * Potential victims are chained together into per-adj buckets through these
+ * arrays rather than through a field in struct task_struct, because changing
+ * the layout of task_struct would break the GKI KMI. Bucket heads and links
+ * store a candidate's index plus one, so that zero means the end of a chain.
+ */
+static struct task_struct *candidates[MAX_CANDIDATES] __cacheline_aligned;
+static u16 candidate_next[MAX_CANDIDATES];
+static u16 task_bucket[SHRT_MAX + 1] __cacheline_aligned;
+static_assert(MAX_CANDIDATES < U16_MAX);
 static DECLARE_WAIT_QUEUE_HEAD(oom_waitq);
 static DECLARE_WAIT_QUEUE_HEAD(reaper_waitq);
 static DECLARE_COMPLETION(reclaim_done);
@@ -74,6 +86,8 @@ static unsigned long find_victims(int *vindex)
 	short i, min_adj = SHRT_MAX, max_adj = 0;
 	unsigned long pages_found = 0;
 	struct task_struct *tsk;
+	int nr_cand = 0;
+	u16 idx;
 
 	rcu_read_lock();
 	for_each_process(tsk) {
@@ -94,9 +108,16 @@ static unsigned long find_victims(int *vindex)
 		    (thread_group_empty(tsk) && tsk->flags & PF_EXITING))
 			continue;
 
+		/* Make sure there's space left in the candidate array */
+		if (unlikely(nr_cand == MAX_CANDIDATES)) {
+			pr_warn_once("Too many processes, ignoring some\n");
+			continue;
+		}
+
 		/* Store the task in a linked-list bucket based on its adj */
-		tsk->simple_lmk_next = task_bucket[adj];
-		task_bucket[adj] = tsk;
+		candidates[nr_cand] = tsk;
+		candidate_next[nr_cand] = task_bucket[adj];
+		task_bucket[adj] = ++nr_cand;
 
 		/* Track the min and max adjs to speed up the loop below */
 		if (adj > max_adj)
@@ -109,18 +130,19 @@ static unsigned long find_victims(int *vindex)
 	for (i = max_adj; i >= min_adj; i--) {
 		int old_vindex;
 
-		tsk = task_bucket[i];
-		if (!tsk)
+		idx = task_bucket[i];
+		if (!idx)
 			continue;
 
 		/* Clear out this bucket for the next time reclaim is done */
-		task_bucket[i] = NULL;
+		task_bucket[i] = 0;
 
 		/* Iterate through every task with this adj */
 		old_vindex = *vindex;
 		do {
 			struct task_struct *vtsk;
 
+			tsk = candidates[idx - 1];
 			vtsk = find_lock_task_mm(tsk);
 			if (!vtsk)
 				continue;
@@ -136,7 +158,7 @@ static unsigned long find_victims(int *vindex)
 			/* Make sure there's space left in the victim array */
 			if (++*vindex == MAX_VICTIMS)
 				break;
-		} while ((tsk = tsk->simple_lmk_next));
+		} while ((idx = candidate_next[idx - 1]));
 
 		/* Go to the next bucket if nothing was found */
 		if (*vindex == old_vindex)
