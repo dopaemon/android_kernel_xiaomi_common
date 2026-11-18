@@ -1363,6 +1363,25 @@ config SCHED_BORE
 
 	  If unsure, say Y here.
 
+config SCHED_CAMBYSES
+	bool "Cambyses CFS load balancer changes"
+	default y
+	help
+	  Two changes to the CFS load balancer's detach_tasks():
+
+	  - Advance the scan window by rotating the examined block of
+	    cfs_tasks to the head once per scan, instead of moving each
+	    rejected task there one at a time under the rq lock.
+
+	  - When pulling into an idle CPU, compare a candidate's cost with
+	    the imbalance directly instead of relaxing it by
+	    nr_balance_failed. If a scan admits nothing, move the cheapest
+	    candidate that still shrinks the imbalance (cost < 2 *
+	    imbalance), so the balance makes progress without bouncing the
+	    task back.
+
+	  If unsure, say Y here.
+
 config SCHED_AUTOGROUP
 	bool "Automatic process group scheduling"
 	select CGROUPS
