@@ -40,14 +40,6 @@ static inline void hyp_write_lock(hyp_rwlock_t *lock)
 	u32 tmp;
 
 	asm volatile(ARM64_LSE_ATOMIC_INSN(
-	/* LL/SC */
-	"	sevl\n"
-	"1:	wfe\n"
-	"2:	ldaxr	%w0, %1\n"
-	"	cbnz	%w0, 1b\n"
-	"	stxr	%w0, %w2, %1\n"
-	"	cbnz	%w0, 2b\n"
-	__nops(1),
 	/* LSE atomics */
 	"1:	mov	%w0, wzr\n"
 	"2:	casa	%w0, %w2, %1\n"
@@ -65,7 +57,6 @@ static inline void hyp_write_lock(hyp_rwlock_t *lock)
 static inline void hyp_write_unlock(hyp_rwlock_t *lock)
 {
 	asm volatile(ARM64_LSE_ATOMIC_INSN(
-	"	stlr	wzr, %0",
 	"	swpl	wzr, wzr, %0")
 	: "=Q" (lock->__val) :: "memory");
 }
@@ -77,14 +68,6 @@ static inline void hyp_read_lock(hyp_rwlock_t *lock)
 	asm volatile(
 	"	sevl\n"
 	ARM64_LSE_ATOMIC_INSN(
-	/* LL/SC */
-	"1:	wfe\n"
-	"2:	ldaxr	%w0, %2\n"
-	"	add	%w0, %w0, #1\n"
-	"	tbnz	%w0, %3, 1b\n"
-	"	stxr	%w1, %w0, %2\n"
-	"	cbnz	%w1, 2b\n"
-	__nops(1),
 	/* LSE atomics */
 	"1:	wfe\n"
 	"2:	ldxr	%w0, %2\n"
@@ -103,15 +86,9 @@ static inline void hyp_read_unlock(hyp_rwlock_t *lock)
 	u32 tmp, tmp2;
 
 	asm volatile(ARM64_LSE_ATOMIC_INSN(
-	/* LL/SC */
-	"1:	ldxr	%w0, %2\n"
-	"	sub	%w0, %w0, #1\n"
-	"	stlxr	%w1, %w0, %2\n"
-	"	cbnz	%w1, 1b",
 	/* LSE atomics */
 	"	movn	%w0, #0\n"
-	"	staddl	%w0, %2\n"
-	__nops(2))
+	"	staddl	%w0, %2\n")
 	: "=&r" (tmp), "=&r" (tmp2), "+Q" (lock->__val)
 	:
 	: "memory");
