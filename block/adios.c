@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/rbtree.h>
 #include <linux/sbitmap.h>
+#include <linux/mempool.h>
 #include <linux/slab.h>
 #include <linux/timekeeping.h>
 #include <linux/percpu.h>
@@ -25,7 +26,7 @@
 #include "blk-mq.h"
 #include "blk-mq-sched.h"
 
-#define ADIOS_VERSION "3.1.9"
+#define ADIOS_VERSION "3.3.0"
 
 /* Request Types:
  *
@@ -37,20 +38,7 @@
  * - Implementation: Placed in a dedicated, high-priority FIFO queue
  *   (`prio_queue[0]`) for immediate dispatch.
  *
- * Tier 1 (High Priority): I/O Barrier Guarantees
- * ---------------------------------------------------------------
- * - Target: Requests with the REQ_OP_FLUSH flag.
- * - Purpose: To enforce a strict I/O barrier. When a flush request is
- *   received, the scheduler stops processing new requests from its main
- *   queues until all preceding requests have been completed. This guarantees
- *   the order of operations required by filesystems for data integrity.
- * - Implementation: A state flag (ADIOS_STATE_BARRIER) halts
- *   insertion into the main deadline tree. The barrier request and all
- *   subsequent requests are held in a temporary `barrier_queue`. Once the
- *   main queues are drained, the barrier request and the subsequent requests
- *   are released from the pending queue back into the scheduler.
- *
- * Tier 2 (Medium Priority): Application Responsiveness
+ * Tier 1 (Medium Priority): Application Responsiveness
  * ----------------------------------------------------
  * - Target: Normal synchronous requests (e.g., from standard file reads).
  * - Purpose: To ensure correct application behavior for operations that
@@ -61,7 +49,7 @@
  *   within the deadline-sorted red-black tree, preventing out-of-order
  *   execution of dependent synchronous operations.
  *
- * Tier 3 (Normal Priority): Background Throughput
+ * Tier 2 (Normal Priority): Background Throughput
  * -----------------------------------------------
  * - Target: Asynchronous requests.
  * - Purpose: To maximize disk throughput for background tasks where latency
@@ -71,12 +59,30 @@
  *   on the predicted I/O latency, allowing for aggressive reordering to
  *   optimize I/O efficiency.
  *
+ * I/O barrier guarantees (REQ_PREFLUSH / REQ_FUA) are provided entirely by
+ * the block layer's flush state machine (block/blk-flush.c), which is the
+ * mechanism that replaced whole-queue barriers upstream in 2.6.37. No
+ * queue-wide barrier is implemented or needed here:
+ * - blk_insert_flush() always strips REQ_PREFLUSH (and REQ_FUA unless the
+ *   device supports it in hardware) before any request ever reaches this
+ *   elevator's ->insert_requests(), and always sets REQ_SYNC on it, so such
+ *   a request lands in Tier 1 (immediate deadline) like any other
+ *   synchronous request -- never delayed behind Tier 2 reordering.
+ * - The data portion of a request that needed an actual PREFLUSH is
+ *   resubmitted via BLK_MQ_INSERT_AT_HEAD once the flush completes, which
+ *   lands in Tier 0 here, ahead of everything else.
+ * - REQ_PREFLUSH/REQ_FUA and RQF_FLUSH_SEQ requests are already excluded
+ *   from bio/request merging by the generic block layer (rq_mergeable(),
+ *   blk_rq_merge_ok()) before this elevator's merge callbacks ever run.
+ * - The synthesized pure REQ_OP_FLUSH command itself always bypasses this
+ *   elevator entirely (blk_mq_insert_request() routes it straight to
+ *   hctx->dispatch), so it never needs to be recognized or handled here.
+ *
  * Dispatch Logic:
  * The scheduler always dispatches requests in strict priority order:
  * 1. prio_queue[0] (Tier 0)
- * 2. The deadline-sorted batch queue (which naturally prioritizes Tier 2
- *    over Tier 3 due to their calculated deadlines).
- * 3. Barrier-pending requests are handled only after the main queues are empty.
+ * 2. The deadline-sorted batch queue (which naturally prioritizes Tier 1
+ *    over Tier 2 due to their calculated deadlines).
  */
 
 // Global variable to control the latency
@@ -85,7 +91,7 @@ static u64 default_global_latency_window_rotational = 22000000ULL;
 // Ratio below which batch queues should be refilled
 static u8  default_bq_refill_below_ratio = 20;
 // Maximum latency sample to input
-static u64 default_lat_model_latency_limit = 500000000ULL;
+static u64 default_lat_model_latency_limit = 500 * NSEC_PER_MSEC;
 // Batch ordering strategy
 static u64 default_batch_order = 0;
 
@@ -154,12 +160,10 @@ enum adios_state_flags {
 	ADIOS_STATE_DL_1      = 1U << 3,
 	ADIOS_STATE_BQ_PAGE_0 = 1U << 4,
 	ADIOS_STATE_BQ_PAGE_1 = 1U << 5,
-	ADIOS_STATE_BARRIER   = 1U << 6,
 };
 #define ADIOS_STATE_PQ 0
 #define ADIOS_STATE_DL 2
 #define ADIOS_STATE_BQ 4
-#define ADIOS_STATE_BP 6
 
 // Temporal granularity of the deadline tree node (dl_group)
 #define ADIOS_QUANTUM_SHIFT 20
@@ -205,10 +209,17 @@ struct latency_model {
 
 	// Per-CPU buckets to avoid lock contention on the completion path
 	struct lm_buckets __percpu *pcpu_buckets;
+	// Per-CPU snapshots for delta-based aggregation (accessed under update_lock)
+	struct lm_buckets __percpu *pcpu_snapshot;
 
 	u32 lm_shrink_at_kreqs;
 	u32 lm_shrink_at_gbytes;
 	u8  lm_shrink_resist;
+};
+
+struct adios_pcpu_completion {
+	u64      last_completed_time;
+	sector_t last_completed_pos;
 };
 
 union adios_in_flight_rqs {
@@ -248,15 +259,12 @@ struct adios_data {
 	u8  batch_order;
 	u8  elv_direction;
 	sector_t head_pos;
-	sector_t last_completed_pos;
 
 	bool bq_page;
 	struct list_head batch_queue[ADIOS_BQ_PAGES][ADIOS_OPTYPES];
 	u32 batch_count[ADIOS_BQ_PAGES][ADIOS_OPTYPES];
 	u8  bq_batch_order[ADIOS_BQ_PAGES];
 	spinlock_t bq_lock;
-	spinlock_t barrier_lock;
-	struct list_head barrier_queue;
 
 	struct lm_buckets *aggr_buckets;
 
@@ -265,9 +273,11 @@ struct adios_data {
 
 	union adios_in_flight_rqs in_flight_rqs;
 	atomic64_t total_pred_lat;
-	u64 last_completed_time;
 
-	struct kmem_cache *rq_data_pool;
+	struct adios_pcpu_completion __percpu *pcpu_completion;
+
+	struct kmem_cache *rq_data_cache;
+	mempool_t *rq_data_pool;
 	struct kmem_cache *dl_group_pool;
 
 	struct request_queue *queue;
@@ -464,8 +474,10 @@ static void reset_buckets(struct lm_buckets *buckets)
 
 static void lm_reset_pcpu_buckets(struct latency_model *model) {
 	int cpu;
-	for_each_possible_cpu(cpu)
+	for_each_possible_cpu(cpu) {
 		reset_buckets(per_cpu_ptr(model->pcpu_buckets, cpu));
+		reset_buckets(per_cpu_ptr(model->pcpu_snapshot, cpu));
+	}
 }
 
 // Update the latency model parameters and statistics
@@ -478,7 +490,7 @@ static void latency_model_update(
 	struct lm_buckets *aggr = ad->aggr_buckets;
 	struct latency_bucket_small *asb;
 	struct latency_bucket_large *alb;
-	struct lm_buckets *pcpu_b;
+	struct lm_buckets *pcpu_b, *snap;
 	unsigned long flags;
 	int cpu;
 	struct latency_model_params *old_params, *new_params;
@@ -493,30 +505,41 @@ static void latency_model_update(
 		return;
 	}
 
-	// Aggregate data from all CPUs and reset per-cpu buckets.
+	// Aggregate deltas from all CPUs using snapshot-delta method.
+	// Per-CPU counters increase monotonically; we compute delta = current - snapshot.
 	for_each_possible_cpu(cpu) {
 		pcpu_b = per_cpu_ptr(model->pcpu_buckets, cpu);
+		snap   = per_cpu_ptr(model->pcpu_snapshot, cpu);
 
 		for (u8 i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
-			if (pcpu_b->small_bucket[i].sum_of_weights) {
+			u64 sw  = pcpu_b->small_bucket[i].sum_of_weights;
+			u64 sl  = pcpu_b->small_bucket[i].weighted_sum_latency;
+			u64 dsw = sw - snap->small_bucket[i].sum_of_weights;
+			u64 dsl = sl - snap->small_bucket[i].weighted_sum_latency;
+			snap->small_bucket[i].sum_of_weights = sw;
+			snap->small_bucket[i].weighted_sum_latency = sl;
+			if (dsw) {
 				asb = &aggr->small_bucket[i];
-				asb->sum_of_weights +=
-					pcpu_b->small_bucket[i].sum_of_weights;
-				asb->weighted_sum_latency +=
-					pcpu_b->small_bucket[i].weighted_sum_latency;
+				asb->sum_of_weights += dsw;
+				asb->weighted_sum_latency += dsl;
 			}
-			if (pcpu_b->large_bucket[i].sum_of_weights) {
+
+			u64 lw  = pcpu_b->large_bucket[i].sum_of_weights;
+			u64 ll  = pcpu_b->large_bucket[i].weighted_sum_latency;
+			u64 lb  = pcpu_b->large_bucket[i].weighted_sum_block_size;
+			u64 dlw = lw - snap->large_bucket[i].sum_of_weights;
+			u64 dll = ll - snap->large_bucket[i].weighted_sum_latency;
+			u64 dlb = lb - snap->large_bucket[i].weighted_sum_block_size;
+			snap->large_bucket[i].sum_of_weights = lw;
+			snap->large_bucket[i].weighted_sum_latency = ll;
+			snap->large_bucket[i].weighted_sum_block_size = lb;
+			if (dlw) {
 				alb = &aggr->large_bucket[i];
-				alb->sum_of_weights +=
-					pcpu_b->large_bucket[i].sum_of_weights;
-				alb->weighted_sum_latency +=
-					pcpu_b->large_bucket[i].weighted_sum_latency;
-				alb->weighted_sum_block_size +=
-					pcpu_b->large_bucket[i].weighted_sum_block_size;
+				alb->sum_of_weights += dlw;
+				alb->weighted_sum_latency += dll;
+				alb->weighted_sum_block_size += dlb;
 			}
 		}
-		// Reset per-cpu buckets after aggregating
-		reset_buckets(pcpu_b);
 	}
 
 	// Count the number of entries in aggregated buckets
@@ -566,7 +589,7 @@ static void latency_model_update(
 
 // Determine the bucket index for a given measured and predicted latency
 static u8 lm_input_bucket_index(u64 measured, u64 predicted) {
-	u8 bucket_index;
+	u32 bucket_index;
 
 	if (measured < predicted * 2)
 		bucket_index = div_u64((measured * 20), predicted);
@@ -575,7 +598,10 @@ static u8 lm_input_bucket_index(u64 measured, u64 predicted) {
 	else
 		bucket_index = div_u64((measured * 3), predicted) + 40;
 
-	return bucket_index;
+	if (bucket_index >= LM_LAT_BUCKET_COUNT)
+		bucket_index = LM_LAT_BUCKET_COUNT - 1;
+
+	return (u8)bucket_index;
 }
 
 // Input latency data into the latency model
@@ -600,9 +626,6 @@ static void latency_model_input(struct adios_data *ad,
 		// Handle small requests
 		bucket_index = lm_input_bucket_index(latency, current_base ?: 1);
 
-		if (bucket_index >= LM_LAT_BUCKET_COUNT)
-			bucket_index = LM_LAT_BUCKET_COUNT - 1;
-
 		buckets->small_bucket[bucket_index].sum_of_weights += weight;
 		buckets->small_bucket[bucket_index].weighted_sum_latency +=
 			latency * weight;
@@ -621,9 +644,6 @@ static void latency_model_input(struct adios_data *ad,
 		}
 
 		bucket_index = lm_input_bucket_index(latency, pred_lat);
-
-		if (bucket_index >= LM_LAT_BUCKET_COUNT)
-			bucket_index = LM_LAT_BUCKET_COUNT - 1;
 
 		buckets->large_bucket[bucket_index].sum_of_weights += weight;
 		buckets->large_bucket[bucket_index].weighted_sum_latency +=
@@ -789,14 +809,6 @@ static void remove_request(struct adios_data *ad, struct request *rq) {
 		q->last_merge = NULL;
 }
 
-// Convert a queue depth to the corresponding word depth for shallow allocation
-static int to_word_depth(struct blk_mq_hw_ctx *hctx, unsigned int qdepth) {
-	struct sbitmap_queue *bt = &hctx->sched_tags->bitmap_tags;
-	const unsigned int nrr = hctx->queue->nr_requests;
-
-	return ((qdepth << bt->sb.shift) + nrr - 1) / nrr;
-}
-
 // We limit the depth of request allocation for asynchronous and write requests
 static void adios_limit_depth(blk_opf_t opf, struct blk_mq_alloc_data *data) {
 	struct adios_data *ad = data->q->elevator->elevator_data;
@@ -805,7 +817,17 @@ static void adios_limit_depth(blk_opf_t opf, struct blk_mq_alloc_data *data) {
 	if (op_is_sync(opf) && !op_is_write(opf))
 		return;
 
-	data->shallow_depth = to_word_depth(data->hctx, ad->async_depth);
+	/*
+	 * sbitmap's __map_depth_with_shallow() has taken shallow_depth in
+	 * whole-queue units since 6.12 (the same release mq-deadline's
+	 * dd_to_word_depth() was dropped) and does the per-word division
+	 * itself. Passing an already per-word value here (the old
+	 * to_word_depth() helper) got it squared away: word_depth^2 /
+	 * sb->depth, silently capping async/write allocation at <= 64 tags
+	 * regardless of async_depth. Pass the raw queue-wide depth, matching
+	 * mq-deadline/kyber.
+	 */
+	data->shallow_depth = ad->async_depth;
 }
 
 // The number of requests in the queue was notified from the block layer
@@ -816,7 +838,7 @@ static void adios_depth_updated(struct blk_mq_hw_ctx *hctx) {
 
 	ad->async_depth = q->nr_requests;
 
-	sbitmap_queue_min_shallow_depth(&tags->bitmap_tags, 1);
+	sbitmap_queue_min_shallow_depth(&tags->bitmap_tags, ad->async_depth);
 }
 
 // Handle request merging after a merge operation
@@ -848,9 +870,6 @@ static bool adios_bio_merge(struct request_queue *q, struct bio *bio,
 	struct adios_data *ad = q->elevator->elevator_data;
 	struct request *free = NULL;
 	bool ret;
-
-	if (eval_adios_state(ad, ADIOS_STATE_BP))
-		return false;
 
 	if (!spin_trylock_irqsave(&ad->lock, flags))
 		return false;
@@ -907,33 +926,17 @@ static void insert_request_post_stability(struct blk_mq_hw_ctx *hctx,
 	struct adios_data *ad = q->elevator->elevator_data;
 	struct adios_rq_data *rd = get_rq_data(rq);
 	u8 optype = adios_optype(rq);
-	bool rq_is_flush;
 
 	rd->managed = true;
 	rd->block_size = blk_rq_bytes(rq);
 	rd->pred_lat =
 		latency_model_predict(&ad->latency_model[optype], rd->block_size);
+	if (unlikely(rd->pred_lat > ad->lat_model_latency_limit))
+		rd->pred_lat = ad->lat_model_latency_limit;
 
 	/* Tier-0: BLK_MQ_INSERT_AT_HEAD Requests */
 	if (insert_flags & BLK_MQ_INSERT_AT_HEAD) {
 		insert_to_prio_queue(ad, rq, 0);
-		return;
-	}
-
-	/*
-	 * Strict Barrier Handling for REQ_OP_FLUSH:
-	 * If a flush request arrives, or if the scheduler is already in a
-	 * barrier-pending state, all subsequent requests are diverted to a
-	 * separate barrier_queue. This ensures that no new requests are processed
-	 * until all work preceding the barrier is complete.
-	 */
-	rq_is_flush = rq->cmd_flags & REQ_OP_FLUSH;
-	if (eval_adios_state(ad, ADIOS_STATE_BP) || rq_is_flush) {
-		scoped_guard(spinlock_irqsave, &ad->barrier_lock) {
-			if (rq_is_flush)
-				set_adios_state(ad, ADIOS_STATE_BP, 0, true);
-			list_add_tail(&rq->queuelist, &ad->barrier_queue);
-		}
 		return;
 	}
 
@@ -954,6 +957,8 @@ static void insert_request_pre_stability(struct blk_mq_hw_ctx *hctx,
 	rd->block_size = blk_rq_bytes(rq);
 	rd->pred_lat =
 		latency_model_predict(&ad->latency_model[optype], rd->block_size);
+	if (unlikely(rd->pred_lat > ad->lat_model_latency_limit))
+		rd->pred_lat = ad->lat_model_latency_limit;
 
 	insert_to_prio_queue(ad, rq, pq_idx);
 
@@ -964,7 +969,7 @@ static void insert_request_pre_stability(struct blk_mq_hw_ctx *hctx,
 	rcu_read_unlock();
 
 	if (stable)
-        	ad->models_stable = true;
+		ad->models_stable = true;
 }
 
 // Insert multiple requests into the scheduler
@@ -987,9 +992,9 @@ static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 		rq = list_first_entry(list, struct request, queuelist);
 		list_del_init(&rq->queuelist);
 		if (likely(ad->models_stable))
-        		insert_request_post_stability(hctx, rq, insert_flags, &free);
-        else
-                insert_request_pre_stability(hctx, rq, insert_flags, &free);
+			insert_request_post_stability(hctx, rq, insert_flags, &free);
+		else
+			insert_request_pre_stability(hctx, rq, insert_flags, &free);
 	}} while (!stop);
 
 	blk_mq_free_requests(&free);
@@ -998,16 +1003,10 @@ static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 // Prepare a request before it is inserted into the scheduler
 static void adios_prepare_request(struct request *rq) {
 	struct adios_data *ad = rq->q->elevator->elevator_data;
-	struct adios_rq_data *rd = get_rq_data(rq);
+	struct adios_rq_data *rd;
 
-	rq->elv.priv[0] = NULL;
-
-	/* Allocate adios_rq_data from the memory pool */
-	rd = kmem_cache_zalloc(ad->rq_data_pool, GFP_ATOMIC);
-	if (WARN(!rd, "adios_prepare_request: "
-			"Failed to allocate memory from rq_data_pool. rd is NULL\n"))
-		return;
-
+	rd = mempool_alloc(ad->rq_data_pool, GFP_ATOMIC);
+	memset(rd, 0, sizeof(*rd));
 	rd->rq = rq;
 	rq->elv.priv[0] = rd;
 }
@@ -1289,63 +1288,12 @@ static struct request *dispatch_from_pq(struct adios_data *ad) {
 	return rq;
 }
 
-static bool release_barrier_requests(struct adios_data *ad) {
-	u32 moved_count = 0;
-	LIST_HEAD(local_list);
-
-	scoped_guard(spinlock_irqsave, &ad->barrier_lock) {
-		if (!list_empty(&ad->barrier_queue)) {
-			struct request *trq, *next;
-			bool first_barrier_moved = false;
-
-			list_for_each_entry_safe(trq, next, &ad->barrier_queue, queuelist) {
-				if (!first_barrier_moved) {
-					list_del_init(&trq->queuelist);
-					insert_to_prio_queue(ad, trq, 1);
-					moved_count++;
-					first_barrier_moved = true;
-					continue;
-				}
-
-				if (trq->cmd_flags & REQ_OP_FLUSH)
-					break;
-
-				list_move_tail(&trq->queuelist, &local_list);
-				moved_count++;
-			}
-
-			if (list_empty(&ad->barrier_queue))
-				set_adios_state(ad, ADIOS_STATE_BP, 0, false);
-		}
-	}
-
-	if (!moved_count)
-		return false;
-
-	if (!list_empty(&local_list)) {
-		struct request *trq, *next;
-		LIST_HEAD(free_list);
-
-		/* ad->lock is already held */
-		list_for_each_entry_safe(trq, next, &local_list, queuelist) {
-			list_del_init(&trq->queuelist);
-			if (merge_or_insert_to_dl_tree(ad, trq, ad->queue, &free_list))
-				continue;
-		}
-
-		if (!list_empty(&free_list))
-			blk_mq_free_requests(&free_list);
-	}
-
-	return true;
-}
 
 // Dispatch a request to the hardware queue
 static struct request *adios_dispatch_request(struct blk_mq_hw_ctx *hctx) {
 	struct adios_data *ad = hctx->queue->elevator->elevator_data;
 	struct request *rq;
 
-retry:
 	rq = dispatch_from_pq(ad);
 	if (rq)
 		goto found;
@@ -1353,19 +1301,6 @@ retry:
 	rq = dispatch_from_bq(ad);
 	if (rq)
 		goto found;
-
-	/*
-	 * If all active queues are empty, check if we need to process a barrier.
-	 * This is the trigger to release requests that were held in barrier_queue
-	 * due to a REQ_OP_FLUSH barrier.
-	 */
-	if (eval_adios_state(ad, ADIOS_STATE_BP)) {
-			bool barrier_released = false;
-			scoped_guard(spinlock_irqsave, &ad->lock)
-				barrier_released = release_barrier_requests(ad);
-			if (barrier_released)
-				goto retry;
-		}
 
 	return NULL;
 found:
@@ -1400,36 +1335,49 @@ static void adios_completed_request(struct request *rq, u64 now) {
 	}
 	u8 optype = adios_optype(rq);
 
+	unsigned long flags;
+	struct adios_pcpu_completion *pc;
+
+	local_irq_save(flags);
+	pc = this_cpu_ptr(ad->pcpu_completion);
+
 	if (optype == ADIOS_OTHER) {
 		// Non-positional commands make the head position unpredictable.
 		// Invalidate our knowledge of the last completed position.
 		if (ad->is_rotational)
-			ad->last_completed_pos = 0;
+			pc->last_completed_pos = 0;
+		local_irq_restore(flags);
 		return;
 	}
 
-	u64 lct = ad->last_completed_time ?: rq->io_start_time_ns;
-	ad->last_completed_time = (ifr.count) ? now : 0;
+	u64 lct = pc->last_completed_time ?: rq->io_start_time_ns;
+	pc->last_completed_time = (ifr.count) ? now : 0;
 
-	if (!rq->io_start_time_ns || !rd->block_size || unlikely(now < lct))
+	if (!rq->io_start_time_ns || !rd->block_size || unlikely(now < lct)) {
+		local_irq_restore(flags);
 		return;
+	}
 
 	u64 latency = now - lct;
-	if (latency > ad->lat_model_latency_limit)
-		return;
 
 	u32 weight = 1;
 	if (ad->is_rotational) {
 		sector_t current_pos = blk_rq_pos(rq);
 		// Only calculate seek distance if we have a valid last position.
-		if (ad->last_completed_pos > 0) {
+		if (pc->last_completed_pos > 0) {
 			u64 seek_distance = abs(
-				(s64)current_pos - (s64)ad->last_completed_pos);
-			weight = 65 - __builtin_clzll(seek_distance);
+				(s64)current_pos - (s64)pc->last_completed_pos);
+			if (seek_distance)
+				weight = 65 - __builtin_clzll(seek_distance);
 		}
 		// Update (or re-synchronize) our knowledge of the head position.
-		ad->last_completed_pos = current_pos + blk_rq_sectors(rq);
+		pc->last_completed_pos = current_pos + blk_rq_sectors(rq);
 	}
+
+	local_irq_restore(flags);
+
+	if (latency > ad->lat_model_latency_limit)
+		return;
 
 	latency_model_input(ad, &ad->latency_model[optype],
 		rd->block_size, latency, rd->pred_lat, weight);
@@ -1442,7 +1390,7 @@ static void adios_finish_request(struct request *rq) {
 
 	if (rq->elv.priv[0]) {
 		// Free adios_rq_data back to the memory pool
-		kmem_cache_free(ad->rq_data_pool, get_rq_data(rq));
+		mempool_free(get_rq_data(rq), ad->rq_data_pool);
 		rq->elv.priv[0] = NULL;
 	}
 }
@@ -1480,12 +1428,19 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 	}
 
 	// Create a memory pool for adios_rq_data
-	ad->rq_data_pool = kmem_cache_create("rq_data_pool",
+	ad->rq_data_cache = kmem_cache_create("adios_rq_data",
 						sizeof(struct adios_rq_data),
 						0, SLAB_HWCACHE_ALIGN, NULL);
+	if (!ad->rq_data_cache) {
+		pr_err("adios: Failed to create rq_data_cache\n");
+		goto free_ad;
+	}
+
+	ad->rq_data_pool = mempool_create_slab_pool(
+						q->nr_requests, ad->rq_data_cache);
 	if (!ad->rq_data_pool) {
 		pr_err("adios: Failed to create rq_data_pool\n");
-		goto free_ad;
+		goto destroy_rq_data_cache;
 	}
 
 	/* Create a memory pool for dl_group */
@@ -1516,6 +1471,12 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 		goto destroy_dl_group_pool;
 	}
 
+	ad->pcpu_completion = alloc_percpu(struct adios_pcpu_completion);
+	if (!ad->pcpu_completion) {
+		pr_err("adios: Failed to allocate per-CPU completion data\n");
+		goto free_aggr_buckets;
+	}
+
 	for (optype = 0; optype < ADIOS_OPTYPES; optype++) {
 		struct latency_model *model = &ad->latency_model[optype];
 		struct latency_model_params *params;
@@ -1532,6 +1493,14 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 		model->pcpu_buckets = alloc_percpu(struct lm_buckets);
 		if (!model->pcpu_buckets) {
 			pr_err("adios: Failed to allocate per-CPU buckets\n");
+			kfree(params);
+			goto free_buckets;
+		}
+
+		model->pcpu_snapshot = alloc_percpu(struct lm_buckets);
+		if (!model->pcpu_snapshot) {
+			pr_err("adios: Failed to allocate per-CPU snapshot\n");
+			free_percpu(model->pcpu_buckets);
 			kfree(params);
 			goto free_buckets;
 		}
@@ -1564,8 +1533,6 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 	spin_lock_init(&ad->lock);
 	spin_lock_init(&ad->pq_lock);
 	spin_lock_init(&ad->bq_lock);
-	spin_lock_init(&ad->barrier_lock);
-	INIT_LIST_HEAD(&ad->barrier_queue);
 
 	timer_setup(&ad->update_timer, update_timer_callback, 0);
 
@@ -1583,13 +1550,18 @@ free_buckets:
 	while (optype-- > 0) {
 		struct latency_model *prev_model = &ad->latency_model[optype];
 		kfree(rcu_access_pointer(prev_model->params));
+		free_percpu(prev_model->pcpu_snapshot);
 		free_percpu(prev_model->pcpu_buckets);
 	}
+	free_percpu(ad->pcpu_completion);
+free_aggr_buckets:
 	kfree(ad->aggr_buckets);
 destroy_dl_group_pool:
 	kmem_cache_destroy(ad->dl_group_pool);
 destroy_rq_data_pool:
-	kmem_cache_destroy(ad->rq_data_pool);
+	mempool_destroy(ad->rq_data_pool);
+destroy_rq_data_cache:
+	kmem_cache_destroy(ad->rq_data_cache);
 free_ad:
 	kfree(ad);
 put_eq:
@@ -1603,7 +1575,6 @@ static void adios_exit_sched(struct elevator_queue *e) {
 
 	timer_shutdown_sync(&ad->update_timer);
 
-	WARN_ON_ONCE(!list_empty(&ad->barrier_queue));
 	for (int i = 0; i < 2; i++)
 		WARN_ON_ONCE(!list_empty(&ad->prio_queue[i]));
 
@@ -1614,15 +1585,17 @@ static void adios_exit_sched(struct elevator_queue *e) {
 		RCU_INIT_POINTER(model->params, NULL);
 		kfree_rcu(params, rcu);
 
+		free_percpu(model->pcpu_snapshot);
 		free_percpu(model->pcpu_buckets);
 	}
 
 	synchronize_rcu();
 
+	free_percpu(ad->pcpu_completion);
 	kfree(ad->aggr_buckets);
 
-	if (ad->rq_data_pool)
-		kmem_cache_destroy(ad->rq_data_pool);
+	mempool_destroy(ad->rq_data_pool);
+	kmem_cache_destroy(ad->rq_data_cache);
 
 	if (ad->dl_group_pool)
 		kmem_cache_destroy(ad->dl_group_pool);
