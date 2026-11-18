@@ -1822,7 +1822,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	struct zcomp_strm *zstrm = NULL;
 	unsigned long element;
 	bool same_filled;
-	u8 prio, prio_max = zram->num_active_comps;
+	u8 prio, prio_max = zram->num_active_comps, last_prio = ZRAM_PRIMARY_COMP;
 #ifdef CONFIG_ZRAM_MULTI_COMP
 	prio_max = min(prio_max, sysctl_zram_recomp_immediate + 1);
 #endif //CONFIG_ZRAM_MULTI_COMP
@@ -1842,6 +1842,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	for (prio = ZRAM_PRIMARY_COMP; prio < prio_max; prio++) {
 		if (!zram->comps[prio])
 			continue;
+		last_prio = prio;
 
 		zstrm = zcomp_stream_get(zram->comps[prio]);
 		mem = kmap_local_page(page);
@@ -1861,13 +1862,19 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	}
 
 	if (!zstrm) {
+		/*
+		 * None of the attempted compressors could shrink this page
+		 * below huge_class_size. Store it uncompressed, tagging it
+		 * ZRAM_INCOMPRESSIBLE only if every active compressor (not
+		 * just the "immediate" subset) was actually tried.
+		 */
 		if (prio >= zram->num_active_comps) {
 			zram_slot_lock(zram, index);
 			zram_set_flag(zram, index, ZRAM_INCOMPRESSIBLE);
 			zram_slot_unlock(zram, index);
 		}
 
-		ret = write_incompressible_page(zram, page, index, prio - 1);
+		ret = write_incompressible_page(zram, page, index, last_prio);
 		goto out;
 	}
 
