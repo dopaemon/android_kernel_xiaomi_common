@@ -25,6 +25,10 @@
 #include <linux/sched/task.h>
 #include <linux/delayacct.h>
 #include <linux/zswap.h>
+#include <linux/freezer.h>
+#include <linux/kfifo.h>
+#include <linux/kthread.h>
+#include <linux/sysctl.h>
 #include "swap.h"
 
 #undef CREATE_TRACE_POINTS
@@ -179,6 +183,198 @@ bad_bmap:
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
  */
+/*
+ * Kcompressd-Unofficial: offload swap-out compression from kswapd.
+ *
+ * Writing a folio to a synchronous swap device such as zram compresses it
+ * in the caller's context, which stalls kswapd's LRU scanning. When kswapd
+ * swaps out an anonymous folio, queue it to a per-node kcompressd thread
+ * instead and let kswapd move on. When the queue is full, the oldest
+ * queued folio is written out synchronously first, so folios are still
+ * written in submission order.
+ *
+ * vm.kcompressd sets the queue depth (0 disables the offload).
+ *
+ * Based on Kcompressd-Unofficial 0.5 by Masahito Suzuki, which extends
+ * Kcompressd by Qun-Wei Lin (MediaTek).
+ */
+#define KCOMPRESS_FIFO_SIZE	256
+
+struct kcompressd_node {
+	wait_queue_head_t	wait;
+	struct task_struct	*task;
+	spinlock_t		lock;
+	DECLARE_KFIFO(fifo, struct folio *, KCOMPRESS_FIFO_SIZE);
+};
+
+static int vm_kcompressd = 24;
+static int kcompress_fifo_size = KCOMPRESS_FIFO_SIZE;
+
+static struct ctl_table kcompressd_sysctl_table[] = {
+	{
+		.procname	= "kcompressd",
+		.data		= &vm_kcompressd,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &kcompress_fifo_size,
+	},
+	{ }
+};
+
+static int __init kcompressd_sysctl_init(void)
+{
+	register_sysctl_init("vm", kcompressd_sysctl_table);
+	return 0;
+}
+late_initcall(kcompressd_sysctl_init);
+
+/* Write @folio out as swap_writepage() would and drop the queue's reference. */
+static void kcompressd_swapout(struct folio *folio)
+{
+	struct writeback_control wbc = {
+		.sync_mode = WB_SYNC_NONE,
+		.nr_to_write = SWAP_CLUSTER_MAX,
+		.range_start = 0,
+		.range_end = LLONG_MAX,
+		.for_reclaim = 1,
+	};
+
+	if (zswap_store(folio)) {
+		folio_start_writeback(folio);
+		folio_unlock(folio);
+		folio_end_writeback(folio);
+	} else {
+		__swap_writepage(&folio->page, &wbc); /* unlocks the folio */
+	}
+
+	folio_put(folio);
+}
+
+/*
+ * Try to queue @folio, which is locked and in the swap cache, for kcompressd.
+ * Returns true if kcompressd now owns the write-out of @folio.
+ */
+static bool kcompressd_store(struct folio *folio)
+{
+	struct kcompressd_node *kcd = READ_ONCE(NODE_DATA(numa_node_id())->kcompressd);
+	unsigned int depth = READ_ONCE(vm_kcompressd);
+	struct folio *head = NULL;
+	bool queued;
+
+	/* Only kswapd offloads; direct reclaim must make progress itself. */
+	if (!current_is_kswapd() || (current->flags & PF_MEMALLOC_NOIO))
+		return false;
+
+	if (!depth || unlikely(!kcd))
+		return false;
+
+	if (!folio_test_anon(folio))
+		return false;
+
+	/*
+	 * Only offload to a device that writes synchronously in the caller's
+	 * context (zram). There the write cost is the compression itself;
+	 * async block devices already return quickly.
+	 */
+	if (!data_race(swp_swap_info(folio->swap)->flags & SWP_SYNCHRONOUS_IO))
+		return false;
+
+	folio_get(folio);
+
+	scoped_guard(spinlock_irqsave, &kcd->lock) {
+		/* Make room by taking the oldest folio when at the set depth. */
+		if (kfifo_len(&kcd->fifo) >= depth &&
+		    !kfifo_get(&kcd->fifo, &head))
+			head = NULL;
+		queued = kfifo_put(&kcd->fifo, folio);
+	}
+
+	if (queued)
+		wake_up_interruptible(&kcd->wait);
+	else
+		folio_put(folio);
+
+	/* Write out the displaced oldest folio before returning. */
+	if (head)
+		kcompressd_swapout(head);
+
+	return queued;
+}
+
+static int kcompressd(void *p)
+{
+	struct kcompressd_node *kcd = p;
+	struct folio *folio;
+
+	/*
+	 * Run like kswapd: allocations for compression may dip into reserves,
+	 * and shrinkers and drivers treat us as part of kswapd's reclaim.
+	 */
+	current->flags |= PF_MEMALLOC | PF_KSWAPD;
+	set_freezable();
+
+	while (!kthread_should_stop()) {
+		wait_event_freezable(kcd->wait, !kfifo_is_empty(&kcd->fifo) ||
+				     kthread_should_stop());
+
+		while (kfifo_out_spinlocked(&kcd->fifo, &folio, 1, &kcd->lock))
+			kcompressd_swapout(folio);
+	}
+
+	current->flags &= ~(PF_MEMALLOC | PF_KSWAPD);
+	return 0;
+}
+
+/* Called from kswapd_run() with the node's kswapd_lock held. */
+void kcompressd_run(pg_data_t *pgdat)
+{
+	struct kcompressd_node *kcd;
+	int nid = pgdat->node_id;
+
+	if (pgdat->kcompressd)
+		return;
+
+	kcd = kzalloc_node(sizeof(*kcd), GFP_KERNEL, nid);
+	if (!kcd)
+		return;
+
+	init_waitqueue_head(&kcd->wait);
+	spin_lock_init(&kcd->lock);
+	INIT_KFIFO(kcd->fifo);
+
+	kcd->task = kthread_run(kcompressd, kcd, "kcompressd%d", nid);
+	if (IS_ERR(kcd->task)) {
+		pr_err("Failed to start kcompressd on node %d\n", nid);
+		kfree(kcd);
+		return;
+	}
+
+	WRITE_ONCE(pgdat->kcompressd, kcd);
+	pr_info_once("Kcompressd-Unofficial 0.5 by Masahito Suzuki (forked from Kcompressd by Qun-Wei Lin from MediaTek)\n");
+}
+
+/* Called from kswapd_stop() with the node's kswapd_lock held. */
+void kcompressd_stop(pg_data_t *pgdat)
+{
+	struct kcompressd_node *kcd = pgdat->kcompressd;
+	struct folio *folio;
+
+	if (!kcd)
+		return;
+
+	/* kswapd has been stopped already, so nothing queues any more. */
+	WRITE_ONCE(pgdat->kcompressd, NULL);
+	kthread_stop(kcd->task);
+
+	/* Write out what the thread left behind: those folios are locked. */
+	while (kfifo_get(&kcd->fifo, &folio))
+		kcompressd_swapout(folio);
+
+	kfree(kcd);
+}
+
 int swap_writepage(struct page *page, struct writeback_control *wbc)
 {
 	struct folio *folio = page_folio(page);
@@ -198,6 +394,12 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		folio_unlock(folio);
 		return ret;
 	}
+	/*
+	 * Compression in zram can stall kswapd's reclaim of both anon and
+	 * file pages; hand it to kcompressd if possible.
+	 */
+	if (kcompressd_store(folio))
+		return 0;
 	if (zswap_store(folio)) {
 		folio_start_writeback(folio);
 		folio_unlock(folio);

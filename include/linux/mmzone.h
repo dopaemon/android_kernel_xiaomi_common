@@ -25,6 +25,8 @@
 #include <linux/android_kabi.h>
 #include <asm/page.h>
 
+struct kcompressd_node;
+
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_ARCH_FORCE_MAX_ORDER
 #define MAX_ORDER 10
@@ -1452,7 +1454,8 @@ typedef struct pglist_data {
 	struct memory_failure_stats mf_stats;
 #endif
 
-	ANDROID_KABI_RESERVE(1);
+	/* Swap-out offload state, see mm/page_io.c. Protected by kswapd_lock. */
+	ANDROID_KABI_USE(1, struct kcompressd_node *kcompressd);
 } pg_data_t;
 
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)
