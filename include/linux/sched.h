@@ -532,13 +532,36 @@ struct sched_statistics {
 } ____cacheline_aligned;
 
 #ifdef CONFIG_SCHED_BORE
-struct sched_burst_cache {
-	u8				score;
-	u32				count;
-	u64				timestamp;
-	spinlock_t			lock;
+#define BORE_BC_TIMESTAMP_SHIFT 16
+
+struct bore_bc {
+	union {
+		struct {
+			u64		timestamp:	48;
+			u64		penalty:	16;
+		};
+		u64			value;
+	};
 };
-#endif // CONFIG_SCHED_BORE
+
+/*
+ * GKI: upstream BORE keeps all of its per-task state, including the two
+ * burst caches, in a single struct bore_ctx embedded in task_struct. That
+ * would move every task_struct member behind it, so the state is split:
+ * struct bore_ctx (24 bytes) replaces KABI reserved fields 1-3 of
+ * struct sched_entity, and the burst caches use the hole in front of its
+ * cacheline aligned 'avg'. See struct sched_entity.
+ */
+struct bore_ctx {
+	u64				burst_time;
+	u64				credit_sleep;
+	u16				prev_penalty;
+	u16				curr_penalty;
+	u16				penalty;
+	bool				stop_update;
+	bool				futex_waiting;
+};
+#endif /* CONFIG_SCHED_BORE */
 
 struct sched_entity {
 	/* For load-balancing: */
@@ -581,20 +604,13 @@ struct sched_entity {
 #if defined(CONFIG_SCHED_BORE) && !defined(__GENKSYMS__)
 	/*
 	 * GKI: the BORE state must not move any existing member or grow the
-	 * structure, so none of it sits where upstream BORE puts it:
-	 *
-	 *  - burst_time and the penalty/score bytes use the hole in front of
-	 *    the cacheline aligned 'avg',
-	 *  - group_burst takes over KABI reserved fields 1-3,
-	 *  - child_burst uses the tail padding after the KABI fields.
-	 *
-	 * Everything is hidden from genksyms to keep the symbol CRCs stable.
+	 * structure. The burst caches use the 16-byte hole in front of the
+	 * cacheline aligned 'avg' and struct bore_ctx takes over KABI
+	 * reserved fields 1-3 below. Hidden from genksyms to keep the symbol
+	 * CRCs stable.
 	 */
-	u64				burst_time;
-	u8				prev_burst_penalty;
-	u8				curr_burst_penalty;
-	u8				burst_penalty;
-	u8				burst_score;
+	struct bore_bc			bore_subtree;
+	struct bore_bc			bore_group;
 #endif
 
 #ifdef CONFIG_SMP
@@ -610,16 +626,13 @@ struct sched_entity {
 #ifdef CONFIG_SCHED_BORE
 	_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(1); ANDROID_KABI_RESERVE(2);
 			      ANDROID_KABI_RESERVE(3),
-			      struct sched_burst_cache group_burst);
+			      struct bore_ctx bore);
 #else
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
 #endif
 	ANDROID_KABI_RESERVE(4);
-#if defined(CONFIG_SCHED_BORE) && !defined(__GENKSYMS__)
-	struct sched_burst_cache	child_burst;
-#endif
 };
 
 struct sched_rt_entity {

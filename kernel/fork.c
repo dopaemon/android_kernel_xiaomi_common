@@ -105,17 +105,15 @@
 #include <linux/dma-buf.h>
 #include <linux/simple_lmk.h>
 
-#ifdef CONFIG_USER_NS
-#include <linux/user_namespace.h>
-#endif
-
 #include <asm/pgalloc.h>
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 
+#ifdef CONFIG_SCHED_BORE
 #include <linux/sched/bore.h>
+#endif /* CONFIG_SCHED_BORE */
 
 #include <trace/events/sched.h>
 
@@ -2726,8 +2724,8 @@ __latent_entropy struct task_struct *copy_process(
 
 #ifdef CONFIG_SCHED_BORE
 	if (likely(p->pid))
-		sched_clone_bore(p, current, clone_flags, p->start_time);
-#endif // CONFIG_SCHED_BORE
+		task_fork_bore(p, current, clone_flags, p->start_time);
+#endif /* CONFIG_SCHED_BORE */
 	/*
 	 * Make it visible to the rest of the system, but dont wake it up yet.
 	 * Need tasklist lock for parent etc handling!
@@ -2801,7 +2799,11 @@ __latent_entropy struct task_struct *copy_process(
 			 */
 			p->signal->has_child_subreaper = p->real_parent->signal->has_child_subreaper ||
 							 p->real_parent->signal->is_child_subreaper;
+#ifdef CONFIG_SCHED_BORE
+			list_add_tail_rcu(&p->sibling, &p->real_parent->children);
+#else /* !CONFIG_SCHED_BORE */
 			list_add_tail(&p->sibling, &p->real_parent->children);
+#endif /* CONFIG_SCHED_BORE */
 			list_add_tail_rcu(&p->tasks, &init_task.tasks);
 			attach_pid(p, PIDTYPE_TGID);
 			attach_pid(p, PIDTYPE_PGID);
