@@ -7,6 +7,7 @@ name: SM8450 6.6 | DoraCore Kleaf AnyKernel3 (boot, vendor_boot, dtbo, vendor_dl
 #   arch/arm64/boot/dts/vendor    (sm8450-devicetrees-6.6)
 #   vendor/xiaomi/sm8450-modules  (sm8450-modules-6.6)
 #   vendor/xiaomi/sm8450-build    (sm8450-build-6.6, BUILD.bazel)
+#   vendor/xiaomi/sm8450-common   (module load lists and blocklists)
 # which are mapped onto the Kleaf platform paths the BUILD files use.
 # The result is an AnyKernel3 zip: boot and vendor_boot are patched on the
 # device (kernel, dtb, vendor ramdisk modules), dtbo, vendor_dlkm and
@@ -107,10 +108,10 @@ jobs:
     env:
       DEVICE: ${{ matrix.device }}
       LINEAGE_BRANCH: lineage-24.0
-      DEVICE_COMMON_BRANCH: lineage-24.0-6.6
       SRC: ${{ github.workspace }}/src
       KP: ${{ github.workspace }}/src/kernel/platform/kernel-6.6
       KERNEL_SRC: ${{ github.workspace }}/src/kernel/platform/kernel-6.6/vendor/xiaomi/sm8450-kernel
+      MODULE_LISTS: ${{ github.workspace }}/src/kernel/platform/kernel-6.6/vendor/xiaomi/sm8450-kernel/vendor/xiaomi/sm8450-common
       DIST: ${{ github.workspace }}/dist
       PACK_OUT: ${{ github.workspace }}/ak3-payload
       AK3_REPO: https://github.com/osm0sis/AnyKernel3.git
@@ -197,6 +198,9 @@ jobs:
           for d in arch/arm64/boot/dts/vendor vendor/xiaomi/sm8450-modules vendor/xiaomi/sm8450-build; do
             [ -f "$d/BUILD.bazel" ] || [ -d "$d/qcom" ] || { echo "DoraCore tree has no $d subtree" >&2; exit 1; }
           done
+          for f in modules.load modules.load.vendor_boot modules.blocklist modules.blocklist.system_dlkm; do
+            [ -s "$MODULE_LISTS/$f" ] || { echo "DoraCore tree has no $MODULE_LISTS/$f" >&2; exit 1; }
+          done
           # The BUILD files keep the Kleaf platform labels
           # (//vendor/xiaomi/sm8450-{kernel,modules,build}); map those paths
           # onto the DoraCore subtrees.
@@ -224,12 +228,6 @@ jobs:
           grep -qx 'POST_DEFCONFIG_CMDS="check_defconfig"' build.config.gki
           sed -i 's/^POST_DEFCONFIG_CMDS="check_defconfig"$/POST_DEFCONFIG_CMDS=""/' build.config.gki
           git diff --stat
-
-      - name: Clone device/xiaomi/sm8450-common
-        run: |
-          git clone --depth=1 -b "$DEVICE_COMMON_BRANCH" \
-            https://github.com/cupid-development/android_device_xiaomi_sm8450-common.git \
-            "$GITHUB_WORKSPACE/device-common"
 
       - name: Build With Kleaf
         run: |
@@ -273,7 +271,7 @@ jobs:
       - name: Pack Images
         run: |
           set -euo pipefail
-          DEVICE_COMMON="$GITHUB_WORKSPACE/device-common" OUT="$PACK_OUT" \
+          OUT="$PACK_OUT" \
             bash tools/ci/sm8450_pack.sh 2>&1 | tee "$GITHUB_WORKSPACE/build-$DEVICE-pack.log"
 
       - name: Create AnyKernel3 Zip

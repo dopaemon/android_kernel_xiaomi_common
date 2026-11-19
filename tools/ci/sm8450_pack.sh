@@ -7,13 +7,13 @@
 #
 # Module staging mirrors vendor/lineage/build/tasks/kernel.mk
 # (build-image-kernel-modules-lineage) for TARGET_KERNEL_PLATFORM_TARGET
-# with TARGET_KERNEL_MIXED_MODE, using the module lists of
-# device/xiaomi/sm8450-common.  boot and vendor_boot are patched on the
+# with TARGET_KERNEL_MIXED_MODE, using the module lists the DoraCore tree
+# carries in vendor/xiaomi/sm8450-common.  boot and vendor_boot are patched on the
 # device by AnyKernel3, so their ramdisks never leave the phone.
 #
 # Required environment:
 #   DIST          Kleaf dist directory (Image, *.ko, *.dtb, *.dtbo, ...)
-#   DEVICE_COMMON device/xiaomi/sm8450-common checkout
+#   MODULE_LISTS  directory with modules.load{,.vendor_boot} and modules.blocklist*
 #   KP            kernel/platform/kernel-6.6 root (prebuilts)
 #   OUT           AnyKernel3 staging directory
 # Optional:
@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-: "${DIST:?}" "${DEVICE_COMMON:?}" "${KP:?}" "${OUT:?}"
+: "${DIST:?}" "${MODULE_LISTS:?}" "${KP:?}" "${OUT:?}"
 KERNEL_IMAGE=${KERNEL_IMAGE:-$DIST/Image}
 WORK=$(mktemp -d "${RUNNER_TEMP:-/tmp}/sm8450-pack.XXXXXX")
 
@@ -179,26 +179,26 @@ SYSTEM_LOAD=$DIST/system_dlkm.modules.load
 xargs -rn1 basename < "$SYSTEM_LOAD" | sort -u > "$WORK/system.list"
 find "$DIST" -maxdepth 1 -type f -name '*.ko' -printf '%f\n' | sort > "$WORK/all.list"
 comm -23 "$WORK/all.list" "$WORK/system.list" > "$WORK/vendor.list"
-read_list "$DEVICE_COMMON/modules.load.vendor_boot" > "$WORK/vendor_boot.list"
+read_list "$MODULE_LISTS/modules.load.vendor_boot" > "$WORK/vendor_boot.list"
 echo "dist: $(wc -l < "$WORK/all.list") modules, system_dlkm: $(wc -l < "$WORK/system.list")," \
      "vendor_dlkm: $(wc -l < "$WORK/vendor.list"), vendor_boot: $(wc -l < "$WORK/vendor_boot.list")"
 
 log "system_dlkm modules"
 build_modules "$WORK/system_dlkm" system_dlkm/ "$WORK/depmod_system_dlkm" \
   "$WORK/system.list" "$WORK/system.list"
-cp "$DEVICE_COMMON/modules.blocklist.system_dlkm" "$WORK/system_dlkm/lib/modules/modules.blocklist"
+cp "$MODULE_LISTS/modules.blocklist.system_dlkm" "$WORK/system_dlkm/lib/modules/modules.blocklist"
 
 log "vendor_boot (dlkm fragment) modules"
 build_modules "$WORK/vendor_ramdisk" "" "$WORK/depmod_vendor_ramdisk" \
-  "$WORK/vendor_boot.list" "$DEVICE_COMMON/modules.load.vendor_boot"
+  "$WORK/vendor_boot.list" "$MODULE_LISTS/modules.load.vendor_boot"
 # The vendor ramdisk blocklist stays wherever the ROM put it; only the
 # modules and their depmod files of the dlkm fragment are replaced.
 
 log "vendor_dlkm modules"
 build_modules "$WORK/vendor_dlkm" vendor_dlkm/ "$WORK/depmod_vendor" \
-  "$WORK/vendor.list" "$DEVICE_COMMON/modules.load" \
+  "$WORK/vendor.list" "$MODULE_LISTS/modules.load" \
   "$WORK/depmod_system_dlkm/lib/modules/0.0/system_dlkm"
-cp "$DEVICE_COMMON/modules.blocklist" "$WORK/vendor_dlkm/lib/modules/modules.blocklist"
+cp "$MODULE_LISTS/modules.blocklist" "$WORK/vendor_dlkm/lib/modules/modules.blocklist"
 
 log "dtb / dtbo"
 if [ -f "$DIST/dtb.img" ]; then
