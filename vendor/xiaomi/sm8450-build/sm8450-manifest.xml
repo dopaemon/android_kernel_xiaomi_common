@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<manifest>
+  <include name="manifests/snippets/kernel-6.6.xml" />
+  <project name="cupid-development/android_kernel_xiaomi_sm8450-6.6" path="kernel/platform/kernel-6.6/vendor/xiaomi/sm8450-kernel" remote="github" revision="lineage-24.0-6.6" />
+  <project name="cupid-development/android_kernel_xiaomi_sm8450-devicetrees-6.6" path="kernel/platform/kernel-6.6/vendor/xiaomi/sm8450-devicetrees" remote="github" revision="lineage-24.0-6.6" />
+  <project name="cupid-development/android_kernel_xiaomi_sm8450-modules-6.6" path="kernel/platform/kernel-6.6/vendor/xiaomi/sm8450-modules" remote="github" revision="lineage-24.0-6.6" />
+  <project name="cupid-development/android_kernel_xiaomi_sm8450-build-6.6" path="kernel/platform/kernel-6.6/vendor/xiaomi/sm8450-build" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/sm8450-common" />
+  <project name="cupid-development/android_device_xiaomi_sm8450-common" path="device/xiaomi/sm8450-common" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/cupid" />
+  <project name="cupid-development/android_device_xiaomi_cupid" path="device/xiaomi/cupid" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/diting" />
+  <project name="cupid-development/android_device_xiaomi_diting" path="device/xiaomi/diting" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/marble" />
+  <project name="cupid-development/android_device_xiaomi_marble" path="device/xiaomi/marble" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/mayfly" />
+  <project name="cupid-development/android_device_xiaomi_mayfly" path="device/xiaomi/mayfly" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/mondrian" />
+  <project name="cupid-development/android_device_xiaomi_mondrian" path="device/xiaomi/mondrian" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/thor" />
+  <project name="cupid-development/android_device_xiaomi_thor" path="device/xiaomi/thor" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/unicorn" />
+  <project name="cupid-development/android_device_xiaomi_unicorn" path="device/xiaomi/unicorn" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/zeus" />
+  <project name="cupid-development/android_device_xiaomi_zeus" path="device/xiaomi/zeus" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="device/xiaomi/zizhan" />
+  <project name="cupid-development/android_device_xiaomi_zizhan" path="device/xiaomi/zizhan" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/sm8450-common" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_sm8450-common" path="vendor/xiaomi/sm8450-common" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/cupid" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_cupid" path="vendor/xiaomi/cupid" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/diting" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_diting" path="vendor/xiaomi/diting" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/marble" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_marble" path="vendor/xiaomi/marble" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/mayfly" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_mayfly" path="vendor/xiaomi/mayfly" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/mondrian" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_mondrian" path="vendor/xiaomi/mondrian" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/thor" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_thor" path="vendor/xiaomi/thor" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/unicorn" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_unicorn" path="vendor/xiaomi/unicorn" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/zeus" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_zeus" path="vendor/xiaomi/zeus" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="vendor/xiaomi/zizhan" />
+  <project name="cupid-development/proprietary_vendor_xiaomi_zizhan" path="vendor/xiaomi/zizhan" remote="github" revision="lineage-24.0-6.6" />
+  <remove-project optional="true" path="hardware/qcom-caf/sm8450-6.6/display/hal" />
+  <project name="cupid-development/android_hardware_qcom_display" path="hardware/qcom-caf/sm8450-6.6/display/hal" remote="github" revision="lineage-24.0-caf-sm8450-6.6" />
+  <remove-project optional="true" path="hardware/qcom-caf/sm8450-6.6/audio/primary-hal" />
+  <project name="cupid-development/android_hardware_qcom_audio-ar" path="hardware/qcom-caf/sm8450-6.6/audio/primary-hal" remote="github" revision="lineage-24.0-6.6" />
+</manifest>
