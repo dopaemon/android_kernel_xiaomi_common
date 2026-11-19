@@ -1,11 +1,16 @@
-name: SM8450 6.6 | Kleaf AnyKernel3 (boot, vendor_boot, dtbo, vendor_dlkm)
+name: SM8450 6.6 | DoraCore Kleaf AnyKernel3 (boot, vendor_boot, dtbo, vendor_dlkm)
 
-# Builds the cupid-development SM8450 kernel platform
-# (android_kernel_xiaomi_sm8450-build-6.6) the same way LineageOS does
-# (vendor/lineage/build/tasks/kernel.mk, TARGET_KERNEL_PLATFORM_TARGET),
-# without the full Android tree, and packs everything into an AnyKernel3
-# zip: boot and vendor_boot are patched on the device (kernel, dtb, vendor
-# ramdisk modules), dtbo, vendor_dlkm and system_dlkm are flashed whole.
+# Builds DoraCore for Xiaomi SM8450/SM8475/SM7475 with Kleaf, the same way
+# LineageOS builds TARGET_KERNEL_PLATFORM_TARGET (vendor/lineage/build/
+# tasks/kernel.mk), without the full Android tree.  Everything SM8450 comes
+# from the DoraCore tree: the msm kernel itself plus the subtrees
+#   arch/arm64/boot/dts/vendor    (sm8450-devicetrees-6.6)
+#   vendor/xiaomi/sm8450-modules  (sm8450-modules-6.6)
+#   vendor/xiaomi/sm8450-build    (sm8450-build-6.6, BUILD.bazel)
+# which are mapped onto the Kleaf platform paths the BUILD files use.
+# The result is an AnyKernel3 zip: boot and vendor_boot are patched on the
+# device (kernel, dtb, vendor ramdisk modules), dtbo, vendor_dlkm and
+# system_dlkm are flashed whole.
 
 on:
   workflow_dispatch:
@@ -26,27 +31,22 @@ on:
         - unicorn
         - zeus
         - zizhan
-      CUPID_BRANCH:
-        description: 'cupid-development branch'
-        required: true
-        default: 'lineage-24.0-6.6'
-      BOOT_KERNEL:
-        description: 'Kernel inside boot.img'
-        required: true
-        default: 'cupid'
-        type: choice
-        options:
-        - cupid
-        - DoraCore-KSU
-        - DoraCore-NonKSU
       KERNEL_GIT:
-        description: 'DoraCore source (only for DoraCore boot kernel)'
+        description: 'DoraCore source'
         required: true
         default: 'https://github.com/dopaemon/android_kernel_xiaomi_common.git'
       KERNEL_BRANCH:
-        description: 'DoraCore branch (only for DoraCore boot kernel)'
+        description: 'DoraCore branch'
         required: true
         default: 'Rebase-6.6'
+      BUILD_TARGET:
+        description: 'KernelSU'
+        required: true
+        default: 'KSU'
+        type: choice
+        options:
+        - KSU
+        - NonKSU
       LTO_MODE:
         description: 'Kleaf --lto'
         required: true
@@ -88,9 +88,8 @@ jobs:
           prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
           make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
           body: |
-            Full kernel images for Xiaomi SM8450/SM8475/SM7475 (Linux 6.6, Kleaf).
-            Source: cupid-development/android_kernel_xiaomi_sm8450-build-6.6 (${{ github.event.inputs.CUPID_BRANCH }})
-            boot.img kernel: ${{ github.event.inputs.BOOT_KERNEL }}
+            DoraCore full kernel for Xiaomi SM8450/SM8475/SM7475 (Linux 6.6, Kleaf).
+            Source: ${{ github.event.inputs.KERNEL_GIT }} (${{ github.event.inputs.KERNEL_BRANCH }}), ${{ github.event.inputs.BUILD_TARGET }}
             AnyKernel3 zip: boot (Image), vendor_boot (dtb + ramdisk modules), dtbo, vendor_dlkm, system_dlkm.
             Credits: cupid-development, ArianK16a
         env:
@@ -107,10 +106,11 @@ jobs:
 
     env:
       DEVICE: ${{ matrix.device }}
-      CUPID_BRANCH: ${{ github.event.inputs.CUPID_BRANCH }}
       LINEAGE_BRANCH: lineage-24.0
+      DEVICE_COMMON_BRANCH: lineage-24.0-6.6
       SRC: ${{ github.workspace }}/src
       KP: ${{ github.workspace }}/src/kernel/platform/kernel-6.6
+      KERNEL_SRC: ${{ github.workspace }}/src/kernel/platform/kernel-6.6/vendor/xiaomi/sm8450-kernel
       DIST: ${{ github.workspace }}/dist
       PACK_OUT: ${{ github.workspace }}/ak3-payload
       AK3_REPO: https://github.com/osm0sis/AnyKernel3.git
@@ -175,24 +175,59 @@ jobs:
           mkdir -p "$MR" "$SRC"
           curl -fsSL --retry 5 -o "$RUNNER_TEMP/kernel-6.6.xml" \
             "https://raw.githubusercontent.com/LineageOS/android/$LINEAGE_BRANCH/snippets/kernel-6.6.xml"
-          curl -fsSL --retry 5 -o "$RUNNER_TEMP/sm8450-manifest.xml" \
-            "https://raw.githubusercontent.com/cupid-development/android_kernel_xiaomi_sm8450-build-6.6/$CUPID_BRANCH/sm8450-manifest.xml"
-          python3 tools/ci/sm8450_manifest.py "$RUNNER_TEMP/kernel-6.6.xml" \
-            "$RUNNER_TEMP/sm8450-manifest.xml" "$MR/default.xml"
-          sed -i "s|revision=\"lineage-24.0-6.6\"|revision=\"$CUPID_BRANCH\"|g" "$MR/default.xml"
+          python3 tools/ci/sm8450_manifest.py "$RUNNER_TEMP/kernel-6.6.xml" "$MR/default.xml"
           cat "$MR/default.xml"
           git -C "$MR" init -q -b main
           git -C "$MR" add default.xml
-          git -C "$MR" commit -q -m "sm8450 kernel platform"
+          git -C "$MR" commit -q -m "kernel-6.6 Kleaf platform"
           cd "$SRC"
           repo init -u "file://$MR" -b main --depth=1 --no-clone-bundle
           repo sync -c -j8 --no-tags --no-clone-bundle --optimized-fetch --force-sync --fail-fast
           repo forall -c 'echo "$REPO_PATH $(git rev-parse --short=12 HEAD)"'
           df -BG
 
+      - name: Clone DoraCore
+        run: |
+          set -euo pipefail
+          git clone -b "${{ github.event.inputs.KERNEL_BRANCH }}" --single-branch --depth=1 --no-tags \
+            --recurse-submodules --shallow-submodules \
+            "${{ github.event.inputs.KERNEL_GIT }}" "$KERNEL_SRC"
+          cd "$KERNEL_SRC"
+          echo "DoraCore: $(make -s kernelversion) @ $(git rev-parse --short=12 HEAD)"
+          for d in arch/arm64/boot/dts/vendor vendor/xiaomi/sm8450-modules vendor/xiaomi/sm8450-build; do
+            [ -f "$d/BUILD.bazel" ] || [ -d "$d/qcom" ] || { echo "DoraCore tree has no $d subtree" >&2; exit 1; }
+          done
+          # The BUILD files keep the Kleaf platform labels
+          # (//vendor/xiaomi/sm8450-{kernel,modules,build}); map those paths
+          # onto the DoraCore subtrees.
+          cd "$KP/vendor/xiaomi"
+          ln -sfn sm8450-kernel/vendor/xiaomi/sm8450-modules sm8450-modules
+          ln -sfn sm8450-kernel/vendor/xiaomi/sm8450-build sm8450-build
+          ln -sfn sm8450-kernel/arch/arm64/boot/dts/vendor sm8450-devicetrees
+          ls -l "$KP/vendor/xiaomi"
+
+      - name: Prepare gki_defconfig
+        run: |
+          set -euo pipefail
+          cd "$KERNEL_SRC"
+          DEFCONFIG=arch/arm64/configs/gki_defconfig
+          if [ "${{ github.event.inputs.BUILD_TARGET }}" = NonKSU ]; then
+            sed -i -e '/^CONFIG_KSU[_=]/d' -e '/^# CONFIG_KSU[_ ].* is not set$/d' "$DEFCONFIG"
+            echo "# CONFIG_KSU is not set" >> "$DEFCONFIG"
+          fi
+          grep -n 'CONFIG_KSU\b' "$DEFCONFIG"
+          # build.config.gki runs check_defconfig, which wants gki_defconfig
+          # to equal "make savedefconfig" byte for byte. DoraCore appends its
+          # options (KSU, SUSFS, ...) instead of keeping savedefconfig order,
+          # so drop the check for this build; olddefconfig still resolves the
+          # same .config from it.
+          grep -qx 'POST_DEFCONFIG_CMDS="check_defconfig"' build.config.gki
+          sed -i 's/^POST_DEFCONFIG_CMDS="check_defconfig"$/POST_DEFCONFIG_CMDS=""/' build.config.gki
+          git diff --stat
+
       - name: Clone device/xiaomi/sm8450-common
         run: |
-          git clone --depth=1 -b "$CUPID_BRANCH" \
+          git clone --depth=1 -b "$DEVICE_COMMON_BRANCH" \
             https://github.com/cupid-development/android_device_xiaomi_sm8450-common.git \
             "$GITHUB_WORKSPACE/device-common"
 
@@ -204,6 +239,9 @@ jobs:
           {
             echo '<manifest>'
             sed -n 's|^kernel/platform/kernel-6.6/\(.*\)$|  <project path="\1" />|p' "$SRC/.repo/project.list"
+            for p in sm8450-kernel sm8450-modules sm8450-build sm8450-devicetrees; do
+              echo "  <project path=\"vendor/xiaomi/$p\" />"
+            done
             echo '</manifest>'
           } > "$RUNNER_TEMP/kleaf-manifest.xml"
           LTO_ARGS=()
@@ -232,37 +270,6 @@ jobs:
           echo "Modules: $(ls "$DIST"/*.ko | wc -l)"
           strings "$DIST/Image" | grep -m1 'Linux version' || true
 
-      - name: Build DoraCore Image
-        if: startsWith(github.event.inputs.BOOT_KERNEL, 'DoraCore')
-        run: |
-          set -euo pipefail
-          git clone -b "${{ github.event.inputs.KERNEL_BRANCH }}" --single-branch --depth=1 --no-tags \
-            --recurse-submodules --shallow-submodules \
-            "${{ github.event.inputs.KERNEL_GIT }}" "$GITHUB_WORKSPACE/doracore"
-          cd "$GITHUB_WORKSPACE/doracore"
-          CLANG_VERSION=$(sed -n 's/^CLANG_VERSION=//p' build.config.constants | head -n1)
-          CLANG_DIR="$KP/prebuilts/clang/host/linux-x86/clang-$CLANG_VERSION"
-          [ -x "$CLANG_DIR/bin/clang" ] || { echo "clang-$CLANG_VERSION not in kernel platform prebuilts" >&2; exit 1; }
-          export PATH="$CLANG_DIR/bin:$PATH"
-          OUT_DIR="$GITHUB_WORKSPACE/doracore-out"
-          MAKE_ARGS=(-j"$(nproc)" LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-                     LD=ld.lld HOSTLD=ld.lld LOCALVERSION= O="$OUT_DIR")
-          case "${{ github.event.inputs.BOOT_KERNEL }}" in
-            DoraCore-KSU) KSU_SWITCH=-e; KSU_EXPECT="CONFIG_KSU=y" ;;
-            *) KSU_SWITCH=-d; KSU_EXPECT="# CONFIG_KSU is not set" ;;
-          esac
-          # This build cannot sign modules with the GKI key, so the stock
-          # system_dlkm modules would be refused the protected exports.
-          rm -f ./android/abi_gki_protected_exports_*
-          make "${MAKE_ARGS[@]}" gki_defconfig
-          scripts/config --file "$OUT_DIR/.config" "$KSU_SWITCH" KSU \
-            -d LTO_NONE -d LTO_CLANG_FULL -e LTO_CLANG_THIN
-          make "${MAKE_ARGS[@]}" olddefconfig
-          grep -qxF "$KSU_EXPECT" "$OUT_DIR/.config"
-          make "${MAKE_ARGS[@]}" Image 2>&1 | tee "$GITHUB_WORKSPACE/build-$DEVICE-doracore.log"
-          echo "KERNEL_IMAGE=$OUT_DIR/arch/arm64/boot/Image" >> $GITHUB_ENV
-          echo "DoraCore release: $(cat "$OUT_DIR/include/config/kernel.release")"
-
       - name: Pack Images
         run: |
           set -euo pipefail
@@ -282,13 +289,13 @@ jobs:
           curl -fsSL --retry 5 -o "$AK3/banner" \
             https://raw.githubusercontent.com/dopaemon/Anykernel3/master/banner
           sed -i -e 's/5\.10\.y - GKI/6.6.y - SM8450 Kleaf/' "$AK3/banner"
-          KERNEL_STRING="DoraCore SM8450 6.6 (${{ github.event.inputs.BOOT_KERNEL }}) for $DEVICE by dopaemon"
+          KERNEL_STRING="DoraCore SM8450 6.6 (${{ github.event.inputs.BUILD_TARGET }}) for $DEVICE by dopaemon"
           sed -e "s|@DEVICE@|$DEVICE|" -e "s|@KERNEL_STRING@|$KERNEL_STRING|" \
             tools/ci/sm8450_anykernel.sh > "$AK3/anykernel.sh"
           cp -r "$PACK_OUT"/. "$AK3/"
           cd "$AK3"
           find . -type f ! -name '*.ko' | sort
-          ZIP_NAME="DoraCore-${DEVICE}-SM8450-6.6-${{ github.event.inputs.BOOT_KERNEL }}-AK3-${BUILD_DATE}.zip"
+          ZIP_NAME="DoraCore-${DEVICE}-SM8450-6.6-${{ github.event.inputs.BUILD_TARGET }}-AK3-${BUILD_DATE}.zip"
           zip -r9 "$GITHUB_WORKSPACE/$ZIP_NAME" . -x '.git*'
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
