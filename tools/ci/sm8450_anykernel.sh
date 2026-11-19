@@ -45,18 +45,22 @@ for proc in zygote zygote64 system_server; do
   fi;
 done;
 
-# vol_key: wait up to 10 s for a volume key press, print "up" or "down"
-# (nothing on timeout)
+# vol_key: wait for a volume key press and print "up" or "down"; prints
+# "none" only if getevent stops (no input device to read)
 vol_key() {
-  local ev=$AKHOME/vol_key.ev i=0 pid key=;
+  local ev=$AKHOME/vol_key.ev pid key=;
   : > $ev;
   getevent -lq > $ev 2>/dev/null &
   pid=$!;
-  while [ $i -lt 50 ]; do
-    if grep -q 'KEY_VOLUMEUP *DOWN' $ev; then key=up; break; fi;
-    if grep -q 'KEY_VOLUMEDOWN *DOWN' $ev; then key=down; break; fi;
+  while [ ! "$key" ]; do
     sleep 0.2 2>/dev/null || sleep 1;
-    i=$((i + 1));
+    if grep -q 'KEY_VOLUMEUP *DOWN' $ev; then
+      key=up;
+    elif grep -q 'KEY_VOLUMEDOWN *DOWN' $ev; then
+      key=down;
+    elif ! kill -0 $pid 2>/dev/null; then
+      key=none;
+    fi;
   done;
   kill $pid 2>/dev/null;
   rm -f $ev;
@@ -72,28 +76,60 @@ oc_label() {
     3) echo "All: 144 Hz + 156 Hz (overclock)";;
   esac;
 }
+oc_warning() {
+  ui_print " " \
+    "!!!!!!!!!! WARNING: DISPLAY OVERCLOCK !!!!!!!!!!" \
+    "$(oc_label $1) drives the panel beyond its" \
+    "rated 120 Hz with a higher DSI clock" \
+    "(998.4 MHz at 144 Hz, 1331.2 MHz at 156 Hz)." \
+    "It can cause colour shift, flicker, artifacts," \
+    "more heat and battery drain or a black screen," \
+    "and lasting damage to the panel cannot be ruled" \
+    "out. You use it entirely at your own risk:" \
+    "DoraCore and its developers take NO" \
+    "responsibility for any damage or data loss." \
+    "If the screen stays black, flash this zip again" \
+    "from recovery and choose Default." \
+    " " \
+    "  Vol- = I accept the risk, use the overclock" \
+    "  Vol+ = go back to the refresh rate menu";
+}
 if [ -f $AKHOME/dtbo-oc/dtbo-oc144.img -a -f $AKHOME/dtbo-oc/dtbo-ocall.img ]; then
   oc=1;
-  ui_print " " "Display refresh rate:";
   if command -v getevent >/dev/null 2>&1; then
-    ui_print "  Vol+ = next option, Vol- = select" \
-      "  (the shown option is used after 10 s without a key)" \
-      "> $(oc_label $oc)";
     while true; do
-      case $(vol_key) in
-        up) oc=$((oc % 3 + 1)); ui_print "> $(oc_label $oc)";;
-        *) break;;
+      ui_print " " "Display refresh rate:" \
+        "  Vol+ = next option, Vol- = select" \
+        "> $(oc_label $oc)";
+      key=;
+      while true; do
+        key=$(vol_key);
+        case $key in
+          up) oc=$((oc % 3 + 1)); ui_print "> $(oc_label $oc)";;
+          *) break;;
+        esac;
+      done;
+      [ "$key" = none ] && oc=1;
+      [ $oc = 1 ] && break;
+      oc_warning $oc;
+      key=$(vol_key);
+      case $key in
+        down) ui_print " " "Overclock accepted.";
+          break;;
+        up) ui_print " " "Back to the refresh rate menu.";;
+        *) oc=1;
+          break;;
       esac;
     done;
+    [ "$key" = none ] && ui_print "  Key input stopped, using the default";
   else
-    ui_print "  No key input in this recovery, using the default";
+    ui_print " " "No key input in this recovery, using the default refresh rate";
   fi;
   case $oc in
     2) cp -f $AKHOME/dtbo-oc/dtbo-oc144.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";;
     3) cp -f $AKHOME/dtbo-oc/dtbo-ocall.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";;
   esac;
-  ui_print "Selected: $(oc_label $oc)";
-  [ $oc = 1 ] || ui_print "Note: the panel is tuned for 120 Hz, colours may shift above it";
+  ui_print "Display refresh rate: $(oc_label $oc)";
 fi;
 rm -rf $AKHOME/dtbo-oc;
 
