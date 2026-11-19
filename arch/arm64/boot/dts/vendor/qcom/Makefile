@@ -296,6 +296,8 @@ CAPE_BASE_DTB += cape.dtb
 CAPE_BOARDS += \
 		diting-sm8475-pm8008-overlay.dtbo \
 		mayfly-sm8475-pm8008-overlay.dtbo \
+		mayfly-sm8475-pm8008-overlay-oc144.dtbo \
+		mayfly-sm8475-pm8008-overlay-ocall.dtbo \
 		mondrian-sm8475-pm8008-overlay.dtbo \
 		thor-sm8475-pm8008-overlay.dtbo \
 		unicorn-sm8475-pm8008-overlay.dtbo \
