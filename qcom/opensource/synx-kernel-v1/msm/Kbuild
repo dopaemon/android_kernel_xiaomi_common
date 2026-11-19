@@ -1,0 +1,42 @@
+LINUXINCLUDE    += -I$(SYNX_ROOT)/include \
+                   -I$(SYNX_ROOT)/include/uapi \
+		   -I$(SYNX_ROOT)/include/uapi/synx
+ccflags-y += -I$(SYNX_ROOT)/msm/synx/
+
+# ported from Android.mk
+$(info within KBUILD file KBUILD_EXTRA_SYMBOLS = $(KBUILD_EXTRA_SYMBOLS))
+
+ifeq ($(CONFIG_ARCH_ANORAK), y)
+$(info within KBUILD file CONFIG_ARCH_ANORAK = $(CONFIG_ARCH_ANORAK))
+# include $(SYNX_ROOT)/config/anorak61.mk
+KBUILD_CPPFLAGS += -DCONFIG_SYNX_ANORAK=1
+ccflags-y += -DCONFIG_SYNX_ANORAK=1
+KBUILD_CPPFLAGS += -DCONFIG_MSM_GLOBAL_SYNX_V2
+endif
+
+ifeq ($(CONFIG_ARCH_NEO), y)
+$(info within KBUILD file CONFIG_ARCH_NEO = $(CONFIG_ARCH_NEO))
+# include $(SYNX_ROOT)/config/neo61.mk
+KBUILD_CPPFLAGS += -DCONFIG_SYNX_NEO=1
+ccflags-y += -DCONFIG_SYNX_NEO=1
+ifeq ($(TARGET), ar-sg1)
+KBUILD_CPPFLAGS += -DCONFIG_MSM_GLOBAL_SYNX_V2
+CONFIG_MSM_GLOBAL_SYNX_V2 := y
+else
+KBUILD_CPPFLAGS += -DCONFIG_MSM_GLOBAL_SYNX
+CONFIG_MSM_GLOBAL_SYNX := y
+endif
+endif
+
+ifeq ($(CONFIG_MSM_GLOBAL_SYNX_V2), y)
+obj-m += synx/ipclite.o
+obj-m += synx-driver.o
+synx-driver-objs := synx/synx_v2.o synx/synx_global_v2.o synx/synx_util_v2.o synx/synx_debugfs_v2.o
+else
+obj-m += synx/ipclite.o
+obj-m += synx/qcom_ipc_lite.o
+obj-m += synx-driver.o
+synx-driver-objs := synx/synx.o synx/synx_util.o synx/synx_debugfs.o
+endif
+
+
