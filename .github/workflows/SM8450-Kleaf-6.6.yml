@@ -256,6 +256,7 @@ jobs:
             --cpu=arm64 \
             --repo_manifest="$KP:$RUNNER_TEMP/kleaf-manifest.xml" \
             --config=stamp \
+            --debug_make_verbosity=I \
             "${LTO_ARGS[@]}" \
             --//vendor/xiaomi/sm8450-modules/qcom/opensource/audio-kernel:target_product=$DEVICE \
             //vendor/xiaomi/sm8450-build:sm8450_dist \
