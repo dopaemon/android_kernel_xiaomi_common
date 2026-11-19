@@ -19,6 +19,7 @@
 #   MODULE_LISTS  directory with modules.load{,.vendor_boot} and modules.blocklist*
 #   KP            kernel/platform/kernel-6.6 root (prebuilts)
 #   OUT           AnyKernel3 staging directory
+#   DEVICE        device the zip is for (picks its overclock variants)
 # Optional:
 #   KERNEL_IMAGE  Image for boot (default: $DIST/Image)
 
@@ -218,7 +219,17 @@ else
   printf '  %s\n' "${DTBS[@]##*/}"
   cat "${DTBS[@]}" > "$WORK/dtb.img"
 
-  mapfile -t GPU_DTBS < <(find "$DIST" -maxdepth 1 -type f -name '*-gpu-*.dtb' | sort)
+  # Only offer the tables of the SoC this zip's device runs on, named by
+  # its board overlay (<device>-sm8450-* waipio, sm8475 cape, sm7475 ukee).
+  case $(basename "$(find "$DIST" -maxdepth 1 -name "${DEVICE:-none}-*-overlay.dtbo" | head -1)") in
+    *-sm8450-*) DEVICE_SOC=waipio;;
+    *-sm8475-*) DEVICE_SOC=cape;;
+    *-sm7475-*) DEVICE_SOC=ukee;;
+    *) DEVICE_SOC=;;
+  esac
+  echo "device ${DEVICE:-?}: SoC ${DEVICE_SOC:-unknown}"
+  GPU_DTBS=()
+  [ -z "$DEVICE_SOC" ] || mapfile -t GPU_DTBS < <(find "$DIST" -maxdepth 1 -type f -name "$DEVICE_SOC-gpu-*.dtb" | sort)
   for gpu in "${GPU_DTBS[@]}"; do
     variant=${gpu##*-gpu-}; variant=${variant%.dtb}
     base=${gpu%-gpu-*}.dtb
@@ -249,7 +260,10 @@ else
   echo "dtbo.img:"
   make_dtbo "$OUT/dtbo.img" "${DTBOS[@]}"
 
-  mapfile -t OC_DTBOS < <(find "$DIST" -maxdepth 1 -type f -name '*-overlay-oc*.dtbo' | sort)
+  # Only this zip's device gets its variants, so the installer offers
+  # them on that device alone.
+  OC_DTBOS=()
+  [ -z "${DEVICE:-}" ] || mapfile -t OC_DTBOS < <(find "$DIST" -maxdepth 1 -type f -name "$DEVICE-*-overlay-oc*.dtbo" | sort)
   for oc in "${OC_DTBOS[@]}"; do
     variant=${oc##*-overlay-}; variant=${variant%.dtbo}
     base=${oc%-overlay-*}-overlay.dtbo
@@ -258,6 +272,7 @@ else
     echo "dtbo-$variant.img:"
     make_dtbo "$OUT/dtbo-oc/dtbo-$variant.img" "${DTBOS[@]/#$base/$oc}"
   done
+  [ "${#OC_DTBOS[@]}" -gt 0 ] || echo "no display overclock variants for ${DEVICE:-?}"
 fi
 
 log "vendor_dlkm.img / system_dlkm.img"
