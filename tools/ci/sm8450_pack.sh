@@ -3,8 +3,8 @@
 #
 # Turn the Kleaf dist of //vendor/xiaomi/sm8450-build:sm8450_dist into an
 # AnyKernel3 payload: boot Image, vendor_boot dtb and ramdisk modules,
-# dtbo.img (plus the dtbo-oc/ display overclock variants), vendor_dlkm.img
-# and system_dlkm.img.
+# dtbo.img (plus the dtbo-oc/ display overclock and dtb-gpu/ GPU
+# undervolt/overclock variants), vendor_dlkm.img and system_dlkm.img.
 #
 # Module staging mirrors vendor/lineage/build/tasks/kernel.mk
 # (build-image-kernel-modules-lineage) for TARGET_KERNEL_PLATFORM_TARGET
@@ -210,7 +210,23 @@ log "dtb / dtbo"
 if [ -f "$DIST/dtb.img" ]; then
   cp "$DIST/dtb.img" "$WORK/dtb.img"
 else
-  find "$DIST" -maxdepth 1 -type f -name '*.dtb' | sort | xargs cat > "$WORK/dtb.img"
+  # <base>-gpu-<name>.dtb are optional GPU undervolt/overclock variants of
+  # <base>.dtb: the default dtb leaves them out and dtb-gpu/dtb-gpu-<name>
+  # swaps them in, for the installer to offer.
+  mapfile -t DTBS < <(find "$DIST" -maxdepth 1 -type f -name '*.dtb' ! -name '*-gpu-*.dtb' | sort)
+  [ "${#DTBS[@]}" -gt 0 ] || { echo "no dtb produced" >&2; exit 1; }
+  printf '  %s\n' "${DTBS[@]##*/}"
+  cat "${DTBS[@]}" > "$WORK/dtb.img"
+
+  mapfile -t GPU_DTBS < <(find "$DIST" -maxdepth 1 -type f -name '*-gpu-*.dtb' | sort)
+  for gpu in "${GPU_DTBS[@]}"; do
+    variant=${gpu##*-gpu-}; variant=${variant%.dtb}
+    base=${gpu%-gpu-*}.dtb
+    [ -f "$base" ] || { echo "no $(basename "$base") for $(basename "$gpu")" >&2; exit 1; }
+    mkdir -p "$OUT/dtb-gpu"
+    echo "dtb-gpu-$variant: $(basename "$gpu") instead of $(basename "$base")"
+    cat "${DTBS[@]/#$base/$gpu}" > "$OUT/dtb-gpu/dtb-gpu-$variant"
+  done
 fi
 [ -s "$WORK/dtb.img" ] || { echo "no dtb produced" >&2; exit 1; }
 # make_dtbo <out.img> <dtbo>...

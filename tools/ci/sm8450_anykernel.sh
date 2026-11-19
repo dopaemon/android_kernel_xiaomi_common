@@ -67,71 +67,137 @@ vol_key() {
   echo $key;
 }
 
+# menu <title> <option>...: Vol+ steps through the options, Vol- picks the
+# shown one. Sets $choice (1 = first option, also without key input) and
+# $key ("none" when there is no key input).
+menu() {
+  local title=$1 n label;
+  shift;
+  n=$#;
+  choice=1;
+  eval "label=\"\$$choice\"";
+  ui_print " " "$title" "  Vol+ = next option, Vol- = select" "> $label";
+  while true; do
+    key=$(vol_key);
+    case $key in
+      up) choice=$((choice % n + 1));
+        eval "label=\"\$$choice\"";
+        ui_print "> $label";;
+      none) choice=1;
+        ui_print "  No key input, using the default";
+        break;;
+      *) break;;
+    esac;
+  done;
+}
+
+# confirm <warning line>...: show the warning and disclaimer, return 0 when
+# Vol- accepts it; on Vol+ or without key input return 1
+confirm() {
+  ui_print " " "$@" \
+    "You use it entirely at your own risk: DoraCore" \
+    "and its developers take NO responsibility for" \
+    "any damage, data loss or voided warranty." \
+    " " \
+    "  Vol- = I accept the risk, use it" \
+    "  Vol+ = go back to the menu";
+  key=$(vol_key);
+  case $key in
+    down) ui_print " " "Accepted.";
+      return 0;;
+    up) ui_print " " "Back to the menu.";;
+  esac;
+  return 1;
+}
+
+# pick <title> <warning function> <option>...: menu, then confirm every
+# option but the first (default) one; sets $choice
+pick() {
+  local title=$1 warn=$2;
+  shift 2;
+  while true; do
+    menu "$title" "$@";
+    [ $choice = 1 ] && return;
+    eval "$warn" && return;
+    [ "$key" = none ] && { choice=1; return; };
+  done;
+}
+
+has_keys() {
+  command -v getevent >/dev/null 2>&1 && return 0;
+  ui_print " " "No key input in this recovery, keeping the default $1";
+  return 1;
+}
+
 # display refresh rate: the default dtbo.img or one of the overclocked
 # variants the CI put in dtbo-oc/ (only built for some devices)
-oc_label() {
-  case $1 in
-    1) echo "Default (60/120 Hz)";;
-    2) echo "144 Hz (overclock)";;
-    3) echo "All: 144 Hz + 156 Hz (overclock)";;
-  esac;
-}
 oc_warning() {
-  ui_print " " \
-    "!!!!!!!!!! WARNING: DISPLAY OVERCLOCK !!!!!!!!!!" \
-    "$(oc_label $1) drives the panel beyond its" \
-    "rated 120 Hz with a higher DSI clock" \
-    "(998.4 MHz at 144 Hz, 1331.2 MHz at 156 Hz)." \
-    "It can cause colour shift, flicker, artifacts," \
-    "more heat and battery drain or a black screen," \
-    "and lasting damage to the panel cannot be ruled" \
-    "out. You use it entirely at your own risk:" \
-    "DoraCore and its developers take NO" \
-    "responsibility for any damage or data loss." \
-    "If the screen stays black, flash this zip again" \
-    "from recovery and choose Default." \
-    " " \
-    "  Vol- = I accept the risk, use the overclock" \
-    "  Vol+ = go back to the refresh rate menu";
-}
-if [ -f $AKHOME/dtbo-oc/dtbo-oc144.img -a -f $AKHOME/dtbo-oc/dtbo-ocall.img ]; then
-  oc=1;
-  if command -v getevent >/dev/null 2>&1; then
-    while true; do
-      ui_print " " "Display refresh rate:" \
-        "  Vol+ = next option, Vol- = select" \
-        "> $(oc_label $oc)";
-      key=;
-      while true; do
-        key=$(vol_key);
-        case $key in
-          up) oc=$((oc % 3 + 1)); ui_print "> $(oc_label $oc)";;
-          *) break;;
-        esac;
-      done;
-      [ "$key" = none ] && oc=1;
-      [ $oc = 1 ] && break;
-      oc_warning $oc;
-      key=$(vol_key);
-      case $key in
-        down) ui_print " " "Overclock accepted.";
-          break;;
-        up) ui_print " " "Back to the refresh rate menu.";;
-        *) oc=1;
-          break;;
-      esac;
-    done;
-    [ "$key" = none ] && ui_print "  Key input stopped, using the default";
-  else
-    ui_print " " "No key input in this recovery, using the default refresh rate";
-  fi;
-  case $oc in
-    2) cp -f $AKHOME/dtbo-oc/dtbo-oc144.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";;
-    3) cp -f $AKHOME/dtbo-oc/dtbo-ocall.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";;
+  case $choice in
+    2) label="144 Hz";;
+    *) label="144 Hz and 156 Hz";;
   esac;
-  ui_print "Display refresh rate: $(oc_label $oc)";
+  confirm "!!!!!!!!!! WARNING: DISPLAY OVERCLOCK !!!!!!!!!!" \
+    "$label drives the panel beyond its rated" \
+    "120 Hz with a higher DSI clock (998.4 MHz at" \
+    "144 Hz, 1331.2 MHz at 156 Hz). It can cause" \
+    "colour shift, flicker, artifacts, more heat and" \
+    "battery drain or a black screen, and lasting" \
+    "damage to the panel cannot be ruled out." \
+    "If the screen stays black, flash this zip again" \
+    "from recovery and choose Default.";
+}
+if [ -f $AKHOME/dtbo-oc/dtbo-oc144.img -a -f $AKHOME/dtbo-oc/dtbo-ocall.img ] && has_keys "refresh rate"; then
+  pick "Display refresh rate:" oc_warning \
+    "Default (60/120 Hz)" \
+    "144 Hz (overclock)" \
+    "All: 144 Hz + 156 Hz (overclock)";
+  case $choice in
+    2) cp -f $AKHOME/dtbo-oc/dtbo-oc144.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";
+      ui_print "Display refresh rate: 144 Hz (overclock)";;
+    3) cp -f $AKHOME/dtbo-oc/dtbo-ocall.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";
+      ui_print "Display refresh rate: 144 Hz + 156 Hz (overclock)";;
+    *) ui_print "Display refresh rate: Default (60/120 Hz)";;
+  esac;
 fi;
 rm -rf $AKHOME/dtbo-oc;
+
+# GPU: the default dtb or one of the undervolt/overclock variants the CI
+# put in dtb-gpu/ (only built for some SoCs)
+gpu_warning() {
+  case $choice in
+    2) label="The undervolt";;
+    3) label="The overclock";;
+    *) label="The undervolt + overclock";;
+  esac;
+  confirm "!!!!! WARNING: GPU UNDERVOLT / OVERCLOCK !!!!!" \
+    "$label table runs the Adreno 730 outside" \
+    "Qualcomm's stock voltage/frequency table." \
+    "Undervolting can cause graphics glitches, app" \
+    "crashes, GPU hangs, reboots or a bootloop;" \
+    "overclocking adds heat, battery drain and wear." \
+    "Every chip is different: a table that is stable" \
+    "on one phone may fail on another." \
+    "If the phone crashes or bootloops, flash this" \
+    "zip again from recovery and choose Default.";
+}
+if [ -f $AKHOME/dtb-gpu/dtb-gpu-uv -a -f $AKHOME/dtb-gpu/dtb-gpu-oc -a -f $AKHOME/dtb-gpu/dtb-gpu-uvoc ] && has_keys "GPU table"; then
+  pick "GPU (Adreno 730):" gpu_warning \
+    "Default (stock, 900 MHz)" \
+    "Undervolt (stock 900 MHz, lower voltage)" \
+    "Overclock (912 MHz max)" \
+    "Undervolt + overclock (912 MHz max)";
+  case $choice in
+    2) gpu=uv; label="Undervolt";;
+    3) gpu=oc; label="Overclock";;
+    4) gpu=uvoc; label="Undervolt + overclock";;
+    *) gpu=; label="Default";;
+  esac;
+  if [ "$gpu" ]; then
+    cp -f $AKHOME/dtb-gpu/dtb-gpu-$gpu $AKHOME/vendor_boot-files/dtb || abort "Selecting dtb failed. Aborting...";
+  fi;
+  ui_print "GPU: $label";
+fi;
+rm -rf $AKHOME/dtb-gpu;
 
 # boot install: only the kernel (boot-files/Image) changes, the generic
 # ramdisk (and Magisk/KernelSU in it) is kept as is
