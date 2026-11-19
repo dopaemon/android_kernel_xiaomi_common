@@ -54,6 +54,13 @@ if [ -z "$AVBTOOL" ]; then
   fetch_googlesource platform/external/avb avbtool.py "$WORK/avbtool.py"
   AVBTOOL="python3 $WORK/avbtool.py"
 fi
+# avbtool add_hashtree_footer runs "fec" from PATH for the FEC data.  Expose
+# only the prebuilt fec, so host e2fsprogs/kmod/lz4 stay the ones in use.
+FEC=$(find_tool fec || true)
+[ -n "$FEC" ] || { echo "fec not found (needed by avbtool add_hashtree_footer)" >&2; exit 1; }
+mkdir -p "$WORK/bin"
+ln -sf "$FEC" "$WORK/bin/fec"
+export PATH="$WORK/bin:$PATH"
 MKDTBOIMG=$(find_tool mkdtboimg || find_tool mkdtimg || true)
 if [ -z "$MKDTBOIMG" ]; then
   fetch_googlesource platform/system/libufdt utils/src/mkdtboimg.py "$WORK/mkdtboimg.py"
