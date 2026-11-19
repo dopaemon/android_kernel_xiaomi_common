@@ -7,9 +7,11 @@
 #
 # Module staging mirrors vendor/lineage/build/tasks/kernel.mk
 # (build-image-kernel-modules-lineage) for TARGET_KERNEL_PLATFORM_TARGET
-# with TARGET_KERNEL_MIXED_MODE, using the module lists the DoraCore tree
-# carries in vendor/xiaomi/sm8450-common.  boot and vendor_boot are patched on the
-# device by AnyKernel3, so their ramdisks never leave the phone.
+# using the module lists the DoraCore tree carries in
+# vendor/xiaomi/sm8450-common.  The Image and every module come from the
+# one standalone waipio_perf build, so they always match each other.
+# boot and vendor_boot are patched on the device by AnyKernel3, so their
+# ramdisks never leave the phone.
 #
 # Required environment:
 #   DIST          Kleaf dist directory (Image, *.ko, *.dtb, *.dtbo, ...)
@@ -174,9 +176,12 @@ make_ext4() {
 }
 
 log "Module lists"
-SYSTEM_LOAD=$DIST/system_dlkm.modules.load
-[ -f "$SYSTEM_LOAD" ] || { echo "missing $SYSTEM_LOAD (mixed build)" >&2; exit 1; }
-xargs -rn1 basename < "$SYSTEM_LOAD" | sort -u > "$WORK/system.list"
+# Standalone build: the GKI module list names the system_dlkm modules.
+# (A mixed build ships system_dlkm.modules.load from kernel_aarch64.)
+SYSTEM_LOAD=$DIST/gki_system_dlkm_modules_arm64
+[ -f "$SYSTEM_LOAD" ] || SYSTEM_LOAD=$DIST/system_dlkm.modules.load
+[ -f "$SYSTEM_LOAD" ] || { echo "no system_dlkm module list in $DIST" >&2; exit 1; }
+read_list "$SYSTEM_LOAD" | sort -u > "$WORK/system.list"
 find "$DIST" -maxdepth 1 -type f -name '*.ko' -printf '%f\n' | sort > "$WORK/all.list"
 comm -23 "$WORK/all.list" "$WORK/system.list" > "$WORK/vendor.list"
 read_list "$MODULE_LISTS/modules.load.vendor_boot" > "$WORK/vendor_boot.list"
