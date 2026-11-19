@@ -42,26 +42,33 @@ def body(lines):
     cut = min(tabs) if tabs else 0
     return ['\t\t\t' + l[cut:] if l.strip() else '' for l in lines]
 
-for hz, clk, node in ((144, 998400000, 3), (156, 1331200000, 4)):
+# name: overclock step (file name); clk: DSI panel clock; xfer: MDP transfer
+# time; fps: the declared frame rate, which is the TE rate the panel was
+# measured to run at with that clock and transfer time (144 -> 145.6 Hz,
+# 156 -> 155.0 Hz), so that SurfaceFlinger and the display HAL pace frames
+# on the panel's real vsync instead of drifting by a frame every second.
+for name, fps, clk, xfer, node in ((144, 146, 998400000, 6340, 3),
+                                   (156, 155, 1331200000, 5810, 4)):
+    hz = fps
     q = '\n'.join(qcom_part)
     q, n1 = re.subn(r'qcom,mdss-dsi-panel-framerate = <120>;', 'qcom,mdss-dsi-panel-framerate = <%d>;' % hz, q)
     q, n2 = re.subn(r'qcom,mdss-dsi-panel-clockrate = <832000000>;', 'qcom,mdss-dsi-panel-clockrate = <%d>;' % clk, q)
     if n1 != 1 or n2 != 1:
         sys.exit('120 Hz timing does not have the expected framerate/clockrate')
-    # The 120 Hz transfer time (7000 us) is longer than a 144/156 Hz frame,
-    # so the DSI driver drops it and derives one from the DSI clock instead
-    # (3920 us at 156 Hz), which needs more than the 500 MHz MDP clock:
-    # SDM then fails every composition and the screen stays black. Give
-    # each overclocked timing its own transfer time, 600 us short of the
-    # frame, to keep the MDP clock well below that limit.
-    xfer = (1000000 // hz - 600) // 10 * 10
+    # The 120 Hz transfer time (7000 us) is longer than an overclocked
+    # frame, so the DSI driver drops it and derives one from the DSI clock
+    # instead (3920 us at 156 Hz), which needs more than the 500 MHz MDP
+    # clock: SDM then fails every composition and the screen stays black.
+    # Each overclocked timing gets its own transfer time, about 600 us short
+    # of the frame, to keep the MDP clock well below that limit.
     q, n3 = re.subn(r'qcom,mdss-mdp-transfer-time-us = <\d+>;', 'qcom,mdss-mdp-transfer-time-us = <%d>;' % xfer, q)
     if n3 != 1:
         sys.exit('120 Hz timing does not have qcom,mdss-mdp-transfer-time-us')
     lines = [
         '/*',
-        ' * DoraCore: %d Hz display overclock for the mayfly' % hz,
-        ' * "xiaomi 42 02 0a mp cmd mode dsc dsi panel".',
+        ' * DoraCore: %d Hz display overclock for the mayfly' % name,
+        ' * "xiaomi 42 02 0a mp cmd mode dsc dsi panel", declared as %d Hz:' % fps,
+        ' * the TE rate the panel was measured to run at with these settings.',
         ' *',
         ' * Copy of the 120 Hz timing@1 with the frame rate, the DSI panel',
         ' * clock (%d Hz) and the MDP transfer time (%d us) changed, as the' % (clk, xfer),
@@ -84,5 +91,5 @@ for hz, clk, node in ((144, 998400000, 3), (156, 1331200000, 4)):
     lines += body(board_part)
     lines += ['\t\t};', '\t};', '};', '']
     out = re.sub(r'\n{3,}', '\n\n', '\n'.join(lines))
-    open('%s/mayfly-panel-oc-%dhz.dtsi' % (outdir, hz), 'w').write(out)
-    print('wrote', hz, len(out.split('\n')), 'lines')
+    open('%s/mayfly-panel-oc-%dhz.dtsi' % (outdir, name), 'w').write(out)
+    print('wrote', name, fps, len(out.split('\n')), 'lines')
