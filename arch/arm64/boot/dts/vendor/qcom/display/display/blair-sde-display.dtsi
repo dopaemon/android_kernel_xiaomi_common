@@ -1,0 +1,165 @@
+#include <dt-bindings/clock/qcom,dispcc-blair.h>
+#include "blair-sde-display-common.dtsi"
+
+&soc {
+	display_panel_vci: display_gpio_regulator@0 {
+		compatible = "qti-regulator-fixed";
+		regulator-name = "display_panel_vci";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+		regulator-enable-ramp-delay = <233>;
+		gpio = <&tlmm 24 0>;
+		enable-active-high;
+		regulator-boot-on;
+		proxy-supply = <&display_panel_vci>;
+		qcom,proxy-consumer-enable;
+		pinctrl-names = "default";
+		pinctrl-0 = <&display_panel_vci_default>;
+	};
+
+	display_panel_avdd: display_gpio_regulator@1 {
+		status= "disabled";
+		compatible = "qti-regulator-fixed";
+		regulator-name = "display_panel_avdd";
+		regulator-min-microvolt = <5500000>;
+		regulator-max-microvolt = <5500000>;
+		regulator-enable-ramp-delay = <233>;
+		gpio = <&tlmm 47 0>;
+		enable-active-high;
+		regulator-boot-on;
+		proxy-supply = <&display_panel_avdd>;
+		qcom,proxy-consumer-enable;
+		pinctrl-names = "default";
+		pinctrl-0 = <&display_panel_avdd_default>;
+	};
+
+	display_panel_dvdd: display_gpio_regulator@2 {
+		compatible = "qti-regulator-fixed";
+		regulator-name = "display_panel_dvdd";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		regulator-enable-ramp-delay = <233>;
+		gpio = <&tlmm 47 0>;
+		enable-active-high;
+		regulator-boot-on;
+		proxy-supply = <&display_panel_dvdd>;
+		qcom,proxy-consumer-enable;
+		pinctrl-names = "default";
+		pinctrl-0 = <&display_panel_avdd_default>;
+	};
+
+	display_panel_ibb: display_panel_ibb_stub {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "display_panel_ibb";
+		regulator-min-microvolt = <4600000>;
+		regulator-max-microvolt = <6000000>;
+	};
+
+	display_panel_lab: display_panel_lab_stub {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "display_panel_lab";
+		regulator-min-microvolt = <4600000>;
+		regulator-max-microvolt = <6000000>;
+	};
+
+	disp_rdump_memory: disp_rdump_region@85200000 {
+		reg = <0x85200000  0x00c00000>;
+		label = "disp_rdump_region";
+	};
+};
+
+&sde_dsi {
+	clocks = <&mdss_dsi_phy0 0>,
+		<&mdss_dsi_phy0 1>,
+		/*
+		 * Currently the dsi clock handles are under the dsi
+		 * controller DT node. As soon as the controller probe
+		 * finishes, the dispcc sync state can get called before
+		 * the dsi_display probe potentially disturbing the clock
+		 * votes for cont_splash use case. Hence we are no longer
+		 * protected by the component model in this case against the
+		 * disp cc sync state getting triggered after the dsi_ctrl
+		 * probe. To protect against this incorrect sync state trigger
+		 * add this dummy MDP clk vote handle to the dsi_display
+		 * DT node. Since the dsi_display driver does not parse
+		 * MDP clock nodes, no actual vote shall be added and this
+		 * change is done just to satisfy sync state requirements.
+		 */
+		<&dispcc DISP_CC_MDSS_MDP_CLK>;
+
+	clock-names = "pll_byte_clk0",
+			"pll_dsi_clk0",
+			"mdp_core_clk";
+
+	vddio-supply = <&L13A>;
+	vci-supply = <&display_panel_vci>;
+	avdd-supply = <&display_panel_avdd>;
+	dvdd-supply = <&display_panel_dvdd>;
+	ibb-supply = <&display_panel_ibb>;
+	lab-supply = <&display_panel_lab>;
+};
+
+&reserved_memory {
+	splash_memory: splash_region {
+		reg = <0x0 0x85200000 0x0 0x00c00000>;
+		label = "cont_splash_region";
+	};
+};
+
+&mdss_mdp {
+	connectors = <&sde_dsi &smmu_sde_unsec &smmu_sde_sec>;
+};
+
+&dsi_sim_dsc_375_cmd {
+	qcom,ulps-enabled;
+};
+
+&dsi_sim_dsc_10b_cmd {
+	qcom,ulps-enabled;
+};
+
+&dsi_rm69299_visionox_amoled_cmd {
+	qcom,ulps-enabled;
+};
+
+&dsi_r66451_amoled_cmd {
+	qcom,ulps-enabled;
+};
+
+&dsi_r66451_amoled_90hz_cmd {
+	qcom,ulps-enabled;
+};
+
+&dsi_r66451_amoled_60hz_cmd {
+	qcom,ulps-enabled;
+};
+
+&dsi_vtdr6130_amoled_cmd {
+	qcom,ulps-enabled;
+
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,partial-update-enabled = "single_roi";
+			qcom,panel-roi-alignment = <540 40 40 40 1080 40>;
+		};
+
+		timing@1 {
+			qcom,partial-update-enabled = "single_roi";
+			qcom,panel-roi-alignment = <540 40 40 40 1080 40>;
+		};
+
+		timing@2 {
+			qcom,partial-update-enabled = "single_roi";
+			qcom,panel-roi-alignment = <540 40 40 40 1080 40>;
+		};
+
+		timing@3 {
+			qcom,partial-update-enabled = "single_roi";
+			qcom,panel-roi-alignment = <540 40 40 40 1080 40>;
+		};
+	};
+};
+
+&dsi_vtdr6130_amoled_qsync_144hz_cmd {
+	qcom,ulps-enabled;
+};

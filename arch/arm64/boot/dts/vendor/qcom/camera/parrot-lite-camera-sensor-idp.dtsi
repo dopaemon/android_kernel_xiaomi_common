@@ -1,0 +1,17 @@
+&soc {
+	qcom,camera-flash@3 {
+		status = "disabled";
+	};
+};
+
+&cam_cci1 {
+        qcom,cam-sensor1 {
+		status = "disabled";
+	};
+	qcom,eeprom1 {
+		status = "disabled";
+	};
+	qcom,actuator1 {
+		status = "disabled";
+	};
+};

@@ -1,0 +1,538 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/clock/qcom,gcc-kera.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/spmi/spmi.h>
+
+&sdhc_2 {
+	vdd-supply = <&L13B>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 976270>;
+
+	vdd-io-supply = <&L23B>;
+	qcom,vdd-io-voltage-level = <1800000 2960000>;
+	qcom,vdd-io-current-level = <0 5830>;
+
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&sdc2_on>;
+	pinctrl-1 = <&sdc2_off>;
+
+	cd-gpios = <&tlmm 58 GPIO_ACTIVE_LOW>;
+
+	qcom,uses_level_shifter;
+
+	status = "ok";
+};
+
+&wcd_usbss {
+	interrupt-parent = <&spmi_bus>;
+	interrupts = <0x0 0xb6 0x1 IRQ_TYPE_EDGE_BOTH>;
+	interrupt-names = "usb_wcd";
+	nvmem-cells = <&usb_mode>;
+	nvmem-cell-names = "usb_mode";
+	status = "ok";
+};
+
+&soc {
+	touch_panel_extavdd: touch_gpio_regulator@1 {
+		compatible = "qti-regulator-fixed";
+		regulator-name = "touch_panel_extavdd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-enable-ramp-delay = <233>;
+		gpio = <&tlmm 3 0>;
+		enable-active-high;
+		regulator-boot-on;
+		proxy-supply = <&touch_panel_extavdd>;
+		qcom,proxy-consumer-enable;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touch_panel_extavdd_default>;
+	};
+};
+
+&tlmm {
+	pmx_ts_int_default {
+		ts_int_default: ts_int_default {
+			mux {
+				pins = "gpio13";
+				function = "gpio";
+			};
+
+			config {
+				drive-strength = <16>;
+				/* bias-pull-up; */   /* Enable if needed */
+				input-enable;
+				bias-disable;
+			};
+		};
+	};
+
+	pmx_ts_gtp_active: pmx_ts_gtp_active {
+		mux {
+			pins = "gpio3";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio3";
+			drive-strength = <8>;    /* 8 mA */
+			bias-disable = <0>;      /* no pull */
+		};
+	};
+
+	pmx_ts_gtp_suspend: pmx_ts_gtp_suspend {
+		mux {
+			pins = "gpio3";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio3";
+			drive-strength = <2>;    /* 2 mA */
+			bias-pull-down;          /* PULL DOWN */
+		};
+	};
+
+	pmx_ts_int_output_high {
+		ts_int_output_high: ts_int_output_high {
+			mux {
+				pins = "gpio13";
+				function = "gpio";
+			};
+
+			config {
+				output-high;
+			};
+		};
+	};
+
+	pmx_ts_int_output_low {
+		ts_int_output_low: ts_int_output_low {
+			mux {
+				pins = "gpio13";
+				function = "gpio";
+			};
+
+			config {
+				output-low;
+			};
+		};
+	};
+
+	pmx_ts_int_input {
+		ts_int_input: ts_int_input {
+			mux {
+				pins = "gpio13";
+				function = "gpio";
+			};
+
+
+			config {
+				input-enable;
+				/* bias-pull-up; */   /* Good if IRQ floats */
+				bias-disable;
+			};
+		};
+	};
+	/* --- Touch Panel Regulator --- */
+	touch_panel_extavdd_default: touch_panel_extavdd_default {
+		mux {
+			pins = "gpio3";
+			function = "gpio";
+		};
+
+		config {
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+		};
+	};
+};
+
+&qupv3_se8_i2c {
+	status = "okay";
+	gt9xx-i2c@14 {
+		compatible = "goodix,gt928";
+		reg = <0x14>;
+		status = "okay";
+		interrupt-parent = <&tlmm>;
+		pinctrl-names = "default", "int-output-low", "int-output-high", "int-input";
+		pinctrl-0 = <&ts_int_default>;
+		pinctrl-1 = <&ts_int_output_low>;
+		pinctrl-2 = <&ts_int_output_high>;
+		pinctrl-3 = <&ts_int_input>;
+
+		interrupts = <13 0x2800>;
+		reset-gpios = <&tlmm 16 GPIO_ACTIVE_LOW>;
+		irq-gpios   = <&tlmm 13 GPIO_ACTIVE_LOW>;
+		irq-flags = <2>;
+		vdd_ana-supply = <&touch_panel_extavdd>;
+
+		touchscreen-max-id = <11>;
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <1920>;
+		touchscreen-max-w  = <1024>;
+		touchscreen-max-p  = <1024>;
+		// touchscreen-key-map = <172>, <158>; /* KEY_HOMEPAGE, KEY_BACK */
+
+		goodix,type-a-report = <0>;
+		goodix,driver-send-cfg = <1>;
+		goodix,create-wr-node = <1>;
+		goodix,wakeup-with-reset = <0>;
+		goodix,resume-in-workqueue = <0>;
+		goodix,int-sync = <1>;
+		goodix,swap-x2y = <0>;
+		goodix,esd-protect = <1>;
+		goodix,pen-suppress-finger = <0>;
+		goodix,auto-update = <0>;
+		goodix,auto-update-cfg = <0>;
+		goodix,power-off-sleep = <0>;
+
+		goodix,cfg-group0 = [
+			42 38 04 80 07 0A 35 00 01 08 32 05 50 3C 03 05 00 00 00 00 00 00 00 18 1A 1E 14 8C 2E 0E
+			32 34 7F 08 00 00 01 BB 02 1D 00 00 00 00 00 03 64 32 00 00 00 23 46 94 C5 02 00 00 00 00
+			A7 25 00 92 2B 00 82 31 00 74 38 00 66 41 00 66 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+			00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 1C 1A 18 16 14 12 10 0E
+			0C 0A 08 06 04 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 04 06 08 0A 0C 0F
+			10 12 13 14 16 2A 29 28 26 24 22 21 20 1F 1E 1D 1C 18 00 00 00 00 00 00 00 00 00 00 00 00
+			00 00 00 00 82 01
+		];
+	};
+};
+
+&qupv3_se8_spi {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	status = "disabled";
+	qcom,touch-active = "goodix,gt9916S";
+	qcom,la-vm;
+
+	goodix-berlin@0 {
+		status = "disabled";
+		compatible = "goodix,gt9916S";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <13 0x2008>;
+		goodix,reset-gpio = <&tlmm 16 0x00>;
+		goodix,irq-gpio = <&tlmm 13 0x2008>;
+		goodix,irq-flags = <2>;
+		goodix,panel-max-x = <1080>;
+		goodix,panel-max-y = <2400>;
+		goodix,panel-max-w = <255>;
+		goodix,panel-max-p = <4096>;
+		goodix,firmware-name = "goodix_firmware_spi.bin";
+		goodix,config-name = "goodix_cfg_group_spi.bin";
+		goodix,avdd-name = "avdd";
+		goodix,iovdd-name = "iovdd";
+		avdd-supply = <&L22B>;
+		iovdd-supply = <&L8B>;
+		goodix,touch-type = "primary";
+		goodix,qts_en;
+
+		qts,trusted-touch-mode = "vm_mode";
+		qts,touch-environment = "pvm";
+		qts,trusted-touch-type = "primary";
+		qts,trusted-touch-spi-irq = <653>;
+		qts,trusted-touch-io-bases = <0x880000>;
+		qts,trusted-touch-io-sizes = <0x1000>;
+		qts,trusted-touch-vm-gpio-list = <&tlmm 0 0 &tlmm 1 0 &tlmm 2 0
+						&tlmm 3 0 &tlmm 16 0 &tlmm 13 0x2008>;
+	};
+};
+
+&pmxr2230_sys_therm_11 {
+	status = "disabled";
+};
+
+&sys_therm_11 {
+	status = "disabled";
+};
+
+&pm8550ve_f_die_temp {
+	status = "disabled";
+};
+
+&usb0 {
+	qcom,wcd_usbss = <&wcd_usbss>;
+};
+
+&regulator_ocp_notifier {
+	periph-1c1-supply = <&L1B>;
+	periph-1c2-supply = <&L2B>;
+	periph-1c3-supply = <&L3B_LEVEL>;
+	periph-1c4-supply = <&L4B>;
+	periph-1c5-supply = <&L5B>;
+	periph-1c6-supply = <&L6B>;
+	periph-1c7-supply = <&L7B>;
+	periph-1c8-supply = <&L8B>;
+	periph-1c9-supply = <&L9B>;
+	periph-1ca-supply = <&L10B>;
+	periph-1cb-supply = <&L11B>;
+	periph-1cc-supply = <&L12B>;
+	periph-1cd-supply = <&L13B>;
+	periph-1ce-supply = <&L14B>;
+	periph-1cf-supply = <&L15B>;
+	periph-1d0-supply = <&L16B>;
+	periph-1d1-supply = <&L17B>;
+	periph-1d2-supply = <&L18B>;
+	periph-1d3-supply = <&L19B>;
+	periph-1d4-supply = <&L20B>;
+	periph-1d5-supply = <&L21B>;
+	periph-1d6-supply = <&L22B>;
+	periph-1d7-supply = <&L23B>;
+	periph-19b-supply = <&S1B>;
+	periph-19e-supply = <&S2B>;
+	periph-1a1-supply = <&S3B>;
+	periph-1a2-supply = <&S4B>;
+	periph-1e4-supply = <&BOB>;
+	periph-3c1-supply = <&L1D>;
+	periph-3c2-supply = <&L2D>;
+	periph-3c3-supply = <&L3D_LEVEL>;
+	periph-39b-supply = <&S1D_LEVEL>;
+	periph-3a1-supply = <&S3D_LEVEL>;
+	periph-3a2-supply = <&S4D_LEVEL>;
+	periph-3a3-supply = <&S5D_LEVEL>;
+	periph-6c1-supply = <&L1G>;
+	periph-6c2-supply = <&L2G>;
+	periph-6c3-supply = <&L3G>;
+};
+
+&pcie0 {
+	status = "ok";
+	qcom,boot-option = <0x1>;
+};
+
+&apps_rsc_drv2 {
+	lgn_vreg: lgn_vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "lgn_vreg";
+		gpio = <&expander0 6 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+	};
+
+	qep_vreg: qep_vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "qep_vreg";
+		gpio = <&expander0 0 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+	};
+};
+
+&qupv3_se4_i2c {
+	status = "ok";
+	expander0: pca953x@38 {
+		compatible = "ti,tca9538";
+		#gpio-cells = <2>;
+		gpio-controller;
+		reg = <0x38>;
+	};
+
+	expander1: pca953x@3C {
+		compatible = "ti,tca9538";
+		#gpio-cells = <2>;
+		gpio-controller;
+		reg = <0x3C>;
+
+		io-exp-hog6 {
+			gpio-hog;
+			gpios = <6 GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "keye_pwr_en";
+		};
+	};
+
+	expander2: pca953x@20 {
+		compatible = "ti,tca9539";
+		#gpio-cells = <2>;
+		gpio-controller;
+		reg = <0x20>;
+	};
+
+	expander3: pca953x@21 {
+		compatible = "ti,tca9539";
+		#gpio-cells = <2>;
+		gpio-controller;
+		reg = <0x21>;
+	};
+
+	pcie1_i2c_ctrl: pcie1_i2c_ctrl {
+		compatible = "qcom,pcie-i2c-ntn3";
+		rc-index = <0x1>;
+		reg = <0x77>;
+		gpio-config-reg = <0x801208>;
+		ep-reset-reg = <0x801210>;
+		ep-reset-gpio-mask = <0xc>;
+		version-reg = <0x800000>;
+		dump-regs = <0x801330 0x801350 0x801370>;
+		reg_update = <0x82c030 0x1
+					0x828000 0x3
+					0x82bd00 0x8
+					0x82c030 0x2
+					0x828000 0x3
+					0x82bd00 0x8
+					0x82c030 0x8
+					0x828000 0x1
+					0x82bd00 0x8
+					0x82c01c 0x10
+					0x82c030 0xf
+					0x828000 0xf
+					0x82b268 0x2>;
+		/*FOM for preset caluclation*/
+		switch_reg_update = <0x82c02c 0x00000007
+					0x824a10 0x00000001
+					0x82c030 0x00000008
+					0x828000 0x00000001
+					0x82b074 0x00000020
+					0x82b2bc 0x00000001
+					0x801208 0xFFFFFFF0
+					0x801210 0x4>;
+	};
+};
+
+&pcie1_msi {
+	status = "ok";
+};
+
+&pcie1 {
+	status = "ok";
+
+	pcie-i2c-phandle = <&qupv3_se4_i2c>;
+	qcom,no-client-based-bw-voting;
+
+	iommu-map = <0x0 &apps_smmu 0x1400 0x1>,
+		<0x100 &apps_smmu 0x1401 0x1>,
+		<0x208 &apps_smmu 0x1402 0x1>,
+		<0x210 &apps_smmu 0x1403 0x1>,
+		<0x218 &apps_smmu 0x1404 0x1>,
+		<0x300 &apps_smmu 0x1405 0x1>,
+		<0x400 &apps_smmu 0x1406 0x1>,
+		<0x500 &apps_smmu 0x1407 0x1>,
+		<0x501 &apps_smmu 0x1408 0x1>;
+};
+
+&pcie1_rp {
+	#address-cells = <5>;
+	#size-cells = <0>;
+	/* BDF 1.0.0 */
+	pcie1_bus1_dev0_fn0: pcie1_bus1_dev0_fn0 {
+		reg = <0 0 0 0 0>;
+
+		/* BDF 2.1.0 */
+		pcie1_bus2_dev1_fn0: pcie1_bus2_dev1_fn0 {
+			reg = <0x800 0x0 0x0 0x0 0x0>;
+		};
+
+		/* BDF 2.2.0 */
+		pcie1_bus2_dev2_fn0: pcie1_bus2_dev2_fn0 {
+			reg = <0x1000 0x0 0x0 0x0 0x0>;
+			/* BDF 4.0.0 */
+			pcie1_bus4_dev0_fn0: pcie1_bus4_dev0_fn0 {
+				reg = <0x0 0x0 0x0 0x0 0x0>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+			};
+		};
+
+		/* BDF 2.3.0 */
+		pcie1_bus2_dev3_fn0: pcie1_bus2_dev3_fn0 {
+			reg = <0x1800 0x0 0x0 0x0 0x0>;
+			qps615_eth0,qps615_eth0@pcie1_rp {
+				reg = <0x0 0x0 0x0 0x0 0x0>;
+				phy-rst-som-gpios = <&expander0 7 GPIO_ACTIVE_HIGH>;
+				qcom,phy-rst-delay-us = <20000>;
+				phy-supply = <&lgn_vreg>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				/* BDF 5.0.0 */
+				qcom,iommu-group = <&eth0_pci_iommu_group>;
+				eth0_pci_iommu_group: eth0_pci_iommu_group {
+					qcom,iommu-dma = "atomic";
+				};
+			};
+
+			qps615_eth1,qps615_eth1@pcie1_rp {
+				reg = <0x100 0x0 0x0 0x0 0x0>;
+				phy-rst-som-gpios = <&expander0 2 GPIO_ACTIVE_HIGH>;
+				qcom,phy-rst-delay-us = <20000>;
+				phy-supply = <&qep_vreg>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				/* BDF 5.0.1 */
+				qcom,iommu-group = <&eth1_pci_iommu_group>;
+				eth1_pci_iommu_group: eth1_pci_iommu_group {
+					qcom,iommu-dma = "atomic";
+				};
+			};
+		};
+	};
+};
+
+// Remove Leica2 regulator for EVK.
+
+&L1N {
+	status = "disabled";
+};
+
+&L2N {
+	status = "disabled";
+};
+
+&L3N {
+	status = "disabled";
+};
+
+&L4N {
+	status = "disabled";
+};
+
+&L5N {
+	status = "disabled";
+};
+
+&L6N {
+	status = "disabled";
+};
+
+&L7N {
+	status = "disabled";
+};
+
+&L1M {
+	status = "disabled";
+};
+
+&L2M {
+	status = "disabled";
+};
+
+&L3M {
+	status = "disabled";
+};
+
+&L4M {
+	status = "disabled";
+};
+
+&L5M {
+	status = "disabled";
+};
+
+&L6M {
+	status = "disabled";
+};
+
+&L7M {
+	status = "disabled";
+};

@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+/dts-v1/;
+
+#include "montague-qmb.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Montague QMB SoC";
+	compatible = "qcom,montague-qmb";
+	qcom,board-id = <0x0 0x0>;
+};
+

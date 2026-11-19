@@ -1,0 +1,23 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,dispcc-scuba.h>
+#include <dt-bindings/clock/qcom,gcc-scuba.h>
+#include <dt-bindings/clock/qcom,gpucc-scuba.h>
+#include <dt-bindings/clock/qcom,rpmcc.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/interconnect/qcom,scuba.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+#include <dt-bindings/soc/qcom,dcc_v2.h>
+#include <dt-bindings/spmi/spmi.h>
+
+#include "scuba-gpu.dtsi"
+#include "scuba-gpu-pwrlevels.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Scuba SoC";
+	compatible = "qcom,scuba", "qcom,scuba-iot", "qcom,idp";
+	qcom,msm-id = <473 0x10000>, <474 0x10000>;
+	qcom,board-id = <0 0>, <34 0>, <0 0x400>, <34 0x400>;
+};

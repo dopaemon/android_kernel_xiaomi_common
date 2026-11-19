@@ -1,0 +1,252 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+#include <dt-bindings/interconnect/qcom,pebble.h>
+
+&pmh0104_c_gpios {
+	icnss_wlan_en_active: icnss_wlan_en_active {
+		pins = "gpio7";
+		function = "normal";
+		qcom,drive-strength = <PMIC_GPIO_STRENGTH_HIGH>;
+		input-disable;
+		output-high;
+		power-source = <1>; /* 1.2 V*/
+	};
+
+	icnss_wlan_en_sleep: icnss_wlan_en_sleep {
+		pins = "gpio7";
+		function = "normal";
+		qcom,drive-strength = <PMIC_GPIO_STRENGTH_LOW>;
+		input-disable;
+		output-low;
+	};
+};
+
+&tlmm {
+	icnss_sw_ctrl: icnss_sw_ctrl {
+		mux {
+			pins = "gpio18";
+			function = "wcn_sw_ctrl";
+		};
+	};
+};
+
+&soc {
+	qcom,smp2p-wpss {
+		pebble_wcn7750_smp2p_wlan_1_in: qcom,smp2p-wlan-1-in {
+			qcom,entry-name = "wlan";
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		};
+
+		pebble_wcn7750_smp2p_wlan_1_out: qcom,smp2p-wlan-1-out {
+			qcom,entry-name = "wlan";
+			#qcom,smem-state-cells = <1>;
+		};
+
+		smp2p_wlan_2_in: qcom,smp2p-wlan-2-in {
+			qcom,entry-name = "wlan_soc_wake";
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		};
+
+		smp2p_wlan_2_out: qcom,smp2p-wlan-2-out {
+			qcom,entry-name = "wlan_soc_wake";
+			#qcom,smem-state-cells = <1>;
+		};
+
+		smp2p_wlan_3_out: qcom,smp2p-wlan-3-out {
+			qcom,entry-name = "wlan_ep_power_save";
+			#qcom,smem-state-cells = <1>;
+		};
+	};
+
+	icnss2_direct_link_iommu_group0: icnss2_direct_link_iommu_group0 {
+		qcom,iommu-geometry = <0x0 0xb0000000 0x0 0x10010000>;
+		qcom,iommu-dma = "fastmap";
+		qcom,iommu-faults = "stall-disable", "HUPCF", "non-fatal";
+	};
+
+	icnss2: qcom,wcn7750 {
+		compatible = "qcom,wcn7750";
+		reg = <0x0 0x17010040 0x0 0x0>,
+		      <0x0 0xc0000000 0x0 0x10000>;
+		reg-names = "msi_addr", "smmu_iova_ipa";
+		qcom,rproc-handle = <&wpss_pas>;
+		iommus = <&apps_smmu 0x1000 0x1>;
+		wlan-en-gpio =  <6   0 2 1 2 0 1 4 0 0 1 255 0 0 1 1>;
+		bt-en-gpio =    <5   1 2 1 2 0 1 4 0 0 0 255 0 0 1 1>;
+		host-sol-gpio = <204 2 0 0 5 0 1 4 0 0 1 255 0 0 1 1>;
+		dev-sol-gpio =  <205 3 0 0 2 0 1 4 0 0 1 4   1 0 1 1>;
+		sw-ctrl-gpio =  <18  4 0 0 2 0 1 4 0 0 1 255 0 0 1 1>;
+		/* List of GPIOs to be setup for interrupt wakeup capable */
+		mpm_wake_set_gpios = <18>;
+		pin_wlan-en-gpio = <&pmh0104_c_gpios 7 0>;
+		pin_sw-ctrl-gpio = <&tlmm 18 0>;
+		pinctrl-names = "sw_ctrl", "wlan_en_active", "wlan_en_sleep";
+		pinctrl-0 = <&icnss_sw_ctrl>;
+		pinctrl-1 = <&icnss_wlan_en_active>;
+		pinctrl-2 = <&icnss_wlan_en_sleep>;
+
+		interrupts = <GIC_ESPI 986 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 987 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 988 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 989 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 990 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 991 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 992 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 993 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 994 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 995 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 996 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 997 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 998 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 999 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1000 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1001 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1002 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1003 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1004 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1005 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1006 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1007 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1008 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1009 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1010 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1011 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1012 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1013 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1014 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1015 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1016 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_ESPI 1017 IRQ_TYPE_EDGE_RISING>;
+
+		qcom,iommu-group = <&icnss2_direct_link_iommu_group0>;
+		dma-coherent;
+		memory-region = <&icnss2_iommu_region_partition>;
+		pin-ctrl-support;
+		qcom,fw-prefix;
+		qcom,wlan;
+		tsens = "sys-therm-3";
+		wcn-hw-version = "wcn7750";
+		qcom,wlan-msa-fixed-region = <&wlan_msa_mem>;
+
+		vdd-cx-mx-supply = <&S9D>;
+		qcom,vdd-cx-mx-config = <696000 1372000 0 0 0>;
+		vdd-1.8-xo-supply = <&S4C>;
+		qcom,vdd-1.8-xo-config = <1824000 2040000 0 0 0>;
+		vdd-1.3-rfa-supply = <&S7G>;
+		qcom,vdd-1.3-rfa-config = <1256000 1372000 0 0 0>;
+		vdd-1.8-io-supply = <&L2D>;
+		qcom,vdd-1.8-io-config = <1800000 1800000 0 0 0>;
+		vdd-1.2-io-supply = <&L4G>;
+		qcom,vdd-1.2-io-config = <1200000 1200000 0 0 0>;
+
+		qcom,smem-states = <&pebble_wcn7750_smp2p_wlan_1_out 0>,
+				   <&smp2p_wlan_2_out 0>,
+				   <&smp2p_wlan_3_out 0>;
+		qcom,smem-state-names = "wlan-smp2p-out",
+					"wlan-soc-wake-smp2p-out",
+					"wlan-ep-powersave-smp2p-out";
+
+		qcom,qmp = <&aoss_qmp>;
+		qcom,vreg_ol_cpr ="S9D0";
+
+		interconnects =
+		<&pcie_anoc MASTER_PCIE_0 &pcie_anoc SLAVE_ANOC_PCIE_GEM_NOC>,
+		<&gem_noc MASTER_ANOC_PCIE_GEM_NOC &mc_virt SLAVE_EBI1>;
+		interconnect-names = "pcie_to_memnoc", "memnoc_to_ddr";
+
+		qcom,icc-path-count = <2>;
+		qcom,bus-bw-cfg-count = <9>;
+
+		/* ddr_type = 8(LPDDR5) */
+
+		ddr_cfg@0 {
+			ddr_type = <8>;
+
+			qcom,bus-bw-cfg =
+			/** ICC Path 1 **/
+			<0 0>, /* no vote */
+			/* idle: 0-18 Mbps snoc/anoc: 100 Mhz */
+			<2250 477000>,
+			/* low: 18-60 Mbps snoc/anoc: 100 Mhz */
+			<7500 477000>,
+			/* medium: 60-240 Mbps snoc/anoc: 100 Mhz */
+			<30000 477000>,
+			/* high: 240-1200 Mbps snoc/anoc: 100 Mhz */
+			<100000 477000>,
+			/* very high: 1200-2000 Mbps snoc/anoc: 100 Mhz */
+			<250000 477000>,
+			/* ultra high: DBS mode snoc/anoc: 200 Mhz */
+			<312500 1200000>,
+			/* super high: DBS mode snoc/anoc: 403 Mhz */
+			<587500 2700000>,
+			/* low (latency critical): 18-60 Mbps snoc/anoc: 200 Mhz */
+			<7500 1200000>,
+
+			/** ICC Path 2 **/
+			<0 0>,
+			/* idle: 0-18 Mbps ddr: 547.2 MHz */
+			<2250 1094000>,
+			/* low: 18-60 Mbps ddr: 547.2 MHz */
+			<7500 1094000>,
+			/* medium: 60-240 Mbps ddr: 547.2 MHz */
+			<30000 1094000>,
+			/* high: 240-1200 Mbps ddr: 547.2 MHz */
+			<100000 1094000>,
+			/* very high: 1200-2000 Mbps ddr: 547.2 MHz */
+			<250000 1094000>,
+			/* ultra high: DBS mode ddr: 2092 MHz */
+			<312500 7602000>,
+			/* super high: DBS mode ddr: 3.2 GHz */
+			<587500 11846000>,
+			/* low (latency critical): 18-60 Mbps ddr: 2092 MHz */
+			<7500 7602000>;
+		};
+
+		icnss_cdev_apss: icnss_cdev1 {
+			#cooling-cells = <2>;
+		};
+
+		icnss_cdev_wpss: icnss_cdev2 {
+			#cooling-cells = <2>;
+		};
+
+		qcom,smp2p_map_wlan_1_in {
+			interrupts-extended = <&pebble_wcn7750_smp2p_wlan_1_in 0 0>,
+					      <&pebble_wcn7750_smp2p_wlan_1_in 1 0>;
+			interrupt-names = "qcom,smp2p-force-fatal-error",
+					  "qcom,smp2p-early-crash-ind";
+		};
+
+		qcom,smp2p_map_wlan_2_in {
+			interrupts-extended = <&smp2p_wlan_2_in 0 0>;
+			interrupt-names = "qcom,smp2p-soc-wake-ack";
+		};
+
+		icnss2_iommu_region_partition: icnss2_iommu_region_partition {
+			iommu-addresses = <&icnss2 0x0 0x0 0x0 0xb0000000>,
+				<&icnss2 0x0 0xc0000000 0x0 0x40000000>;
+		};
+
+	};
+
+	wlan_direct_link: qcom,icnss-direct-link {
+		compatible = "qcom,icnss-direct-link";
+		iommus = <&apps_smmu 0x0c0f 0x0>;
+		qcom,iommu-group = <&icnss2_direct_link_iommu_group0>;
+		memory-region = <&direct_link_iommu_region_partition>;
+		dma-coherent;
+
+		direct_link_iommu_region_partition: direct_link_iommu_region_partition {
+			iommu-addresses = <&wlan_direct_link 0x0 0x0 0x0 0xb0000000>,
+				<&wlan_direct_link 0x0 0xc0000000 0x0 0x40000000>;
+		};
+	};
+};

@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/clock/qcom,gcc-pitti.h>
+#include <dt-bindings/interconnect/qcom,pitti.h>
+#include <dt-bindings/clock/qcom,gpucc-pitti.h>
+#include "pitti-vidc.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Pitti SoC";
+	compatible = "qcom,pitti";
+	qcom,msm-id = <623 0x10000>;
+	qcom,board-id = <0 0>;
+};

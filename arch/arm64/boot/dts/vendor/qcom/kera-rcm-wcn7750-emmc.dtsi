@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+#include "kera-rcm.dtsi"
+#include "kera_emmc.dtsi"
+
+&L11B {
+	/delete-property/ regulator-always-on;
+};
+
+&sdc1_on {
+	clk {
+		bias-disable;
+		drive-strength = <16>;
+	};
+
+	cmd {
+		bias-pull-up;
+		drive-strength = <12>;
+	};
+
+	data {
+		bias-pull-up;
+		drive-strength = <12>;
+	};
+
+	rclk {
+		bias-pull-down;
+	};
+};
+
+&sdc1_off {
+	clk {
+		bias-disable;
+		drive-strength = <2>;
+	};
+
+	cmd {
+		bias-pull-up;
+		drive-strength = <2>;
+	};
+
+	data {
+		bias-pull-up;
+		drive-strength = <2>;
+	};
+
+	rclk {
+		bias-pull-down;
+	};
+};

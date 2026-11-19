@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/soc/qcom,ipcc.h>
+#include <dt-bindings/clock/qcom,rpmh.h>
+#include "smem-mailbox.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Tuna SoC";
+	compatible = "qcom,tuna";
+	qcom,msm-id = <655 0x10000>;
+	qcom,board-id = <0 0>;
+};

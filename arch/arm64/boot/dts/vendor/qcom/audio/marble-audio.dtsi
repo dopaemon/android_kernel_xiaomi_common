@@ -1,0 +1,14 @@
+#include "xiaomi-sm8450-common.dtsi"
+
+&waipio_snd {
+	/delete-property/qcom,uart-audio-sw-gpio;
+	qcom,model = "ukee-mtp-snd-card";
+	qcom,msm-mbhc-usbc-audio-supported = <0>;
+	qcom,msm-mbhc-hphl-swh = <1>;
+	qcom,msm-mbhc-gnd-swh = <1>;
+};
+
+&adsp_loader {
+	adsp-fuse-not-supported = <1>;
+	adsp-fw-name = "adsp2.mdt";
+};

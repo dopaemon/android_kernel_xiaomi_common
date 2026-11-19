@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "kera-wcn7760.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Kera EVK";
+	compatible = "qcom,kera-ievk", "qcom,kera", "qcom,evk";
+	qcom,msm-id = <731 0x10000>, <732 0x10000>;
+	qcom,board-id = <0x01002F 0>;
+};

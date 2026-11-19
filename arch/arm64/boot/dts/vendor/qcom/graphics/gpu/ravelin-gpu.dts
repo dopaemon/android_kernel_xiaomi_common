@@ -1,0 +1,26 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,aop-qmp.h>
+#include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/clock/qcom,sm4450-gcc.h>
+#include <dt-bindings/clock/qcom,sm4450-gpucc.h>
+#include <dt-bindings/interconnect/qcom,ravelin.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+#include "ravelin-gpu.dtsi"
+#include "ravelin-gpu-pwrlevels.dtsi"
+/ {
+	model = "Qualcomm Technologies, Inc. Ravelin";
+	compatible = "qcom,ravelin", "qcom,ravelin-atp",
+			"qcom,ravelin-idp", "qcom,ravelin-qrd",
+			"qcom,ravelin-rumi", "qcom,ravelinp",
+			"qcom,ravelinp-atp", "qcom,ravelinp-idp",
+			"qcom,ravelinp-qrd";
+	qcom,msm-id = <568 0x10000>, <581 0x10000>,
+			 <582 0x10000>, <602 0x10000>;
+	qcom,board-id = <0 0>, <34 0x601>,
+			 <0x1000B 0x600>, <0x1000B 0>,
+			 <0x10022 3>;
+};

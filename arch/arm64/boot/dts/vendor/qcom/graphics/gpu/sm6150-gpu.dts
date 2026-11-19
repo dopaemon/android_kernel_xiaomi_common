@@ -1,0 +1,22 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,dispcc-sm6150.h>
+#include <dt-bindings/clock/qcom,gcc-sm6150.h>
+#include <dt-bindings/clock/qcom,gpucc-sm6150.h>
+#include <dt-bindings/clock/qcom,rpmcc.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/interconnect/qcom,sm6150.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+#include <dt-bindings/soc/qcom,dcc_v2.h>
+
+#include "sm6150-gpu.dtsi"
+#include "sm6150-gpu-pwrlevels.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. SM6150";
+	compatible = "qcom,sm6150";
+	qcom,msm-id = <401 0>;
+	qcom,board-id = <32 0>, <32 3>, <32 1>;
+};

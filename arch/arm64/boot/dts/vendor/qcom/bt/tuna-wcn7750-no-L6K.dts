@@ -1,0 +1,26 @@
+/* SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "tuna-wcn7750-bt.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Tuna";
+	compatible = "qcom,tuna-rcm", "qcom,tunap-rcm", "qcom,rcm",
+			"qcom,tuna-mtp", "qcom,tunap-mtp", "qcom,mtp",
+			"qcom,tuna-cdp", "qcom,tunap-cdp", "qcom,cdp",
+			"qcom,tuna-qrd", "qcom,tunap-qrd", "qcom,qrd",
+			"qcom,tuna", "qcom,tunap";
+	qcom,msm-id = <0x28f 0x10000>;
+	qcom,board-id = <0x1f40 0>;
+};
+
+&bluetooth {
+	/delete-property/ qcom,bt-vdd-rfa-0p8-supply;
+	/delete-property/ qcom,bt-vdd-rfa-0p8-config;
+};
+

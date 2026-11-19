@@ -1,0 +1,23 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,camcc-waipio.h>
+#include <dt-bindings/clock/qcom,gcc-waipio.h>
+#include <dt-bindings/interconnect/qcom,waipio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+#include "zeus-sm8450.dtsi"
+#include "waipio-pm8008.dtsi"
+
+#include "audio/zeus-audio-mtp.dtsi"
+#include "camera/zeus-sm8450-camera-sensor.dtsi"
+#include "display/display/zeus-sde-display-mtp.dtsi"
+
+/ {
+	model = "Zeus based on Qualcomm Technologies, Inc SM8450";
+	compatible = "qcom,waipio-mtp", "qcom,waipio", "qcom,mtp";
+	qcom,msm-id = <457 0x10000>, <457 0x20000>;
+	qcom,board-id = <0x10008 0>, <0x03010008 0x03>;
+	xiaomi,miboard-id = <0x1 0>;
+};

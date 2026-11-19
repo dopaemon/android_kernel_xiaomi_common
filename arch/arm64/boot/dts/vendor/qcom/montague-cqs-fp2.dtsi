@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+#include "montaguep.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Montague-CQS-FP2 SoC";
+	compatible = "qcom,montague";
+};

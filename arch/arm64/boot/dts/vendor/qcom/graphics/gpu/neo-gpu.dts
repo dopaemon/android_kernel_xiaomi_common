@@ -1,0 +1,21 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,aop-qmp.h>
+#include <dt-bindings/clock/qcom,gcc-neo.h>
+#include <dt-bindings/clock/qcom,gpucc-neo.h>
+#include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/interconnect/qcom,neo.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+#include "neo-gpu.dtsi"
+#include "neo-gpu-pwrlevels.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. NEO";
+	compatible = "qcom,neo";
+	qcom,msm-id = <525 0x10000>;
+	qcom,board-id = <0 0>;
+};

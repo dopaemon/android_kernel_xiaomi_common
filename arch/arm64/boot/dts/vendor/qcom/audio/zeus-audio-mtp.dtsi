@@ -1,0 +1,15 @@
+#include "xiaomi-sm8450-common.dtsi"
+
+&soc {
+	sbu_uart_en: msm_cdc_pinctrl@12 {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&sbu_uart_en_active_ze>;
+		pinctrl-1 = <&sbu_uart_en_idle_ze>;
+		#gpio-cells = <0>;
+	};
+};
+
+&swr_haptics {
+	status = "disabled";
+};
