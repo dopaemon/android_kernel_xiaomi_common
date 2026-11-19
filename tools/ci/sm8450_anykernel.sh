@@ -32,6 +32,19 @@ PATCH_VBMETA_FLAG=auto;
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh;
 
+# recovery only: this zip remaps vendor_dlkm/system_dlkm in super and
+# replaces every kernel module, which must not happen under a running
+# Android (Kernel Flasher, KernelSU/Magisk manager, FKM, ...).
+# update-binary does not export BOOTMODE, so look for Android ourselves.
+for proc in zygote zygote64 system_server; do
+  if pidof $proc >/dev/null 2>&1 \
+    || ps 2>/dev/null | grep -v grep | grep -qw $proc \
+    || ps -A 2>/dev/null | grep -v grep | grep -qw $proc; then
+    abort "DoraCore must be flashed from recovery (OrangeFox/TWRP)." \
+      "Flashing from Android apps is not supported. Aborting...";
+  fi;
+done;
+
 # boot install: only the kernel (boot-files/Image) changes, the generic
 # ramdisk (and Magisk/KernelSU in it) is kept as is
 split_boot;
