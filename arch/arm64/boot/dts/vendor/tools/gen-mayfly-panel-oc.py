@@ -48,29 +48,35 @@ for hz, clk, node in ((144, 998400000, 3), (156, 1331200000, 4)):
     q, n2 = re.subn(r'qcom,mdss-dsi-panel-clockrate = <832000000>;', 'qcom,mdss-dsi-panel-clockrate = <%d>;' % clk, q)
     if n1 != 1 or n2 != 1:
         sys.exit('120 Hz timing does not have the expected framerate/clockrate')
+    # The 120 Hz transfer time (7000 us) is longer than a 144/156 Hz frame,
+    # so the DSI driver drops it and derives one from the DSI clock instead
+    # (3920 us at 156 Hz), which needs more than the 500 MHz MDP clock:
+    # SDM then fails every composition and the screen stays black. Give
+    # each overclocked timing its own transfer time, 600 us short of the
+    # frame, to keep the MDP clock well below that limit.
+    xfer = (1000000 // hz - 600) // 10 * 10
+    q, n3 = re.subn(r'qcom,mdss-mdp-transfer-time-us = <\d+>;', 'qcom,mdss-mdp-transfer-time-us = <%d>;' % xfer, q)
+    if n3 != 1:
+        sys.exit('120 Hz timing does not have qcom,mdss-mdp-transfer-time-us')
     lines = [
         '/*',
-        ' * DoraCore: %d Hz display overclock for the mayfly',
+        ' * DoraCore: %d Hz display overclock for the mayfly' % hz,
         ' * "xiaomi 42 02 0a mp cmd mode dsc dsi panel".',
         ' *',
-        ' * Copy of the 120 Hz timing@1 with only the frame rate and the DSI',
-        ' * panel clock raised, as in the overclocked stock dtbo (%d Hz at',
-        ' * %d Hz DSI clock). The panel is calibrated for 120 Hz, so colours',
-        ' * may shift at this rate. Generated from',
-        ' * dsi-panel-l3s-42-02-0a-dsc-cmd.dtsi and mayfly-sde-display-mtp.dtsi by',
-        ' * tools/gen-mayfly-panel-oc.py; regenerate when the 120 Hz timing changes.',
+        ' * Copy of the 120 Hz timing@1 with the frame rate, the DSI panel',
+        ' * clock (%d Hz) and the MDP transfer time (%d us) changed, as the' % (clk, xfer),
+        ' * 120 Hz transfer time does not fit in a %d Hz frame. The panel is' % hz,
+        ' * calibrated for 120 Hz, so colours may shift at this rate.',
+        ' * Generated from dsi-panel-l3s-42-02-0a-dsc-cmd.dtsi and',
+        ' * mayfly-sde-display-mtp.dtsi by tools/gen-mayfly-panel-oc.py;',
+        ' * regenerate when the 120 Hz timing changes.',
         ' */',
         '',
         '&dsi_l3s_42_02_0a_dsc_cmd {',
         '\tqcom,mdss-dsi-display-timings {',
-        '\t\t/* %d Hz (overclock) */',
-        '\t\ttiming@%d {',
+        '\t\t/* %d Hz (overclock) */' % hz,
+        '\t\ttiming@%d {' % node,
     ]
-    lines = [l % (hz,) if l.count('%d') == 1 and 'timing@' not in l else l for l in lines]
-    lines[5] = ' * panel clock raised, as in the overclocked stock dtbo (%d Hz at' % hz
-    lines[6] = ' * %d Hz DSI clock). The panel is calibrated for 120 Hz, so colours' % clk
-    lines[-2] = '\t\t/* %d Hz (overclock) */' % hz
-    lines[-1] = '\t\ttiming@%d {' % node
     lines += body(q.split('\n'))
     lines += ['', '\t\t\t/* Xiaomi panel commands, as at 120 Hz */']
     lines += body(mi_part)
