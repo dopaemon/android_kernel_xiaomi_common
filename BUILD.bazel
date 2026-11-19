@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: GPL-2.0
+
+load("@rules_pkg//pkg:install.bzl", "pkg_install")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
+load(
+    "//build/kernel/kleaf:kernel.bzl",
+    "ddk_uapi_headers",
+    "kernel_abi",
+    "kernel_module_group",
+    "kernel_modules_install",
+)
+
+kernel_module_group(
+    name = "external_modules",
+    srcs = [
+        "//vendor/xiaomi/sm8450-modules/nxp/opensource/driver:waipio_perf_nxp-nci",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/audio-kernel:waipio_perf_modules",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/bt-kernel:waipio_perf_bt_fm_slim",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/bt-kernel:waipio_perf_btpower",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/camera-kernel:waipio_perf_camera",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/dataipa:waipio_perf_gsim",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/dataipa:waipio_perf_ipam",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/dataipa:waipio_perf_ipanetm",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet-ext/aps:waipio_perf_aps",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet-ext/mem:waipio_perf_rmnet_mem",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet-ext/offload:waipio_perf_offload",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet-ext/perf:waipio_perf_perf",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet-ext/perf_tether:waipio_perf_perf_tether",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet-ext/sch:waipio_perf_sch",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet-ext/shs:waipio_perf_shs",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet-ext/wlan:waipio_perf_wlan",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet:waipio_perf_rmnet_core",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/datarmnet:waipio_perf_rmnet_ctl",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/display-drivers:waipio_perf_display_drivers",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/dsp-kernel:waipio_perf_cdsp-loader",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/dsp-kernel:waipio_perf_frpc-adsprpc",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/eva-kernel-v1:waipio_perf_modules",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/graphics-kernel:waipio_perf_msm_kgsl",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/mm-drivers/msm_ext_display:waipio_perf_msm_ext_display",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/mm-drivers/sync_fence:waipio_perf_sync_fence",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/mmrm-driver:waipio_perf_mmrm_driver",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/securemsm-kernel:waipio_perf_hdcp_qseecom_dlkm",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/securemsm-kernel:waipio_perf_qce50_dlkm",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/securemsm-kernel:waipio_perf_qcedev-mod_dlkm",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/securemsm-kernel:waipio_perf_qseecom_dlkm",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/securemsm-kernel:waipio_perf_smcinvoke_dlkm",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/securemsm-kernel:waipio_perf_tz_log_dlkm",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/spu-kernel:waipio_perf_spu-drivers",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/synx-kernel-v1:waipio_perf_modules",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/touch-drivers:waipio_perf_touch_modules",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/video-driver:waipio_perf_video_modules",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/wlan/platform:waipio_perf_cnss2",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/wlan/platform:waipio_perf_cnss_nl",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/wlan/platform:waipio_perf_cnss_plat_ipc_qmi_svc",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/wlan/platform:waipio_perf_cnss_prealloc",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/wlan/platform:waipio_perf_cnss_utils",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/wlan/platform:waipio_perf_wlan_firmware_service",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/wlan/qcacld-3.0:waipio_perf_qca_cld_qca6490",
+    ],
+)
+
+kernel_modules_install(
+    name = "modules_install",
+    kernel_build = "//vendor/xiaomi/sm8450-kernel:waipio_perf",
+    kernel_modules = [
+        ":external_modules",
+    ],
+)
+
+ddk_uapi_headers(
+    name = "sm8450_ddk_uapi_headers",
+    srcs = [
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/audio-kernel:audio_uapi_headers",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/dataipa:dataipa_uapi_headers",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/display-drivers:uapi_headers",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/securemsm-kernel:securemsm_uapi_headers",
+    ],
+    out = "ddk-uapi-headers.tar.gz",
+    kernel_build = "//vendor/xiaomi/sm8450-kernel:waipio_perf",
+)
+
+hermetic_genrule(
+    name = "sm8450_merged_kernel_uapi_headers",
+    srcs = [
+        "//vendor/xiaomi/sm8450-kernel:waipio_perf_uapi_headers",
+        ":sm8450_ddk_uapi_headers",
+    ],
+    outs = [
+        "kernel-uapi-headers.tar.gz",
+    ],
+    cmd = """
+        mkdir -p out
+        tar -xzf $$(find bazel-out/ -name kernel-uapi-headers.tar.gz -print -quit) -C out
+        tar -xzf $$(find bazel-out/ -name ddk-uapi-headers.tar.gz -print -quit) -C out
+        tar -czf $(@D)/kernel-uapi-headers.tar.gz . -C out
+    """,
+)
+
+pkg_files(
+    name = "sm8450_uapi_headers_dist_files",
+    srcs = [
+        ":sm8450_merged_kernel_uapi_headers",
+    ],
+)
+
+pkg_install(
+    name = "sm8450_uapi_headers_dist",
+    srcs = [":sm8450_uapi_headers_dist_files"],
+    destdir = "out/xiaomi_sm8450/dist",
+)
+
+pkg_files(
+    name = "sm8450_dist_files",
+    srcs = [
+        "//vendor/xiaomi/sm8450-kernel:waipio_perf",
+        ":modules_install",
+        ":sm8450_uapi_headers_dist_files",
+        # Mixed build: Additional GKI artifacts.
+        "//vendor/xiaomi/sm8450-kernel:kernel_aarch64",
+        "//vendor/xiaomi/sm8450-kernel:kernel_aarch64_modules",
+        "//vendor/xiaomi/sm8450-kernel:kernel_aarch64_images_system_dlkm_image",
+    ],
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_install(
+    name = "sm8450_dist",
+    srcs = [":sm8450_dist_files"],
+    destdir = "out/xiaomi_sm8450/dist",
+)
+
+kernel_abi(
+    name = "sm8450_abi",
+    kernel_build = "//vendor/xiaomi/sm8450-kernel:waipio_perf",
+    kernel_modules = [
+        ":external_modules",
+    ],
+    module_grouping = False,
+)
