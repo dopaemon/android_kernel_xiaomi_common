@@ -25,6 +25,7 @@ load(
 )
 load(":avb_boot_img.bzl", "avb_sign_boot_image")
 load(":image_opts.bzl", "boot_image_opts")
+load(":modules.bzl", "get_gki_modules_list", "get_kunit_modules_list")
 load(":modules_unprotected.bzl", "get_unprotected_vendor_modules_list")
 load(":msm_abl.bzl", "define_abl_dist")
 load(":msm_common.bzl", "define_top_level_config", "gen_config_without_source_lines", "get_out_dir")
@@ -148,7 +149,8 @@ def _define_kernel_build(
 
     Args:
       target: name of main Bazel target (e.g. `kalama_gki`)
-      base_kernel: base kernel to pass into `kernel_build` (e.g. `//common:kernel_aarch64`)
+      base_kernel: base kernel to pass into `kernel_build` (e.g. `//common:kernel_aarch64`),
+        or None for a standalone (non-GKI) build that produces its own Image
       in_tree_module_list: list of in-tree modules
       dtb_list: device tree blobs expected to be built
       dtbo_list: device tree overlay blobs expected to be built
@@ -161,9 +163,40 @@ def _define_kernel_build(
     if dtbo_list:
         out_list += dtbo_list
 
+    module_outs = in_tree_module_list
+    module_implicit_outs = None
+    make_goals = None
+    if not base_kernel:
+        # Standalone build: Image and every module, GKI ones included, come
+        # from this one vmlinux, so they always match each other whatever
+        # happens to the KMI. Without a KMI symbol list the protected
+        # export check has nothing to enforce, so the modules may use any
+        # exported symbol.
+        out_list += [
+            "Image",
+            "System.map",
+            "modules.builtin",
+            "modules.builtin.modinfo",
+            "vmlinux",
+            "vmlinux.symvers",
+        ]
+        module_outs = in_tree_module_list + [
+            m
+            for m in get_gki_modules_list("arm64")
+            if m not in in_tree_module_list
+        ]
+        module_implicit_outs = [
+            m
+            for m in get_kunit_modules_list("arm64")
+            if m not in module_outs
+        ]
+        make_goals = ["Image", "modules", "dtbs"]
+
     kernel_build(
         name = target,
-        module_outs = in_tree_module_list,
+        module_outs = module_outs,
+        module_implicit_outs = module_implicit_outs,
+        make_goals = make_goals,
         outs = out_list,
         build_config = ":{}_build_config".format(target),
         dtstree = dtstree,
@@ -439,6 +472,7 @@ def define_msm_la(
         variant,
         in_tree_module_list,
         kmi_enforced = True,
+        mixed_build = True,
         boot_image_opts = boot_image_opts()):
     """Top-level kernel build definition macro for an MSM platform
 
@@ -447,6 +481,9 @@ def define_msm_la(
       variant: variant of kernel to build (e.g. "gki")
       in_tree_module_list: list of in-tree modules
       kmi_enforced: boolean determining if the KMI contract should be enforced
+      mixed_build: if True, build only the modules against the GKI
+        `kernel_aarch64` (Image and system_dlkm come from GKI); if False,
+        build a standalone kernel whose own Image and modules are used
       boot_image_header_version: boot image header version (for `boot.img`)
       base_address: edk2 base address
       page_size: kernel page size
@@ -463,6 +500,9 @@ def define_msm_la(
 
     if variant == "consolidate":
         base_kernel = "//vendor/xiaomi/sm8450-kernel:kernel_aarch64_consolidate"
+        define_abi_targets = False
+    elif not mixed_build:
+        base_kernel = None
         define_abi_targets = False
     else:
         base_kernel = "//vendor/xiaomi/sm8450-kernel:kernel_aarch64"
@@ -505,31 +545,35 @@ def define_msm_la(
         kmi_enforced,
     )
 
-    _define_image_build(
-        target,
-        msm_target,
-        base_kernel,
-        # When building a GKI target, we take the kernel and boot.img directly from
-        # common, so no need to build here.
-        build_boot = False if define_abi_targets else True,
-        build_dtbo = True if dtbo_list else False,
-        build_initramfs = True,
-        build_vendor_boot = True if dtbo_list else False,
-        dtbo_list = dtbo_list,
-        vendor_ramdisk_binaries = vendor_ramdisk_binaries,
-        boot_image_opts = boot_image_opts,
-        boot_image_outs = None if dtb_list else ["boot.img", "init_boot.img"],
-        in_tree_module_list = in_tree_module_list,
-    )
+    # The image and dist rules take boot.img, system_dlkm and the GKI
+    # artifacts from base_kernel; a standalone build is packed from its own
+    # outputs instead (see vendor/xiaomi/sm8450-build).
+    if base_kernel:
+        _define_image_build(
+            target,
+            msm_target,
+            base_kernel,
+            # When building a GKI target, we take the kernel and boot.img directly from
+            # common, so no need to build here.
+            build_boot = False if define_abi_targets else True,
+            build_dtbo = True if dtbo_list else False,
+            build_initramfs = True,
+            build_vendor_boot = True if dtbo_list else False,
+            dtbo_list = dtbo_list,
+            vendor_ramdisk_binaries = vendor_ramdisk_binaries,
+            boot_image_opts = boot_image_opts,
+            boot_image_outs = None if dtb_list else ["boot.img", "init_boot.img"],
+            in_tree_module_list = in_tree_module_list,
+        )
 
-    _define_kernel_dist(
-        target,
-        msm_target,
-        variant,
-        base_kernel,
-        define_abi_targets,
-        boot_image_opts = boot_image_opts,
-    )
+        _define_kernel_dist(
+            target,
+            msm_target,
+            variant,
+            base_kernel,
+            define_abi_targets,
+            boot_image_opts = boot_image_opts,
+        )
 
     _define_uapi_library(target)
 

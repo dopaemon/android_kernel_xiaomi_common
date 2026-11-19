@@ -290,6 +290,8 @@ def define_waipio():
         msm_target = target_name,
         variant = "perf",
         in_tree_module_list = mod_list,
+        # Standalone kernel: Image, GKI and vendor modules all from waipio_perf
+        mixed_build = False,
         boot_image_opts = boot_image_opts(
             kernel_vendor_cmdline_extras = kernel_vendor_cmdline_extras,
             board_kernel_cmdline_extras = board_kernel_cmdline_extras,

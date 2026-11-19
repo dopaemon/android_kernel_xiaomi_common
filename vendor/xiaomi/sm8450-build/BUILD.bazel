@@ -6,7 +6,6 @@ load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(
     "//build/kernel/kleaf:kernel.bzl",
     "ddk_uapi_headers",
-    "kernel_abi",
     "kernel_module_group",
     "kernel_modules_install",
 )
@@ -116,10 +115,9 @@ pkg_files(
         "//vendor/xiaomi/sm8450-kernel:waipio_perf",
         ":modules_install",
         ":sm8450_uapi_headers_dist_files",
-        # Mixed build: Additional GKI artifacts.
-        "//vendor/xiaomi/sm8450-kernel:kernel_aarch64",
-        "//vendor/xiaomi/sm8450-kernel:kernel_aarch64_modules",
-        "//vendor/xiaomi/sm8450-kernel:kernel_aarch64_images_system_dlkm_image",
+        # Standalone (non-GKI) build: Image and all in-tree modules come from
+        # waipio_perf; the GKI module list says which go to system_dlkm.
+        "//vendor/xiaomi/sm8450-kernel:gki_system_dlkm_modules_arm64",
     ],
     strip_prefix = strip_prefix.files_only(),
 )
@@ -128,13 +126,4 @@ pkg_install(
     name = "sm8450_dist",
     srcs = [":sm8450_dist_files"],
     destdir = "out/xiaomi_sm8450/dist",
-)
-
-kernel_abi(
-    name = "sm8450_abi",
-    kernel_build = "//vendor/xiaomi/sm8450-kernel:waipio_perf",
-    kernel_modules = [
-        ":external_modules",
-    ],
-    module_grouping = False,
 )
