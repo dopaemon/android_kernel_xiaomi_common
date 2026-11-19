@@ -1,0 +1,57 @@
+load("//build/kernel/kleaf:kernel.bzl", "ddk_headers", "ddk_uapi_headers")
+
+package(
+    default_visibility = [
+      "//visibility:public"],
+)
+
+filegroup(
+    name = "synx_dt_bindings",
+    srcs = glob(["dt-bindings/**"]),
+)
+
+filegroup(
+    name = "_synx_uapi_headers",
+    srcs = glob([
+        "include/uapi/synx/media/*.h",
+    ]),
+)
+
+ddk_headers(
+    name = "uapi_headers",
+    hdrs = [
+        ":_synx_uapi_headers",
+    ],
+    includes = ["include/uapi/synx"],
+)
+
+ddk_headers(
+    name = "synx_drivers_headers",
+    hdrs = glob([
+      "msm/synx/*.h",
+    ]),
+    includes = ["msm","msm/synx"]
+)
+
+ddk_headers(
+    name = "synx_headers",
+    hdrs = [":uapi_headers", ":synx_drivers_headers"]
+)
+
+ddk_uapi_headers(
+    name = "msm_synx_ddk_uapi_headers",
+    srcs = [
+        ":_synx_uapi_headers",
+    ],
+    out = "synx-uapi-headers.tar.gz",
+    kernel_build = "//:target_kernel_build",
+)
+
+load(":neo61.bzl", "define_neo61")
+define_neo61()
+
+load(":anorak61.bzl", "define_anorak61")
+define_anorak61()
+
+load(":waipio.bzl", "define_waipio")
+define_waipio()

@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config SPECTRA_ISP
+	bool "enable camera ISP module"
+	help
+	  This is enabling camera ISP module.
+	  IFE camera driver file be included.
+	  This will enable camera ISP driver to handle IFE driver.
+	  Core camera driver to handle VFE HW.
+
+config SPECTRA_ICP
+	bool "enable camera ICP module"
+	help
+	  This is enabling camera ICP module.
+	  Camera ICP driver file be included.
+	  This will enable camera ICP driver to interact with,
+	  ICP FW. Which can control IPE and BPS HW.
+
+config SPECTRA_JPEG
+	bool "enable camera jpeg module"
+	help
+	  This is enabling camera JPEG module.
+	  camera jpeg module will be functional.
+	  This module interact with jpeg HW for
+	  snapshot processing.
+
+config SPECTRA_FD
+	bool "enable camera FD module"
+	help
+	  This is enabling camera Face Detection module.
+	  FD module files will be included to enable the driver.
+	  This module interacts with FD HW for face detection.
+
+config SPECTRA_LRME
+	bool "enable camera LRME module"
+	help
+	  This is enabling camera LRME module.
+	  LRME (Low Resolution Motion Estimation) module will be functional.
+	  This module is used for motion estimation processing.
+
+config SPECTRA_SENSOR
+	bool "enable camera sensor module"
+	help
+	  This is enabling camera sensor module.
+	  sensor module files will be included to enable the driver.
+	  eeprom, flash, csiphy all other module will be included
+	  to make the sensor functional.
+
+config SPECTRA_CUSTOM
+	bool "enable camera CUSTOM module"
+	help
+	  This is enabling camera CUSTOM module.
+	  Custom module for platform-specific customizations.
+	  This enables custom hardware manager and CSID.
+
+config SPECTRA_OPE
+	bool "enable camera OPE module"
+	help
+	  This is enabling camera OPE module.
+	  OPE (Offline Processing Engine) module will be functional.
+	  This module is used for offline image processing.
+
+config SPECTRA_CRE
+	bool "enable camera CRE module"
+	help
+	  This option enables camera CRE module
+	  compilation. Camera CRE module will be functional.
+	  This enables CRE driver code files
+	  which interacts with CRE HW.
+
+config SPECTRA_TFE
+	bool "enable camera TFE module"
+	help
+	  This is enabling camera TFE module.
+	  TFE (Thin Front End) module will be functional.
+	  This module handles TFE hardware operations.
+
+config MSM_MMRM
+	bool "enable MSM MMRM"
+	help
+	  This is enabling mmrm api access.
+	  mmrm to cahce the clk voting.
+	  mmrm knows about all clients' clock rates.
+	  MMRM can decide whether new peak power usage is within allowed value
+
+config MSM_GLOBAL_SYNX
+	bool "enabling camera synxv1 module"
+	help
+	  This is enabling camera synx v1 module
+	  that allows the usage of synx V1 APIs
+	  and global synchronization across cores.
+	  Synx V1 code only compiles if this is enabled.
+
+config INTERCONNECT_QCOM
+	bool "enabling icc bus driver"
+	help
+	  This is to access icc driver api.
+	  To cache AB and IB vote will
+	  use ICC kernel driver API.
+	  So that ICC driver can consolidate the vote
+
+config QCOM_CX_IPEAK
+	bool "enable CX IPEAK support"
+	help
+	  This config enables CX IPEAK support.
+	  CX IPEAK is used for current peak management.
+
+config QCOM_BUS_SCALING
+	bool "enable bus scaling support"
+	help
+	  This config enables bus scaling support.
+	  Bus scaling is used for bandwidth management.
+
+config CAM_PRESIL
+	bool "enable camera presil support"
+	help
+	  This config enables camera presil support.
+	  Presil is used for pre-silicon validation.
