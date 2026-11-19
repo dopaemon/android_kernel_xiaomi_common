@@ -3,7 +3,8 @@
 #
 # Turn the Kleaf dist of //vendor/xiaomi/sm8450-build:sm8450_dist into an
 # AnyKernel3 payload: boot Image, vendor_boot dtb and ramdisk modules,
-# dtbo.img, vendor_dlkm.img and system_dlkm.img.
+# dtbo.img (plus the dtbo-oc/ display overclock variants), vendor_dlkm.img
+# and system_dlkm.img.
 #
 # Module staging mirrors vendor/lineage/build/tasks/kernel.mk
 # (build-image-kernel-modules-lineage) for TARGET_KERNEL_PLATFORM_TARGET
@@ -212,15 +213,36 @@ else
   find "$DIST" -maxdepth 1 -type f -name '*.dtb' | sort | xargs cat > "$WORK/dtb.img"
 fi
 [ -s "$WORK/dtb.img" ] || { echo "no dtb produced" >&2; exit 1; }
+# make_dtbo <out.img> <dtbo>...
+make_dtbo() {
+  local img=$1; shift
+  printf '  %s\n' "${@##*/}"
+  $MKDTBOIMG create "$img" --page_size=4096 "$@"
+  $AVBTOOL add_hash_footer --partition_name dtbo --partition_size "$DTBO_SIZE" --image "$img"
+}
+
 if [ -f "$DIST/dtbo.img" ]; then
   cp "$DIST/dtbo.img" "$OUT/dtbo.img"
+  $AVBTOOL add_hash_footer --partition_name dtbo --partition_size "$DTBO_SIZE" --image "$OUT/dtbo.img"
 else
-  mapfile -t DTBOS < <(find "$DIST" -maxdepth 1 -type f -name '*.dtbo' | sort)
+  # <board>-overlay-oc<name>.dtbo are optional display overclock variants
+  # of <board>-overlay.dtbo: the default dtbo.img leaves them out and
+  # dtbo-oc/dtbo-oc<name>.img swaps them in, for the installer to offer.
+  mapfile -t DTBOS < <(find "$DIST" -maxdepth 1 -type f -name '*.dtbo' ! -name '*-overlay-oc*.dtbo' | sort)
   [ "${#DTBOS[@]}" -gt 0 ] || { echo "no dtbo produced" >&2; exit 1; }
-  printf '  %s\n' "${DTBOS[@]##*/}"
-  $MKDTBOIMG create "$OUT/dtbo.img" --page_size=4096 "${DTBOS[@]}"
+  echo "dtbo.img:"
+  make_dtbo "$OUT/dtbo.img" "${DTBOS[@]}"
+
+  mapfile -t OC_DTBOS < <(find "$DIST" -maxdepth 1 -type f -name '*-overlay-oc*.dtbo' | sort)
+  for oc in "${OC_DTBOS[@]}"; do
+    variant=${oc##*-overlay-}; variant=${variant%.dtbo}
+    base=${oc%-overlay-*}-overlay.dtbo
+    [ -f "$base" ] || { echo "no $(basename "$base") for $(basename "$oc")" >&2; exit 1; }
+    mkdir -p "$OUT/dtbo-oc"
+    echo "dtbo-$variant.img:"
+    make_dtbo "$OUT/dtbo-oc/dtbo-$variant.img" "${DTBOS[@]/#$base/$oc}"
+  done
 fi
-$AVBTOOL add_hash_footer --partition_name dtbo --partition_size "$DTBO_SIZE" --image "$OUT/dtbo.img"
 
 log "vendor_dlkm.img / system_dlkm.img"
 make_ext4 vendor_dlkm u:object_r:vendor_file:s0 u:object_r:vendor_configs_file:s0 "$WORK/vendor_dlkm/lib/modules" "$OUT/vendor_dlkm.img"

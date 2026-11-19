@@ -45,6 +45,58 @@ for proc in zygote zygote64 system_server; do
   fi;
 done;
 
+# vol_key: wait up to 10 s for a volume key press, print "up" or "down"
+# (nothing on timeout)
+vol_key() {
+  local ev=$AKHOME/vol_key.ev i=0 pid key=;
+  : > $ev;
+  getevent -lq > $ev 2>/dev/null &
+  pid=$!;
+  while [ $i -lt 50 ]; do
+    if grep -q 'KEY_VOLUMEUP *DOWN' $ev; then key=up; break; fi;
+    if grep -q 'KEY_VOLUMEDOWN *DOWN' $ev; then key=down; break; fi;
+    sleep 0.2 2>/dev/null || sleep 1;
+    i=$((i + 1));
+  done;
+  kill $pid 2>/dev/null;
+  rm -f $ev;
+  echo $key;
+}
+
+# display refresh rate: the default dtbo.img or one of the overclocked
+# variants the CI put in dtbo-oc/ (only built for some devices)
+oc_label() {
+  case $1 in
+    1) echo "Default (60/120 Hz)";;
+    2) echo "144 Hz (overclock)";;
+    3) echo "All: 144 Hz + 156 Hz (overclock)";;
+  esac;
+}
+if [ -f $AKHOME/dtbo-oc/dtbo-oc144.img -a -f $AKHOME/dtbo-oc/dtbo-ocall.img ]; then
+  oc=1;
+  ui_print " " "Display refresh rate:";
+  if command -v getevent >/dev/null 2>&1; then
+    ui_print "  Vol+ = next option, Vol- = select" \
+      "  (the shown option is used after 10 s without a key)" \
+      "> $(oc_label $oc)";
+    while true; do
+      case $(vol_key) in
+        up) oc=$((oc % 3 + 1)); ui_print "> $(oc_label $oc)";;
+        *) break;;
+      esac;
+    done;
+  else
+    ui_print "  No key input in this recovery, using the default";
+  fi;
+  case $oc in
+    2) cp -f $AKHOME/dtbo-oc/dtbo-oc144.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";;
+    3) cp -f $AKHOME/dtbo-oc/dtbo-ocall.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";;
+  esac;
+  ui_print "Selected: $(oc_label $oc)";
+  [ $oc = 1 ] || ui_print "Note: the panel is tuned for 120 Hz, colours may shift above it";
+fi;
+rm -rf $AKHOME/dtbo-oc;
+
 # boot install: only the kernel (boot-files/Image) changes, the generic
 # ramdisk (and Magisk/KernelSU in it) is kept as is
 split_boot;
