@@ -133,13 +133,13 @@ has_keys() {
 # variants the CI put in dtbo-oc/ (only built for some devices)
 oc_warning() {
   case $choice in
-    2) label="144 Hz";;
-    *) label="144 Hz and 156 Hz";;
+    2) label="146 Hz";;
+    *) label="146 Hz and 155 Hz";;
   esac;
   confirm "!!!!!!!!!! WARNING: DISPLAY OVERCLOCK !!!!!!!!!!" \
     "$label drives the panel beyond its rated" \
     "120 Hz with a higher DSI clock (998.4 MHz at" \
-    "144 Hz, 1331.2 MHz at 156 Hz). It can cause" \
+    "146 Hz, 1331.2 MHz at 155 Hz). It can cause" \
     "colour shift, flicker, artifacts, more heat and" \
     "battery drain or a black screen, and lasting" \
     "damage to the panel cannot be ruled out." \
@@ -149,13 +149,13 @@ oc_warning() {
 if [ -f $AKHOME/dtbo-oc/dtbo-oc144.img -a -f $AKHOME/dtbo-oc/dtbo-ocall.img ] && has_keys "refresh rate"; then
   pick "Display refresh rate:" oc_warning \
     "Default (60/120 Hz)" \
-    "144 Hz (overclock)" \
-    "All: 144 Hz + 156 Hz (overclock)";
+    "146 Hz (overclock)" \
+    "All: 146 Hz + 155 Hz (overclock)";
   case $choice in
     2) cp -f $AKHOME/dtbo-oc/dtbo-oc144.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";
-      ui_print "Display refresh rate: 144 Hz (overclock)";;
+      ui_print "Display refresh rate: 146 Hz (overclock)";;
     3) cp -f $AKHOME/dtbo-oc/dtbo-ocall.img $AKHOME/dtbo.img || abort "Selecting dtbo failed. Aborting...";
-      ui_print "Display refresh rate: 144 Hz + 156 Hz (overclock)";;
+      ui_print "Display refresh rate: 146 Hz + 155 Hz (overclock)";;
     *) ui_print "Display refresh rate: Default (60/120 Hz)";;
   esac;
 fi;
