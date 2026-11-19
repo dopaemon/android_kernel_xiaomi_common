@@ -286,6 +286,8 @@ dtb-y += $(parrot-dtb-y)
 
 WAIPIO_BASE_DTB += waipio.dtb waipio-v2.dtb
 WAIPIO_BOARDS += cupid-sm8450-pm8008-overlay.dtbo zeus-sm8450-pm8008-overlay.dtbo
+# DoraCore: optional cupid display overclock variants (see the mayfly ones)
+WAIPIO_BOARDS += cupid-sm8450-pm8008-overlay-oc144.dtbo cupid-sm8450-pm8008-overlay-ocall.dtbo
 
 waipio-dtb-$(CONFIG_ARCH_WAIPIO) += \
 	$(call add-overlays, $(WAIPIO_BOARDS),$(WAIPIO_BASE_DTB))

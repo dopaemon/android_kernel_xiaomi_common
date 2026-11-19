@@ -1,0 +1,8 @@
+/*
+ * DoraCore: cupid overlay with every display overclock timing
+ * (144 Hz and 156 Hz). Packed as an optional dtbo.img variant; the
+ * default dtbo.img keeps cupid-sm8450-pm8008-overlay.dtbo.
+ */
+#include "cupid-sm8450-pm8008-overlay.dts"
+#include "display/display/cupid-panel-oc-144hz.dtsi"
+#include "display/display/cupid-panel-oc-156hz.dtsi"

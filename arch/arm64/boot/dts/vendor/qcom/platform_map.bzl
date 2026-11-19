@@ -606,6 +606,8 @@ _platform_map = {
         ],
         "dtbo_list": [
             {"name": "cupid-sm8450-pm8008-overlay.dtbo", "soc": "waipio"},
+            {"name": "cupid-sm8450-pm8008-overlay-oc144.dtbo", "soc": "waipio"},
+            {"name": "cupid-sm8450-pm8008-overlay-ocall.dtbo", "soc": "waipio"},
             {"name": "zeus-sm8450-pm8008-overlay.dtbo", "soc": "waipio"},
             {"name": "diting-sm8475-pm8008-overlay.dtbo", "soc": "cape"},
             {"name": "mayfly-sm8475-pm8008-overlay.dtbo", "soc": "cape"},

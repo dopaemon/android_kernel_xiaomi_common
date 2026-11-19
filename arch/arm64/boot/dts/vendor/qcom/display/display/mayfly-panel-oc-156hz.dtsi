@@ -1,14 +1,14 @@
 /*
  * DoraCore: 156 Hz display overclock for the mayfly
  * "xiaomi 42 02 0a mp cmd mode dsc dsi panel", declared as 155 Hz:
- * the TE rate the panel was measured to run at with these settings.
+ * the TE rate this panel was measured to run at with these settings.
  *
  * Copy of the 120 Hz timing@1 with the frame rate, the DSI panel
  * clock (1331200000 Hz) and the MDP transfer time (5810 us) changed, as the
  * 120 Hz transfer time does not fit in a 155 Hz frame. The panel is
  * calibrated for 120 Hz, so colours may shift at this rate.
  * Generated from dsi-panel-l3s-42-02-0a-dsc-cmd.dtsi and
- * mayfly-sde-display-mtp.dtsi by tools/gen-mayfly-panel-oc.py;
+ * mayfly-sde-display-mtp.dtsi by tools/gen-panel-oc.py;
  * regenerate when the 120 Hz timing changes.
  */
 
