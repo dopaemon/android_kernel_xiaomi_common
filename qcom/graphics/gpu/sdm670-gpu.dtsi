@@ -1,0 +1,200 @@
+#define MHZ_TO_KBPS(mhz, w) ((mhz * 1000000 * w) / (1024))
+
+&msm_gpu {
+
+	compatible = "qcom,kgsl-3d0", "qcom,kgsl-3d";
+	status = "ok";
+	reg = <0x5000000 0x40000>, <0x5061000 0x800>,
+		<0x509e000 0x1000>;
+	reg-names = "kgsl_3d0_reg_memory", "kgsl_3d0_cx_dbgc_memory",
+		"cx_misc";
+	interrupts = <0 300 IRQ_TYPE_LEVEL_HIGH>;
+	interrupt-names = "kgsl_3d0_irq";
+
+	qcom,id = <0>;
+	qcom,chipid = <0x06010501>;
+	qcom,gpu-model = "Adreno615v1";
+
+	qcom,initial-pwrlevel = <3>;
+
+	qcom,gpu-quirk-hfi-use-reg;
+	qcom,gpu-quirk-limit-uche-gbif-rw;
+	qcom,gpu-quirk-secvid-set-once;
+
+	qcom,no-nap;
+
+	qcom,min-access-length = <32>;
+
+	qcom,ubwc-mode = <2>;
+
+	qcom,gpu-qdss-stm = <0x161c0000 0x40000>;
+	#cooling-cells = <2>;
+
+	clocks = <&gpucc GPU_CC_GX_GFX3D_CLK>,
+		<&gpucc GPU_CC_CXO_CLK>,
+		<&gcc GCC_DDRSS_GPU_AXI_CLK>,
+		<&gcc GCC_GPU_MEMNOC_GFX_CLK>,
+		<&gpucc GPU_CC_CX_GMU_CLK>,
+		<&gcc GCC_GPU_MEMNOC_GFX_CLK>;
+
+	clock-names = "core_clk", "rbbmtimer_clk", "mem_clk",
+			"mem_iface_clk", "gmu_clk", "gcc_gpu_memnoc_gfx";
+
+	interconnects = <&mem_noc MASTER_GFX3D &mc_virt SLAVE_EBI1>;
+	interconnect-names = "gpu_icc_path";
+
+	qcom,bus-table-cnoc =
+		<0>,   /* Off */
+		<100>; /* On */
+
+	qcom,bus-table-ddr =
+		<MHZ_TO_KBPS(0, 4)>,    /* index=0  */
+		<MHZ_TO_KBPS(100, 4)>,  /* index=1  */
+		<MHZ_TO_KBPS(200, 4)>,  /* index=2  */
+		<MHZ_TO_KBPS(300, 4)>,  /* index=3  */
+		<MHZ_TO_KBPS(451, 4)>,  /* index=4  */
+		<MHZ_TO_KBPS(547, 4)>,  /* index=5  */
+		<MHZ_TO_KBPS(681, 4)>,  /* index=6  */
+		<MHZ_TO_KBPS(825, 4)>,  /* index=7  */
+		<MHZ_TO_KBPS(1017, 4)>, /* index=8  */
+		<MHZ_TO_KBPS(1353, 4)>, /* index=9  */
+		<MHZ_TO_KBPS(1555, 4)>, /* index=10  */
+		<MHZ_TO_KBPS(1804, 4)>; /* index=11  */
+
+	/* GDSC regulator names */
+	regulator-names = "vddcx", "vdd";
+	/* GDSC oxili regulators */
+	vddcx-supply = <&gpu_cx_gdsc>;
+	vdd-supply = <&gpu_gx_gdsc>;
+
+	/* Enable context aware freq. scaling */
+	qcom,enable-ca-jump;
+	/* Context aware jump busy penalty in us */
+	qcom,ca-busy-penalty = <12000>;
+	/* Context aware jump target power level */
+	qcom,ca-target-pwrlevel = <1>;
+
+	nvmem-cells = <&gpu_speed_bin>;
+	nvmem-cell-names = "speed_bin";
+
+	qcom,soc-hw-rev-efuse = <0x414c 28 0x3>;
+
+	qcom,soc-hw-revisions {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "qcom,soc-hw-revisions";
+
+		qcom,soc-hw-revision-0 {
+			qcom,soc-hw-revision = <0>;
+			qcom,chipid = <0x06010500>;
+			qcom,gpu-quirk-hfi-use-reg;
+			qcom,gpu-quirk-limit-uche-gbif-rw;
+			qcom,gpu-quirk-mmu-secure-cb-alt;
+			qcom,gpu-quirk-secvid-set-once;
+		};
+
+		qcom,soc-hw-revision-1 {
+			qcom,soc-hw-revision = <1>;
+			qcom,chipid = <0x06010501>;
+			qcom,gpu-quirk-hfi-use-reg;
+			qcom,gpu-quirk-secvid-set-once;
+		};
+	};
+
+	qcom,gpu-coresights {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "qcom,gpu-coresight";
+
+		status = "disabled";
+
+		qcom,gpu-coresight@0 {
+			reg = <0>;
+			coresight-name = "coresight-gfx";
+			coresight-atid = <50>;
+			port {
+				gfx_out_funnel_in2: endpoint {
+					remote-endpoint =
+					<&funnel_in2_in_gfx>;
+				};
+			};
+		};
+
+		qcom,gpu-coresight@1 {
+			reg = <1>;
+			coresight-name = "coresight-gfx-cx";
+			coresight-atid = <51>;
+			port {
+				gfx_cx_out_funnel_in2: endpoint {
+					remote-endpoint =
+					<&funnel_in2_in_gfx_cx>;
+				};
+			};
+		};
+	};
+
+	/* ZAP Shader memory */
+	zap-shader {
+		memory-region = <&pil_gpu_mem>;
+	};
+};
+
+&soc {
+	kgsl_msm_iommu: qcom,kgsl-iommu {
+		compatible = "qcom,kgsl-smmu-v2";
+		reg = <0x05040000 0x10000>;
+
+		gfx3d_user: gfx3d_user {
+			compatible = "qcom,smmu-kgsl-cb";
+			label = "gfx3d_user";
+			iommus = <&kgsl_smmu 0 0>;
+			qcom,gpu-offset = <0x48000>;
+			qcom,iommu-dma = "disabled";
+		};
+
+		gfx3d_secure: gfx3d_secure {
+			compatible = "qcom,smmu-kgsl-cb";
+			iommus = <&kgsl_smmu 2 0>;
+			qcom,iommu-dma = "disabled";
+		};
+
+		gfx3d_secure_alt: gfx3d_secure_alt {
+			compatible = "qcom,smmu-kgsl-cb";
+			iommus = <&kgsl_smmu 2 0>, <&kgsl_smmu 1 0>;
+			qcom,iommu-dma = "disabled";
+		};
+
+	};
+
+	gmu: qcom,gmu {
+		compatible = "qcom,gpu-gmu";
+		reg = <0x506a000 0x31000>, <0xb200000 0x300000>;
+		reg-names = "kgsl_gmu_reg", "kgsl_gmu_pdc_reg";
+		interrupts = <0 304 IRQ_TYPE_LEVEL_HIGH>,
+				<0 305 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "kgsl_hfi_irq",
+					"kgsl_gmu_irq";
+
+		regulator-names = "vddcx", "vdd";
+		vddcx-supply = <&gpu_cx_gdsc>;
+		vdd-supply = <&gpu_gx_gdsc>;
+
+		clocks = <&gpucc GPU_CC_CX_GMU_CLK>,
+				<&gpucc GPU_CC_CXO_CLK>,
+				<&gcc GCC_DDRSS_GPU_AXI_CLK>,
+				<&gcc GCC_GPU_MEMNOC_GFX_CLK>;
+
+		clock-names = "gmu_clk", "cxo_clk", "axi_clk",
+				"memnoc_clk";
+
+		qcom,gmu-freq-table = <200000000 RPMH_REGULATOR_LEVEL_LOW_SVS>,
+					<200000000 RPMH_REGULATOR_LEVEL_LOW_SVS>;
+
+		iommus = <&kgsl_smmu 5 0>;
+		qcom,iommu-dma = "disabled";
+
+		/* AOP mailbox for sending ACD enable and disable messages */
+		mboxes = <&qmp_aop 0>;
+		mbox-names = "aop";
+	};
+};

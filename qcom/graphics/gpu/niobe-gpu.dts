@@ -1,0 +1,21 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,aop-qmp.h>
+#include <dt-bindings/clock/qcom,gcc-niobe.h>
+#include <dt-bindings/clock/qcom,gpucc-niobe.h>
+#include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/interconnect/qcom,niobe.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+#include "niobe-gpu.dtsi"
+#include "niobe-gpu-pwrlevels.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Niobe";
+	compatible = "qcom,niobe";
+	qcom,msm-id = <629 0x10000>, <652 0x10000>;
+	qcom,board-id = <0 0>;
+};

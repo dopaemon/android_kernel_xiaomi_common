@@ -1,0 +1,43 @@
+#include "xiaomi-sm8450-common.dtsi"
+
+&soc {
+	sbu_uart_en: msm_cdc_pinctrl@12 {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&sbu_uart_en_active_dit>;
+		pinctrl-1 = <&sbu_uart_en_idle_dit>;
+		#gpio-cells = <0>;
+	};
+};
+
+&tlmm {
+	sbu_uart_en_idle_dit: uart_audio_en_idle_dit {
+		mux {
+			pins = "gpio12";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio12";
+			drive-strength = <2>;
+			bias-pull-down;
+			output-low;
+		};
+	};
+
+	sbu_uart_en_active_dit: uart_audio_en_active_dit {
+		mux {
+			pins = "gpio12";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio12";
+			drive-strength = <2>;
+			bias-disable;
+			output-high;
+		};
+	};
+};
+
+&swr_haptics {
+	status = "ok";
+};

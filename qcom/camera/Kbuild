@@ -1,0 +1,33 @@
+DTC_INCLUDE += $(srctree)/../sm8450-modules/qcom/opensource/camera-kernel
+
+ifeq ($(CONFIG_ARCH_CANOE), y)
+include $(srctree)/$(src)/config/canoe.mk
+endif
+
+ifeq ($(CONFIG_ARCH_KALAMA), y)
+include $(srctree)/$(src)/config/kalama.mk
+endif
+
+ifeq ($(CONFIG_ARCH_PARROT), y)
+include $(srctree)/$(src)/config/parrot.mk
+endif
+
+ifeq ($(CONFIG_ARCH_PINEAPPLE), y)
+ifeq ($(CONFIG_ARCH_QTI_VM), y)
+include $(srctree)/$(src)/config/pineapple_tuivm.mk
+else
+include $(srctree)/$(src)/config/pineapple.mk
+endif
+endif
+
+ifeq ($(CONFIG_ARCH_SUN), y)
+include $(srctree)/$(src)/config/sun.mk
+endif
+
+ifeq ($(CONFIG_ARCH_WAIPIO), y)
+include $(srctree)/$(src)/config/waipio.mk
+endif
+
+always-y	:= $(dtbo-y) $(dtb-y)
+subdir-y	:= $(dts-dirs)
+clean-files	:= *.dtb *.dtbo

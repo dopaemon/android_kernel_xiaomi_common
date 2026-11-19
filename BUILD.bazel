@@ -1,0 +1,26 @@
+load("//build/kernel/kleaf:kernel.bzl", "kernel_dtstree")
+
+kernel_dtstree(
+    name = "msm_dt",
+    srcs = glob(
+        [
+            "Makefile",
+            "qcom/Makefile",
+            "qcom/**/bindings/**",
+            "qcom/**/*.dtsi",
+            "qcom/**/*.dts",
+            "bindings/**/*",
+        ],
+        exclude = [
+            "**/.*",
+            "**/.*/**",
+            "**/*.bazel",
+            "**/*.bzl",
+        ],
+    ) + [
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/audio-kernel:audio_dt_bindings",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/camera-kernel:camera_dt_bindings",
+        "//vendor/xiaomi/sm8450-modules/qcom/opensource/synx-kernel:synx_dt_bindings",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "pikachu-peach-cnss.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Pikachu SoC";
+	compatible = "qcom,pikachu-atp", "qcom,pikachu-idp", "qcom,pikachu", "qcom,atp", "qcom,idp", "qcom,pikachup", "qcom,pikachup-atp", "qcom,pikachup-idp";
+	qcom,msm-id = <736 0x10000>, <737 0x10000>;
+	qcom,board-id = <0x10021 0>, <0x10022 0>, <0x10022 1>;
+};

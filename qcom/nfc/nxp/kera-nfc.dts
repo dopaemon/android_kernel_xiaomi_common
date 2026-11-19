@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "kera-nfc-common.dtsi"
+/ {
+        model = "Qualcomm Technologies, Inc. Kera SoC";
+        compatible = "qcom,kera", "qcom,kerap-qmb", "qcom,kerap-qna";
+        qcom,msm-id = <686 0x10000>, <659 0x10000>, <720 0x10000>, <721 0x10000>,
+			<731 0x10000>, <732 0x10000>;
+        qcom,board-id = <33 0>, <0x10001 0>, <0x30001 0>, <0x20001 0>, <0x40001 0>,
+                    <0x10008 0>, <0x20008 0>, <0x20008 1>, <0x10008 1>, <0x10015 0>,
+                    <0x10015 1>, <0x20015 0>, <0x20015 1>, <0x30015 0>, <0x30015 1>,
+                    <0x1000B 0>, <0x3000B 0>, <0x2000B 0>, <0x3000B 1>;
+};

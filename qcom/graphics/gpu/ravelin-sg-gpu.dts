@@ -1,0 +1,24 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,aop-qmp.h>
+#include <dt-bindings/clock/qcom,sm4450-gcc.h>
+#include <dt-bindings/clock/qcom,sm4450-gpucc.h>
+#include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/interconnect/qcom,ravelin.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+#include "ravelin-gpu.dtsi"
+#include "ravelin-gpu-pwrlevels.dtsi"
+/ {
+
+	model = "Qualcomm Technologies, Inc. Ravelin SG";
+	compatible = "qcom,ravelin";
+	qcom,msm-id = <653 0x10000>;
+};
+
+&msm_gpu {
+	/delete-property/qcom,gpu-model;
+	qcom,gpu-model = "AdrenoA12v1";
+};

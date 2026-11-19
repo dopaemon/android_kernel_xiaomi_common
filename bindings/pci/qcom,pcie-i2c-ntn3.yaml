@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pci/qcom,pcie-i2c-ntn3.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm PCIe NTN3 I2C Control
+
+maintainers:
+  - Shubham Chouhan <schouhan@qti.qualcomm.com>
+
+description: |
+  Binding for the NTN3 PCIe switch control block accessed over I2C from
+  the Qualcomm PCIe root complex. The controller is responsible for
+  configuring the switch via I2C registers, including GPIO and endpoint
+  reset handling, as well as optional debugging and version detection
+  registers.
+
+properties:
+  compatible:
+    description: Compatible string for NTN3 switch attached to Root port 0
+    items:
+      - const: qcom,pcie-i2c-ntn3
+
+  reg:
+    description: I2C slave address of the NTN3 switch
+    maxItems: 1
+
+  gpio-config-reg:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Slave GPIO configuration register address
+
+  ep-reset-reg:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Slave endpoint reset register address
+
+  ep-reset-gpio-mask:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Slave GPIO number as a 32-bit mask used for reset control
+
+  dump-regs:
+    description: List of slave registers to dump via I2C reads for debug
+    minItems: 1
+    items:
+      $ref: /schemas/types.yaml#/definitions/uint32
+
+  version-reg:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Register used to read the NTN3 switch version
+
+  force-i2c-setting:
+    type: boolean
+    description: |
+      If set, de-emphasis settings are always updated via I2C writes
+      irrespective of the switch chip version.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    &i2c_5 {
+      pcie_i2c_ctrl: pcie_i2c_ctrl@77 {
+        compatible = "qcom,pcie-i2c-ntn3";
+        reg = <0x77>;
+        gpio-config-reg = <0x801208>;
+        ep-reset-reg = <0x801210>;
+        ep-reset-gpio-mask = <0xf>;
+        dump-regs = <0x801330 0x801350 0x801370>;
+        version-reg = <0x800000>;
+        force-i2c-setting;
+      };
+    };
+...

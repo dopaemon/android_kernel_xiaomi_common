@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "kera-dsp.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Kera v1 SoC";
+	compatible = "qcom,kera";
+	qcom,msm-id = <659 0x10000>, <686 0x10000>,
+			<720 0x10000>, <721 0x10000>,
+			<0x10002d0 0x10000>, <0x10002d1 0x10000>,
+			<731 0x10000>, <732 0x10000>;
+	qcom,board-id = <0 0>;
+};

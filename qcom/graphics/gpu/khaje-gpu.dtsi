@@ -1,0 +1,16 @@
+#include "bengal-gpu.dtsi"
+
+&msm_gpu {
+	qcom,gpu-model = "Adreno610v2";
+	qcom,chipid = <0x06010001>;
+
+	qcom,bus-table-ddr =
+		<MHZ_TO_KBPS(0, 8)>,    /* index=0  */
+		<MHZ_TO_KBPS(200, 8)>,  /* index=1  */
+		<MHZ_TO_KBPS(547, 8)>,  /* index=2  */
+		<MHZ_TO_KBPS(768, 8)>,  /* index=3  */
+		<MHZ_TO_KBPS(1017, 8)>, /* index=4  */
+		<MHZ_TO_KBPS(1555, 8)>, /* index=5  */
+		<MHZ_TO_KBPS(1804, 8)>, /* index=6  */
+		<MHZ_TO_KBPS(2092, 8)>; /* index=7  */
+};

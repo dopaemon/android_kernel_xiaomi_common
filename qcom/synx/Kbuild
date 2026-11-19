@@ -1,0 +1,13 @@
+DTC_INCLUDE += $(srctree)/../sm8450-modules/qcom/opensource/synx-kernel
+
+ifeq ($(CONFIG_ARCH_PINEAPPLE), y)
+include $(srctree)/$(src)/config/pineapple.mk
+endif
+
+ifeq ($(CONFIG_ARCH_SUN), y)
+include $(srctree)/$(src)/config/sun.mk
+endif
+
+always-y	:= $(dtbo-y) $(dtb-y)
+subdir-y	:= $(dts-dirs)
+clean-files	:= *.dtb *.dtbo
