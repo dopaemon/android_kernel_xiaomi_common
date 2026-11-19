@@ -1,0 +1,12 @@
+SM8450 module load lists and blocklists used to stage the vendor_boot,
+vendor_dlkm and system_dlkm kernel modules. They match the
+BOARD_*_KERNEL_MODULES_LOAD and BOARD_*_KERNEL_MODULES_BLOCKLIST_FILE lists
+of the device tree:
+
+  https://github.com/cupid-development/android_device_xiaomi_sm8450-common
+  branch lineage-24.0-6.6, commit a04c4bfd962e80dd197ae81b1e2fcbbffa8587c5
+
+Keep them in sync with the modules built from this tree: a module listed
+here but no longer built fails the image packing, and a new vendor module
+is installed to vendor_dlkm but only loaded at boot once it is listed in
+modules.load (or modules.load.vendor_boot for first stage).
