@@ -190,6 +190,14 @@ fi
 # version string from CONFIG_LOCALVERSION
 config_localversion=$(sed -n 's/^CONFIG_LOCALVERSION=\(.*\)$/\1/p' include/config/auto.conf)
 
+# DoraCore: without CONFIG_LOCALVERSION_AUTO the release is named by
+# CONFIG_LOCALVERSION alone. Kleaf writes its scmversion
+# (-android15-8-g<sha>[-dirty]) to a localversion file in the output
+# directory, so drop the localversion files in that case.
+if ! grep -q "^CONFIG_LOCALVERSION_AUTO=y$" include/config/auto.conf; then
+	file_localversion=
+fi
+
 # scm version string if not at the kernel version tag or at the file_localversion
 if grep -q "^CONFIG_LOCALVERSION_AUTO=y$" include/config/auto.conf; then
 	# full scm version string
