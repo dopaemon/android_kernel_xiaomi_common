@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Package boundary for the in-tree vendor subtrees (sm8450-modules,
+# sm8450-build). It keeps their files out of the kernel's
+# common_kernel_sources glob(["**"]) so they are not inputs of the
+# kernel_build actions; Kleaf reaches them through their own packages at
+# //vendor/xiaomi/sm8450-modules and //vendor/xiaomi/sm8450-build.
