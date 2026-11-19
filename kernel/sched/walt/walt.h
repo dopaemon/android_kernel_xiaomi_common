@@ -1182,11 +1182,6 @@ static inline void walt_irq_work_queue(struct irq_work *work)
 		irq_work_queue_on(work, cpumask_any(cpu_online_mask));
 }
 
-static inline struct task_group *css_tg(struct cgroup_subsys_state *css)
-{
-	return css ? container_of(css, struct task_group, css) : NULL;
-}
-
 /*
  * The policy of a RT boosted task (via PI mutex) still indicates it is
  * a fair task, so use prio check as well. The prio check alone is not
