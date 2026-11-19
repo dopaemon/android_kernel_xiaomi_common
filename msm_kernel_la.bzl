@@ -200,7 +200,10 @@ def _define_kernel_build(
         outs = out_list,
         build_config = ":{}_build_config".format(target),
         dtstree = dtstree,
-        page_size = "4k",
+        # The 4k page size fragment also sets CONFIG_LOCALVERSION="-4k",
+        # which would replace "-DoraCore"; 4K pages are the arm64 default
+        # anyway, so a standalone build keeps the defconfig as is.
+        page_size = "4k" if base_kernel else "default",
         base_kernel = base_kernel,
         kmi_symbol_list = "android/abi_gki_aarch64_qcom" if define_abi_targets else None,
         additional_kmi_symbol_lists = ["{}_all_kmi_symbol_lists".format(base_kernel)] if define_abi_targets else None,
