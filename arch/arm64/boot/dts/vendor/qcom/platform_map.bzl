@@ -599,6 +599,9 @@ _platform_map = {
             {"name": "waipio.dtb", "soc": "waipio"},
             {"name": "waipio-v2.dtb", "soc": "waipio"},
             {"name": "cape.dtb", "soc": "cape"},
+            {"name": "cape-gpu-uv.dtb", "soc": "cape"},
+            {"name": "cape-gpu-oc.dtb", "soc": "cape"},
+            {"name": "cape-gpu-uvoc.dtb", "soc": "cape"},
             {"name": "ukee.dtb", "soc": "ukee"},
         ],
         "dtbo_list": [

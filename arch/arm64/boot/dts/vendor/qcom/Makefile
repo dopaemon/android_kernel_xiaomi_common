@@ -305,6 +305,14 @@ CAPE_BOARDS += \
 
 cape-dtb-$(CONFIG_ARCH_CAPE) += \
 	$(call add-overlays, $(CAPE_BOARDS),$(CAPE_BASE_DTB))
+
+# DoraCore: optional Adreno 730 undervolt / overclock variants of cape.dtb,
+# packed as separate dtb images; combined with the mayfly overlay so the
+# build checks that it still applies to them.
+CAPE_GPU_DTB += cape-gpu-uv.dtb cape-gpu-oc.dtb cape-gpu-uvoc.dtb
+
+cape-dtb-$(CONFIG_ARCH_CAPE) += $(CAPE_GPU_DTB) \
+	$(call add-overlays, mayfly-sm8475-pm8008-overlay.dtbo,$(CAPE_GPU_DTB))
 dtb-y += $(cape-dtb-y)
 
 UKEE_BASE_DTB += ukee.dtb
