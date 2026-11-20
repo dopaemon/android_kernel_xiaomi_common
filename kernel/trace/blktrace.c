@@ -404,9 +404,9 @@ int blk_trace_remove(struct request_queue *q)
 {
 	int ret;
 
-	mutex_lock(&q->debugfs_mutex);
+	blk_debugfs_lock_nomemsave(q);
 	ret = __blk_trace_remove(q);
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock_nomemrestore(q);
 
 	return ret;
 }
@@ -645,10 +645,11 @@ int blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 		    char __user *arg)
 {
 	int ret;
+	unsigned int memflags;
 
-	mutex_lock(&q->debugfs_mutex);
+	memflags = blk_debugfs_lock(q);
 	ret = __blk_trace_setup(q, name, dev, bdev, arg);
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock(q, memflags);
 
 	return ret;
 }
@@ -707,9 +708,9 @@ int blk_trace_startstop(struct request_queue *q, int start)
 {
 	int ret;
 
-	mutex_lock(&q->debugfs_mutex);
+	blk_debugfs_lock_nomemsave(q);
 	ret = __blk_trace_startstop(q, start);
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock_nomemrestore(q);
 
 	return ret;
 }
@@ -732,9 +733,10 @@ int blk_trace_ioctl(struct block_device *bdev, unsigned cmd, char __user *arg)
 {
 	struct request_queue *q = bdev_get_queue(bdev);
 	int ret, start = 0;
+	unsigned int memflags;
 	char b[BDEVNAME_SIZE];
 
-	mutex_lock(&q->debugfs_mutex);
+	memflags = blk_debugfs_lock(q);
 
 	switch (cmd) {
 	case BLKTRACESETUP:
@@ -761,7 +763,7 @@ int blk_trace_ioctl(struct block_device *bdev, unsigned cmd, char __user *arg)
 		break;
 	}
 
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock(q, memflags);
 	return ret;
 }
 
@@ -1770,7 +1772,7 @@ static ssize_t sysfs_blk_trace_attr_show(struct device *dev,
 	struct blk_trace *bt;
 	ssize_t ret = -ENXIO;
 
-	mutex_lock(&q->debugfs_mutex);
+	blk_debugfs_lock_nomemsave(q);
 
 	bt = rcu_dereference_protected(q->blk_trace,
 				       lockdep_is_held(&q->debugfs_mutex));
@@ -1791,7 +1793,7 @@ static ssize_t sysfs_blk_trace_attr_show(struct device *dev,
 		ret = sprintf(buf, "%llu\n", bt->end_lba);
 
 out_unlock_bdev:
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock_nomemrestore(q);
 	return ret;
 }
 
@@ -1803,6 +1805,7 @@ static ssize_t sysfs_blk_trace_attr_store(struct device *dev,
 	struct request_queue *q = bdev_get_queue(bdev);
 	struct blk_trace *bt;
 	u64 value;
+	unsigned int memflags;
 	ssize_t ret = -EINVAL;
 
 	if (count == 0)
@@ -1821,7 +1824,7 @@ static ssize_t sysfs_blk_trace_attr_store(struct device *dev,
 			goto out;
 	}
 
-	mutex_lock(&q->debugfs_mutex);
+	memflags = blk_debugfs_lock(q);
 
 	bt = rcu_dereference_protected(q->blk_trace,
 				       lockdep_is_held(&q->debugfs_mutex));
@@ -1856,7 +1859,7 @@ static ssize_t sysfs_blk_trace_attr_store(struct device *dev,
 	}
 
 out_unlock_bdev:
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock(q, memflags);
 out:
 	return ret ? ret : count;
 }

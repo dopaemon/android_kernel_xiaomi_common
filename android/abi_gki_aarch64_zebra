@@ -13,3 +13,5 @@
   video_device_pipeline_alloc_start
   v4l2_pipeline_pm_get
   v4l2_pipeline_pm_put
+  mii_link_ok
+  usb_check_int_endpoints

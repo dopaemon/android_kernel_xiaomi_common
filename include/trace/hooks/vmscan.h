@@ -186,6 +186,21 @@ DECLARE_HOOK(android_vh_mm_customize_file_is_tiny,
 DECLARE_HOOK(android_vh_mm_get_zone_mark,
 	TP_PROTO(struct zone *zone, unsigned long *mark),
 	TP_ARGS(zone, mark));
+DECLARE_HOOK(android_vh_customize_may_deactivate,
+	TP_PROTO(struct lruvec *target_lruvec, struct scan_control *sc),
+	TP_ARGS(target_lruvec, sc));
+DECLARE_HOOK(android_vh_customize_lruvec_may_deactivate,
+	TP_PROTO(struct lruvec *lruvec, struct scan_control *sc),
+	TP_ARGS(lruvec, sc));
+DECLARE_HOOK(android_vh_restore_may_deactivate,
+	TP_PROTO(unsigned int orig_may_deactivate, struct scan_control *sc),
+	TP_ARGS(orig_may_deactivate, sc));
+DECLARE_HOOK(android_vh_snapshot_refaults,
+	TP_PROTO(struct mem_cgroup *target_memcg, pg_data_t *pgdat),
+	TP_ARGS(target_memcg, pgdat));
+DECLARE_HOOK(android_vh_can_reclaim_anon_pages,
+	TP_PROTO(struct mem_cgroup *memcg, int nid, gfp_t gfp_mask, bool *skip),
+	TP_ARGS(memcg, nid, gfp_mask, skip));
 #endif /* _TRACE_HOOK_VMSCAN_H */
 /* This part must be outside protection */
 #include <trace/define_trace.h>

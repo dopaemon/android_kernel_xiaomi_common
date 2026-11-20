@@ -27,6 +27,14 @@ DECLARE_HOOK(android_vh_try_fixup_sea,
 		 bool *can_fixup),
 	TP_ARGS(addr, esr, regs, can_fixup));
 
+DECLARE_HOOK(android_vh_arm64_user_fault_lock_vma,
+	TP_PROTO(unsigned long addr, unsigned int mm_flags, bool *bypass),
+	TP_ARGS(addr, mm_flags, bypass));
+
+DECLARE_HOOK(android_vh_arm64_do_page_fault_retry_vma_lock,
+	TP_PROTO(bool *retry),
+	TP_ARGS(retry));
+
 #endif /* _TRACE_HOOK_FAULT_H */
 /* This part must be outside protection */
 #include <trace/define_trace.h>

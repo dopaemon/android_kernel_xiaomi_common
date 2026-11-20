@@ -209,6 +209,7 @@ static int gzvm_vm_ioctl_create_device(struct gzvm *gzvm, void __user *argp)
 {
 	struct gzvm_create_device *gzvm_dev;
 	void *dev_data = NULL;
+	size_t dev_data_size = 0;
 	int ret;
 
 	gzvm_dev = (struct gzvm_create_device *)alloc_pages_exact(PAGE_SIZE,
@@ -225,14 +226,17 @@ static int gzvm_vm_ioctl_create_device(struct gzvm *gzvm, void __user *argp)
 		void __user *attr_addr = u64_to_user_ptr(gzvm_dev->attr_addr);
 
 		/* Size of device specific data should not be over a page. */
-		if (attr_size > PAGE_SIZE)
-			return -EINVAL;
+		if (attr_size > PAGE_SIZE) {
+			ret = -EINVAL;
+			goto err_free_dev;
+		}
 
 		dev_data = alloc_pages_exact(attr_size, GFP_KERNEL);
 		if (!dev_data) {
 			ret = -ENOMEM;
 			goto err_free_dev;
 		}
+		dev_data_size = attr_size;
 
 		if (copy_from_user(dev_data, attr_addr, attr_size)) {
 			ret = -EFAULT;
@@ -244,9 +248,9 @@ static int gzvm_vm_ioctl_create_device(struct gzvm *gzvm, void __user *argp)
 	ret = gzvm_arch_create_device(gzvm->vm_id, gzvm_dev);
 err_free_dev_data:
 	if (dev_data)
-		free_pages_exact(dev_data, 0);
+		free_pages_exact(dev_data, dev_data_size);
 err_free_dev:
-	free_pages_exact(gzvm_dev, 0);
+	free_pages_exact(gzvm_dev, PAGE_SIZE);
 	return ret;
 }
 

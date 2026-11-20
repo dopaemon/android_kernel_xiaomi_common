@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include "blk-rq-qos.h"
+#include "blk.h"
 
 /*
  * Increment 'v', if 'v' is below 'below'. Returns true if we succeeded,
@@ -301,6 +302,7 @@ int rq_qos_add(struct rq_qos *rqos, struct gendisk *disk, enum rq_qos_id id,
 		const struct rq_qos_ops *ops)
 {
 	struct request_queue *q = disk->queue;
+	unsigned int memflags;
 
 	lockdep_assert_held(&q->rq_qos_mutex);
 
@@ -322,9 +324,9 @@ int rq_qos_add(struct rq_qos *rqos, struct gendisk *disk, enum rq_qos_id id,
 	blk_mq_unfreeze_queue(q);
 
 	if (rqos->ops->debugfs_attrs) {
-		mutex_lock(&q->debugfs_mutex);
+		memflags = blk_debugfs_lock(q);
 		blk_mq_debugfs_register_rqos(rqos);
-		mutex_unlock(&q->debugfs_mutex);
+		blk_debugfs_unlock(q, memflags);
 	}
 
 	return 0;
@@ -349,7 +351,7 @@ void rq_qos_del(struct rq_qos *rqos)
 	}
 	blk_mq_unfreeze_queue(q);
 
-	mutex_lock(&q->debugfs_mutex);
+	blk_debugfs_lock_nomemsave(q);
 	blk_mq_debugfs_unregister_rqos(rqos);
-	mutex_unlock(&q->debugfs_mutex);
+	blk_debugfs_unlock_nomemrestore(q);
 }

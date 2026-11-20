@@ -49,12 +49,14 @@ bool gzvm_handle_guest_exception(struct gzvm_vcpu *vcpu)
  */
 bool gzvm_handle_guest_hvc(struct gzvm_vcpu *vcpu)
 {
-	unsigned long ipa;
+	unsigned long func, ipa;
 	int ret;
 
-	switch (vcpu->run->hypercall.args[0]) {
+	func = READ_ONCE(vcpu->run->hypercall.args[0]);
+	ipa = READ_ONCE(vcpu->run->hypercall.args[1]);
+
+	switch (func) {
 	case GZVM_HVC_MEM_RELINQUISH:
-		ipa = vcpu->run->hypercall.args[1];
 		ret = gzvm_handle_relinquish(vcpu, ipa);
 		return (ret == 0) ? true : false;
 	default:
