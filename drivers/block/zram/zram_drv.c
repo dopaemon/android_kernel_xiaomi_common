@@ -219,22 +219,20 @@ static inline bool is_partial_io(struct bio_vec *bvec)
 
 #ifdef	CONFIG_ZRAM_WRITEBACK
 /*
- * zram->table is vmalloc'd, so the virt_to_page() list_lru does on these
- * entries yields a bogus struct page. Only safe while page_to_nid() folds to
- * 0 under !NUMA and zram_list_lru stays non-memcg-aware; both are required
- * here until this is reworked onto a plain list.
+ * The table is vmalloc'd, so list_lru cannot derive the node from the
+ * entry. Use node 0 on !NUMA and keep the LRU non-memcg-aware.
  */
 static void zram_lru_add(struct zram *zram, struct zram_table_entry *entry)
 {
 	BUILD_BUG_ON(IS_ENABLED(CONFIG_NUMA));
 
 	entry->referenced = true;
-    list_lru_add(&zram->zram_list_lru, &entry->lru);
+	list_lru_add(&zram->zram_list_lru, &entry->lru, 0, NULL);
 }
 
 static void zram_lru_del(struct zram *zram, struct zram_table_entry *entry)
 {
-    list_lru_del(&zram->zram_list_lru, &entry->lru);
+	list_lru_del(&zram->zram_list_lru, &entry->lru, 0, NULL);
 }
 #endif
 
