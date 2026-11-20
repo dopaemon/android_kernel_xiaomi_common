@@ -211,7 +211,7 @@ static void binder_lru_freelist_add(struct binder_alloc *alloc,
 
 		trace_binder_free_lru_start(alloc, index);
 
-		ret = list_lru_add(&binder_freelist, &page->lru);
+		ret = list_lru_add_obj(&binder_freelist, &page->lru);
 		WARN_ON(!ret);
 
 		trace_binder_free_lru_end(alloc, index);
@@ -318,7 +318,7 @@ static void binder_lru_freelist_del(struct binder_alloc *alloc,
 		if (page->page_ptr) {
 			trace_binder_alloc_lru_start(alloc, index);
 
-			on_lru = list_lru_del(&binder_freelist, &page->lru);
+			on_lru = list_lru_del_obj(&binder_freelist, &page->lru);
 			WARN_ON(!on_lru);
 
 			trace_binder_alloc_lru_end(alloc, index);
@@ -942,7 +942,7 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 			if (!alloc->pages[i].page_ptr)
 				continue;
 
-			on_lru = list_lru_del(&binder_freelist,
+			on_lru = list_lru_del_obj(&binder_freelist,
 					      &alloc->pages[i].lru);
 			binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 				     "%s: %d: page %d %s\n",

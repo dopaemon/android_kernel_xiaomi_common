@@ -272,9 +272,9 @@ static int ip6_frag_reasm(struct frag_queue *fq, struct sk_buff *skb,
 	if (!reasm_data)
 		goto out_oom;
 
-	payload_len = ((skb->data - skb_network_header(skb)) -
+	payload_len = -skb_network_offset(skb) -
 		       sizeof(struct ipv6hdr) + fq->q.len -
-		       sizeof(struct frag_hdr));
+		       sizeof(struct frag_hdr);
 	if (payload_len > IPV6_MAXPLEN)
 		goto out_oversize;
 
@@ -487,7 +487,7 @@ err_alloc:
 
 static void __net_exit ip6_frags_ns_sysctl_unregister(struct net *net)
 {
-	struct ctl_table *table;
+	const struct ctl_table *table;
 
 	table = net->ipv6.sysctl.frags_hdr->ctl_table_arg;
 	unregister_net_sysctl_table(net->ipv6.sysctl.frags_hdr);

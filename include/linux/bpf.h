@@ -465,7 +465,7 @@ static inline void bpf_obj_memcpy(struct btf_record *rec,
 
 	if (IS_ERR_OR_NULL(rec)) {
 		if (long_memcpy)
-			bpf_long_memcpy(dst, src, round_up(size, 8));
+			bpf_long_memcpy(dst, src, size);
 		else
 			memcpy(dst, src, size);
 		return;
@@ -488,7 +488,7 @@ static inline void copy_map_value(struct bpf_map *map, void *dst, void *src)
 
 static inline void copy_map_value_long(struct bpf_map *map, void *dst, void *src)
 {
-	bpf_obj_memcpy(map->record, dst, src, map->value_size, true);
+	bpf_obj_memcpy(map->record, dst, src, round_up(map->value_size, 8), true);
 }
 
 static inline void bpf_obj_memzero(struct btf_record *rec, void *dst, u32 size)
@@ -1270,6 +1270,7 @@ int bpf_trampoline_unlink_prog(struct bpf_tramp_link *link, struct bpf_trampolin
 struct bpf_trampoline *bpf_trampoline_get(u64 key,
 					  struct bpf_attach_target_info *tgt_info);
 void bpf_trampoline_put(struct bpf_trampoline *tr);
+void bpf_trampoline_set_flags(struct bpf_trampoline *tr, u32 flags);
 int arch_prepare_bpf_dispatcher(void *image, void *buf, s64 *funcs, int num_funcs);
 
 /*
@@ -1362,6 +1363,7 @@ static inline struct bpf_trampoline *bpf_trampoline_get(u64 key,
 	return NULL;
 }
 static inline void bpf_trampoline_put(struct bpf_trampoline *tr) {}
+static inline void bpf_trampoline_set_flags(struct bpf_trampoline *tr, u32 flags) {}
 #define DEFINE_BPF_DISPATCHER(name)
 #define DECLARE_BPF_DISPATCHER(name)
 #define BPF_DISPATCHER_FUNC(name) bpf_dispatcher_nop_func
@@ -2054,6 +2056,9 @@ bpf_prog_run_array_uprobe(const struct bpf_prog_array *array,
 	return ret;
 }
 
+#define bpf_rcu_lock_held() \
+	(rcu_read_lock_held() || rcu_read_lock_trace_held() || rcu_read_lock_bh_held())
+
 #ifdef CONFIG_BPF_SYSCALL
 DECLARE_PER_CPU(int, bpf_prog_active);
 extern struct mutex bpf_stats_enabled_mutex;
@@ -2466,7 +2471,7 @@ int btf_struct_access(struct bpf_verifier_log *log,
 bool btf_struct_ids_match(struct bpf_verifier_log *log,
 			  const struct btf *btf, u32 id, int off,
 			  const struct btf *need_btf, u32 need_type_id,
-			  bool strict);
+			  bool strict, bool walk_flex_arrays);
 
 int btf_distill_func_proto(struct bpf_verifier_log *log,
 			   struct btf *btf,
@@ -2790,6 +2795,11 @@ static inline void bpf_dynptr_set_rdonly(struct bpf_dynptr_kern *ptr)
 {
 }
 #endif /* CONFIG_BPF_SYSCALL */
+
+static inline bool bpf_net_capable(void)
+{
+	return capable(CAP_NET_ADMIN) || capable(CAP_SYS_ADMIN);
+}
 
 static __always_inline int
 bpf_probe_read_kernel_common(void *dst, u32 size, const void *unsafe_ptr)
@@ -3262,6 +3272,12 @@ static inline gfp_t bpf_memcg_flags(gfp_t flags)
 	if (memcg_bpf_enabled())
 		return flags | __GFP_ACCOUNT;
 	return flags;
+}
+
+static inline bool bpf_prog_is_raw_tp(const struct bpf_prog *prog)
+{
+	return prog->type == BPF_PROG_TYPE_TRACING &&
+	       prog->expected_attach_type == BPF_TRACE_RAW_TP;
 }
 
 #endif /* _LINUX_BPF_H */

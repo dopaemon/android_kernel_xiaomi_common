@@ -1284,6 +1284,7 @@
   skb_ensure_writable
   __skb_gso_segment
   system_freezable_wq
+  timer_shutdown_sync
   unregister_inet6addr_notifier
   unregister_inetaddr_notifier
 
@@ -1872,6 +1873,7 @@
 # required by qcom_rpmh.ko
   arch_timer_read_counter
   cpu_pm_register_notifier
+  cpu_pm_unregister_notifier
   dev_pm_genpd_get_next_hrtimer
   __num_online_cpus
   _raw_spin_trylock

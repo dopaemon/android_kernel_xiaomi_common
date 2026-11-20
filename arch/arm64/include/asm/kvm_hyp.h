@@ -163,6 +163,7 @@ extern unsigned int kvm_nvhe_sym(kvm_arm_vmid_bits);
 extern bool kvm_nvhe_sym(smccc_trng_available);
 extern unsigned int kvm_nvhe_sym(kvm_sve_max_vl);
 extern unsigned int kvm_nvhe_sym(kvm_host_sve_max_vl);
+extern unsigned int kvm_nvhe_sym(hyp_gicv3_nr_lr);
 
 struct kvm_nvhe_clock_data {
 	u32 mult;

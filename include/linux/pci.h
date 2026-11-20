@@ -899,6 +899,7 @@ struct module;
  *		function returns zero when the driver chooses to
  *		take "ownership" of the device or an error code
  *		(negative number) otherwise.
+ *		The pci_device_id parameter is only valid during probe.
  *		The probe function always gets called from process
  *		context, so it can sleep.
  * @remove:	The remove() function gets called whenever a device
@@ -1408,7 +1409,12 @@ static inline int pci_rebar_bytes_to_size(u64 bytes)
 }
 
 u32 pci_rebar_get_possible_sizes(struct pci_dev *pdev, int bar);
+int __must_check __pci_resize_resource(struct pci_dev *dev, int i, int size,
+				       int exclude_bars);
+/* ANDROID: keep the KMI 3-argument pci_resize_resource() symbol */
 int __must_check pci_resize_resource(struct pci_dev *dev, int i, int size);
+#define pci_resize_resource(dev, i, size, exclude_bars)			\
+	__pci_resize_resource(dev, i, size, exclude_bars)
 int pci_select_bars(struct pci_dev *dev, unsigned long flags);
 bool pci_device_is_present(struct pci_dev *pdev);
 void pci_ignore_hotplug(struct pci_dev *dev);
@@ -1478,7 +1484,6 @@ void pci_assign_unassigned_resources(void);
 void pci_assign_unassigned_bridge_resources(struct pci_dev *bridge);
 void pci_assign_unassigned_bus_resources(struct pci_bus *bus);
 void pci_assign_unassigned_root_bus_resources(struct pci_bus *bus);
-int pci_reassign_bridge_resources(struct pci_dev *bridge, unsigned long type);
 int pci_enable_resources(struct pci_dev *, int mask);
 void pci_assign_irq(struct pci_dev *dev);
 struct resource *pci_find_resource(struct pci_dev *dev, struct resource *res);

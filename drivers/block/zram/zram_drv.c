@@ -962,8 +962,8 @@ static ssize_t writeback_store(struct device *dev,
 			       const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
-	u64 nr_pages = zram->disksize >> PAGE_SHIFT;
-	unsigned long lo = 0, hi = nr_pages;
+	u64 nr_pages;
+	unsigned long lo = 0, hi;
 	struct zram_pp_ctl *ctl = NULL;
 	char *args, *param, *val;
 	ssize_t ret = len;
@@ -974,6 +974,9 @@ static ssize_t writeback_store(struct device *dev,
 		up_read(&zram->init_lock);
 		return -EINVAL;
 	}
+
+	nr_pages = zram->disksize >> PAGE_SHIFT;
+	hi = nr_pages;
 
 	/* Do not permit concurrent post-processing actions. */
 	if (atomic_xchg(&zram->pp_in_progress, 1)) {
@@ -1149,8 +1152,7 @@ static ssize_t read_block_state(struct file *file, char __user *buf,
 	char *kbuf;
 	ssize_t index, written = 0;
 	struct zram *zram = file->private_data;
-	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
-	struct timespec64 ts;
+	unsigned long nr_pages;
 
 	kbuf = kvmalloc(count, GFP_KERNEL);
 	if (!kbuf)
@@ -1163,8 +1165,11 @@ static ssize_t read_block_state(struct file *file, char __user *buf,
 		return -EINVAL;
 	}
 
+	nr_pages = zram->disksize >> PAGE_SHIFT;
+
 	for (index = *ppos; index < nr_pages; index++) {
 		int copied;
+		struct timespec64 ts;
 
 		zram_slot_lock(zram, index);
 		if (!zram_allocated(zram, index))
@@ -2461,6 +2466,8 @@ static void zram_destroy_comps(struct zram *zram)
 			kfree(zram->comp_algs[prio]);
 		zram->comp_algs[prio] = NULL;
 	}
+
+	comp_algorithm_set(zram, ZRAM_PRIMARY_COMP, default_compressor);
 }
 
 static void zram_reset_device(struct zram *zram)
@@ -2479,8 +2486,6 @@ static void zram_reset_device(struct zram *zram)
 	memset(&zram->stats, 0, sizeof(zram->stats));
 	atomic_set(&zram->pp_in_progress, 0);
 	reset_bdev(zram);
-
-	comp_algorithm_set(zram, ZRAM_PRIMARY_COMP, default_compressor);
 	up_write(&zram->init_lock);
 }
 

@@ -840,13 +840,12 @@ static int z_erofs_pcluster_begin(struct z_erofs_frontend *fe)
 		DBG_BUGON(1);
 		return -EFSCORRUPTED;
 	} else {
-		ptr = erofs_read_metabuf(&map->buf, sb, map->m_pa, EROFS_NO_KMAP);
+		ptr = erofs_read_metabuf(&map->buf, sb, blknr, EROFS_NO_KMAP);
 		if (IS_ERR(ptr)) {
 			erofs_err(sb, "failed to read inline data %pe @ pa %llu of nid %llu",
 				  ptr, map->m_pa, EROFS_I(fe->inode)->nid);
 			return PTR_ERR(ptr);
 		}
-		ptr = map->buf.page;
 	}
 
 	if (pcl) {
@@ -876,8 +875,8 @@ static int z_erofs_pcluster_begin(struct z_erofs_frontend *fe)
 		/* bind cache first when cached decompression is preferred */
 		z_erofs_bind_cache(fe);
 	} else {
-		get_page((struct page *)ptr);
-		WRITE_ONCE(fe->pcl->compressed_bvecs[0].page, ptr);
+		get_page(map->buf.page);
+		WRITE_ONCE(fe->pcl->compressed_bvecs[0].page, map->buf.page);
 		fe->pcl->pageofs_in = map->m_pa & ~PAGE_MASK;
 		fe->mode = Z_EROFS_PCLUSTER_FOLLOWED_NOINPLACE;
 	}

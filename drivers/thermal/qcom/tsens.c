@@ -289,9 +289,65 @@ static inline enum tsens_ver tsens_version(struct tsens_priv *priv)
 }
 
 /**
- * tsens_hw_to_mC - Return sign-extended temperature in mCelsius.
+ * tsens_read_temp - Retrieve temperature readings from the hardware.
  * @s:     Pointer to sensor struct
  * @field: Index into regmap_field array pointing to temperature data
+ * @temp: temperature in deciCelsius to be read from hardware
+ *
+ * This function handles temperature returned in ADC code or deciCelsius
+ * depending on IP version.
+ *
+ * Return: 0 on success, a negative errno will be returned in error cases
+ */
+static int tsens_read_temp(const struct tsens_sensor *s, int field, int *temp)
+{
+	struct tsens_priv *priv = s->priv;
+	int temp_val[MAX_READ_RETRY] = {0};
+	u32 status;
+	int ret;
+	u32 last_temp_mask = priv->feat->last_temp_mask;
+	u32 valid_bit = priv->feat->valid_bit;
+
+	for (int i = 0; i < MAX_READ_RETRY; i++) {
+		ret = regmap_read(priv->tm_map, priv->fields[field].reg, &status);
+		if (ret)
+			return ret;
+
+		/* VER_0 doesn't have a VALID bit */
+		if (tsens_version(priv) == VER_0) {
+			*temp = status;
+			return 0;
+		}
+
+		temp_val[i] = status & last_temp_mask;
+
+		if (status & valid_bit) {
+			*temp = temp_val[i];
+			return 0;
+		}
+	}
+
+	/*
+	 * As per the HW guidelines, if none of the attempts observe a
+	 * valid sample, a stable fallback value must be returned. If the
+	 * first and second samples match, the second value is returned;
+	 * otherwise, if the second and third samples match, the third
+	 * value is returned.
+	 */
+	if (temp_val[0] == temp_val[1])
+		*temp = temp_val[1];
+	else if (temp_val[1] == temp_val[2])
+		*temp = temp_val[2];
+	else
+		return -EAGAIN;
+
+	return 0;
+}
+
+/**
+ * tsens_hw_to_mC - Return sign-extended temperature in mCelsius.
+ * @s:     Pointer to sensor struct
+ * @temp: temperature in milliCelsius to be read from hardware
  *
  * This function handles temperature returned in ADC code or deciCelsius
  * depending on IP version.
@@ -299,55 +355,13 @@ static inline enum tsens_ver tsens_version(struct tsens_priv *priv)
  * Return: Temperature in milliCelsius on success, a negative errno will
  * be returned in error cases
  */
-static int tsens_hw_to_mC(const struct tsens_sensor *s, int field)
+static int tsens_hw_to_mC(const struct tsens_sensor *s, int temp)
 {
 	struct tsens_priv *priv = s->priv;
 	u32 resolution;
-	u32 temp = 0, temp1 = 0, temp2 = 0, temp3 = 0;
-	unsigned int status = 0;
-	int ret = 0;
 
 	resolution = priv->feat->last_temp_resolution;
-	ret = regmap_field_read(priv->rf[field], &status);
-	if (ret)
-		return ret;
 
-	/* VER_0 doesn't have VALID bit */
-	if (tsens_version(priv) == VER_0) {
-		temp = status;
-		goto convert;
-	} else {
-		temp1 = status & priv->feat->last_temp_mask;
-		if (status & priv->feat->valid_bit) {
-			temp = temp1;
-			goto convert;
-		}
-		ret = regmap_field_read(priv->rf[field], &status);
-		if (ret)
-			return ret;
-
-		temp2 = status & priv->feat->last_temp_mask;
-		if (status & priv->feat->valid_bit) {
-			temp = temp2;
-			goto convert;
-		}
-		ret = regmap_field_read(priv->rf[field], &status);
-		if (ret)
-			return ret;
-
-		temp3 = status & priv->feat->last_temp_mask;
-		if (status & priv->feat->valid_bit) {
-			temp = temp3;
-			goto convert;
-		}
-	}
-
-	if (temp1 == temp2)
-		temp = temp2;
-	else if (temp2 == temp3)
-		temp = temp3;
-
-convert:
 	/* Convert temperature from ADC code to milliCelsius */
 	if (priv->feat->adc)
 		return code_to_degc(temp, s) * 1000;
@@ -519,8 +533,10 @@ static int tsens_read_irq_state(struct tsens_priv *priv, u32 hw_id,
 					&d->crit_irq_mask);
 		if (ret)
 			return ret;
-
-		d->crit_thresh = tsens_hw_to_mC(s, CRIT_THRESH_0 + hw_id);
+		ret = regmap_field_read(priv->rf[CRIT_THRESH_0 + hw_id], &d->crit_thresh);
+		if (ret)
+			return ret;
+		d->crit_thresh = tsens_hw_to_mC(s, d->crit_thresh);
 	} else {
 		/* No mask register on older TSENS */
 		d->up_irq_mask = 0;
@@ -530,8 +546,16 @@ static int tsens_read_irq_state(struct tsens_priv *priv, u32 hw_id,
 		d->crit_thresh = 0;
 	}
 
-	d->up_thresh  = tsens_hw_to_mC(s, UP_THRESH_0 + hw_id);
-	d->low_thresh = tsens_hw_to_mC(s, LOW_THRESH_0 + hw_id);
+	ret = regmap_field_read(priv->rf[UP_THRESH_0 + hw_id], &d->up_thresh);
+	if (ret)
+		return ret;
+
+	d->up_thresh = tsens_hw_to_mC(s, d->up_thresh);
+	ret = regmap_field_read(priv->rf[LOW_THRESH_0 + hw_id], &d->low_thresh);
+	if (ret)
+		return ret;
+
+	d->low_thresh = tsens_hw_to_mC(s, d->low_thresh);
 
 	dev_dbg(priv->dev, "[%u] %s%s: thresh: (%d:%d:%d)\n", hw_id, __func__,
 		(d->up_viol || d->low_viol || d->crit_viol) ? "(V)" : "",
@@ -856,11 +880,16 @@ int get_cold_int_status(const struct tsens_sensor *s, bool *cold_status)
 
 int get_temp_tsens_valid(const struct tsens_sensor *s, int *temp)
 {
-	struct tsens_priv *priv = s->priv;
 	int hw_id = s->hw_id;
 	u32 temp_idx = LAST_TEMP_0 + hw_id;
+	struct tsens_priv *priv = s->priv;
+	int ret;
 
-	*temp = tsens_hw_to_mC(s, temp_idx);
+	ret = tsens_read_temp(s, temp_idx, temp);
+	if (ret)
+		return ret;
+
+	*temp = tsens_hw_to_mC(s, *temp);
 
 	if (s->tzd)
 		TSENS_DBG(priv, "Sensor:%s temp: %d", s->tzd->type, *temp);

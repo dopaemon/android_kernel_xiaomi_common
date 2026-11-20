@@ -2075,8 +2075,11 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 			err = ufs_qcom_unvote_qos_all(hba);
 	}
 
-	if (!err && ufs_qcom_is_link_off(hba) && host->device_reset)
+	if (!err && ufs_qcom_is_link_off(hba) && host->device_reset) {
 		ufs_qcom_device_reset_ctrl(hba, true);
+		/* Let the device finish its reset before the power rail enters LPM. */
+		usleep_range(10000, 11000);
+	}
 
 	/* put a proxy vote on UFS VCCQ LDO in shutdown case */
 	if (pm_op == UFS_SHUTDOWN_PM)
@@ -2729,6 +2732,12 @@ static void ufs_qcom_wait_for_cq_hp_update(struct ufs_hba *hba)
  * @hba: host controller instance
  * @on: If true, enable clocks else disable them.
  * @status: PRE_CHANGE or POST_CHANGE notify
+ *
+ * There are certain clocks which comes from the PHY so it needs
+ * to be managed together along with controller clocks which also
+ * provides a better power saving. Hence keep phy_power_off/on calls
+ * in ufs_qcom_setup_clocks, so that PHY's regulators & clks can be
+ * turned on/off along with UFS's clocks.
  *
  * Return: 0 on success, non-zero on failure.
  */

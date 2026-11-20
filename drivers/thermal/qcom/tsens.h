@@ -23,6 +23,7 @@
 #define COLD_SENSOR_HW_ID	128
 
 #define MAX_SENSORS 16
+#define MAX_READ_RETRY 3
 
 #include <linux/interrupt.h>
 #include <linux/thermal.h>

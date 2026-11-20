@@ -416,7 +416,7 @@ enum {
 /*
  * System-wide workqueues which are always present.
  *
- * system_wq is the one used by schedule[_delayed]_work[_on]().
+ * system_percpu_wq is the one used by schedule[_delayed]_work[_on]().
  * Multi-CPU multi-threaded.  There are users which expect relatively
  * short queue flush time.  Don't queue works which can run for too
  * long.
@@ -427,7 +427,7 @@ enum {
  * system_long_wq is similar to system_wq but may host long running
  * works.  Queue flushing might take relatively long.
  *
- * system_unbound_wq is unbound workqueue.  Workers are not bound to
+ * system_dfl_wq is unbound workqueue.  Workers are not bound to
  * any specific CPU, not concurrency managed, and all queued works are
  * executed immediately as long as max_active limit is not reached and
  * resources are available.
@@ -441,10 +441,12 @@ enum {
  * system_power_efficient_wq is identical to system_wq if
  * 'wq_power_efficient' is disabled.  See WQ_POWER_EFFICIENT for more info.
  */
-extern struct workqueue_struct *system_wq;
+extern struct workqueue_struct *system_wq; /* use system_percpu_wq, this will be removed */
+extern struct workqueue_struct *system_percpu_wq;
 extern struct workqueue_struct *system_highpri_wq;
 extern struct workqueue_struct *system_long_wq;
 extern struct workqueue_struct *system_unbound_wq;
+extern struct workqueue_struct *system_dfl_wq;
 extern struct workqueue_struct *system_freezable_wq;
 extern struct workqueue_struct *system_power_efficient_wq;
 extern struct workqueue_struct *system_freezable_power_efficient_wq;
@@ -490,6 +492,9 @@ alloc_workqueue(const char *fmt, unsigned int flags, int max_active, ...);
 			WQ_MEM_RECLAIM, 1, (name))
 #define create_singlethread_workqueue(name)				\
 	alloc_ordered_workqueue("%s", __WQ_LEGACY | WQ_MEM_RECLAIM, name)
+
+#define from_work(var, callback_work, work_fieldname)	\
+	container_of(callback_work, typeof(*var), work_fieldname)
 
 extern void destroy_workqueue(struct workqueue_struct *wq);
 
@@ -611,14 +616,14 @@ static inline bool schedule_work_on(int cpu, struct work_struct *work)
 }
 
 /**
- * schedule_work - put work task in global workqueue
+ * schedule_work - put work task in per-CPU workqueue
  * @work: job to be done
  *
- * Returns %false if @work was already on the kernel-global workqueue and
+ * Returns %false if @work was already on the system per-CPU workqueue and
  * %true otherwise.
  *
- * This puts a job in the kernel-global workqueue if it was not already
- * queued and leaves it in the same position on the kernel-global
+ * This puts a job in the system per-CPU workqueue if it was not already
+ * queued and leaves it in the same position on the system per-CPU
  * workqueue otherwise.
  *
  * Shares the same memory-ordering properties of queue_work(), cf. the
@@ -669,12 +674,12 @@ extern void __warn_flushing_systemwide_wq(void)
 })
 
 /**
- * schedule_delayed_work_on - queue work in global workqueue on CPU after delay
+ * schedule_delayed_work_on - queue work in per-CPU workqueue on CPU after delay
  * @cpu: cpu to use
  * @dwork: job to be done
  * @delay: number of jiffies to wait
  *
- * After waiting for a given time this puts a job in the kernel-global
+ * After waiting for a given time this puts a job in the system per-CPU
  * workqueue on the specified CPU.
  */
 static inline bool schedule_delayed_work_on(int cpu, struct delayed_work *dwork,
@@ -684,11 +689,11 @@ static inline bool schedule_delayed_work_on(int cpu, struct delayed_work *dwork,
 }
 
 /**
- * schedule_delayed_work - put work task in global workqueue after delay
+ * schedule_delayed_work - put work task in per-CPU workqueue after delay
  * @dwork: job to be done
  * @delay: number of jiffies to wait or 0 for immediate execution
  *
- * After waiting for a given time this puts a job in the kernel-global
+ * After waiting for a given time this puts a job in the system per-CPU
  * workqueue.
  */
 static inline bool schedule_delayed_work(struct delayed_work *dwork,

@@ -253,7 +253,7 @@ static void tcp_measure_rcv_mss(struct sock *sk, const struct sk_buff *skb)
 				struct tcp_sock *tp = tcp_sk(sk);
 
 				val = tcp_win_from_space(sk, sk->sk_rcvbuf);
-				tcp_set_window_clamp(sk, val);
+				WRITE_ONCE(tp->window_clamp, val);
 
 				if (tp->window_clamp < tp->rcvq_space.space)
 					tp->rcvq_space.space = tp->window_clamp;
@@ -4080,6 +4080,12 @@ no_queue:
 	return 1;
 
 old_ack:
+	/* An old ACK can carry new data. Update TS.Recent before SACK
+	 * processing can trigger a retransmission.
+	 */
+	if (flag & FLAG_UPDATE_TS_RECENT)
+		tcp_replace_ts_recent(tp, TCP_SKB_CB(skb)->seq);
+
 	/* If data was SACKed, tag it and see if we should send more data.
 	 * If data was DSACKed, see if we can undo a cwnd reduction.
 	 */
@@ -6019,6 +6025,7 @@ reset:
  *	  or pure receivers (this means either the sequence number or the ack
  *	  value must stay constant)
  *	- Unexpected TCP option.
+ *	- ACK sequence number is outside [SND.UNA, SND.NXT].
  *
  *	When these conditions are not satisfied it drops into a standard
  *	receive procedure patterned after RFC793 to handle all cases.
@@ -6067,7 +6074,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 
 	if ((tcp_flag_word(th) & TCP_HP_BITS) == tp->pred_flags &&
 	    TCP_SKB_CB(skb)->seq == tp->rcv_nxt &&
-	    !after(TCP_SKB_CB(skb)->ack_seq, tp->snd_nxt)) {
+	    between(TCP_SKB_CB(skb)->ack_seq, tp->snd_una, tp->snd_nxt)) {
 		int tcp_header_len = tp->tcp_header_len;
 
 		/* Timestamp header prediction: tcp_header_len
@@ -7127,6 +7134,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct net *net = sock_net(sk);
 	struct sock *fastopen_sk = NULL;
+	union tcp_seq_and_ts_off st;
 	struct request_sock *req;
 	bool want_cookie = false;
 	struct dst_entry *dst;
@@ -7184,8 +7192,11 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	if (!dst)
 		goto drop_and_free;
 
+	if (tmp_opt.tstamp_ok || (!want_cookie && !isn))
+		st = af_ops->init_seq_and_ts_off(net, skb);
+
 	if (tmp_opt.tstamp_ok)
-		tcp_rsk(req)->ts_off = af_ops->init_ts_off(net, skb);
+		tcp_rsk(req)->ts_off = st.ts_off;
 
 	if (!want_cookie && !isn) {
 		int max_syn_backlog = READ_ONCE(net->ipv4.sysctl_max_syn_backlog);
@@ -7207,7 +7218,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 			goto drop_and_release;
 		}
 
-		isn = af_ops->init_seq(skb);
+		isn = st.seq;
 	}
 
 	tcp_ecn_create_request(req, skb, sk, dst);

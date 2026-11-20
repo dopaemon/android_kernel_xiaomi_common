@@ -447,8 +447,12 @@ void net_passive_dec(struct net *net)
 	if (refcount_dec_and_test(&net->passive)) {
 		kfree(rcu_access_pointer(net->gen));
 
+#ifdef CONFIG_REF_TRACKER
 		/* There should not be any trackers left there. */
 		ref_tracker_dir_exit(&net->notrefcnt_tracker);
+		if (!net->refcnt_tracker.dead)
+			ref_tracker_dir_exit(&net->refcnt_tracker);
+#endif
 
 		kmem_cache_free(net_cachep, net);
 	}
