@@ -132,8 +132,10 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 	 * unless the task is boosted or has significant utilization demanding maximum performance.
 	 */
 	if (!uc_min && p_util < SCHED_CAPACITY_SCALE / 2) {
-		if (cass_cmp(cass_prime_cpu(b), cass_prime_cpu(a)))
-			goto done;
+		if (!(a->exit_lat && !b->exit_lat)) {
+			if (cass_cmp(cass_prime_cpu(b), cass_prime_cpu(a)))
+				goto done;
+		}
 	}
 
 	/* Prefer the CPU with lower relative utilization */
@@ -237,7 +239,8 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync)
 			if (!has_idle &&
 			    uc_min <= arch_scale_min_freq_capacity(cpu) &&
 			    (!cass_prime_cpu(curr) || uc_min > 0 ||
-			     p_util >= SCHED_CAPACITY_SCALE / 2)) {
+			     p_util >= SCHED_CAPACITY_SCALE / 2 ||
+			     (best->cpu >= 0 && !best->exit_lat))) {
 				/* Discard any previous non-idle candidate */
 				best = curr;
 				has_idle = true;
@@ -379,5 +382,12 @@ static int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 			return target_cpu;
 	}
 
-	return cass_select_task_rq(p, prev_cpu, wake_flags);
+	target_cpu = cass_select_task_rq(p, prev_cpu, wake_flags);
+	if (target_cpu >= 0 && target_cpu != prev_cpu) {
+		rcu_read_lock();
+		cpufreq_update_util(cpu_rq(target_cpu), SCHED_CPUFREQ_IOWAIT);
+		rcu_read_unlock();
+	}
+
+	return target_cpu;
 }
