@@ -20,7 +20,6 @@
 #include <linux/of.h>
 #include <linux/power_supply.h>
 #include <linux/property.h>
-#include <linux/temp_offset_sysctl.h>
 #include <linux/thermal.h>
 #include <linux/fixp-arith.h>
 #include "power_supply.h"
@@ -1272,7 +1271,6 @@ int power_supply_get_property(struct power_supply *psy,
 			    enum power_supply_property psp,
 			    union power_supply_propval *val)
 {
-	int ret;
 	if (atomic_read(&psy->use_cnt) <= 0) {
 		if (!psy->initialized)
 			return -EAGAIN;
@@ -1280,17 +1278,11 @@ int power_supply_get_property(struct power_supply *psy,
 	}
 
 	if (psy_has_property(psy->desc, psp))
-		ret = psy->desc->get_property(psy, psp, val);
+		return psy->desc->get_property(psy, psp, val);
 	else if (power_supply_battery_info_has_prop(psy->battery_info, psp))
-		ret = power_supply_battery_info_get_prop(psy->battery_info, psp, val);
+		return power_supply_battery_info_get_prop(psy->battery_info, psp, val);
 	else
-		ret = -EINVAL;
-
-	if (ret == 0 && psp == POWER_SUPPLY_PROP_TEMP) {
-		val->intval -= power_supply_temp_offset_deci_c();
-	}
-
-	return ret;
+		return -EINVAL;
 }
 EXPORT_SYMBOL_GPL(power_supply_get_property);
 
