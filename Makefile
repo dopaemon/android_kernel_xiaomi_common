@@ -2213,5 +2213,5 @@ FORCE:
 # information in a variable so we can use it in if_changed and friends.
 .PHONY: $(PHONY)
 
-KBUILD_CFLAGS += -march=armv9-a+crypto+nosve+dotprod -mcpu=cortex-a510 -mtune=cortex-a510
-KBUILD_AFLAGS += -march=armv9-a+crypto+nosve+dotprod -mcpu=cortex-a510 -mtune=cortex-a510
+KBUILD_CFLAGS += -march=armv9-a+crypto -mtune=cortex-a710
+KBUILD_AFLAGS += -march=armv9-a+crypto -mtune=cortex-a710
