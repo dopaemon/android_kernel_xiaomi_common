@@ -504,6 +504,8 @@ static void mark_idle(struct zram *zram, ktime_t cutoff)
 		}
 #endif
 		zram_slot_unlock(zram, index);
+		if ((index & 0x3ff) == 0)
+			cond_resched();
 	}
 }
 
