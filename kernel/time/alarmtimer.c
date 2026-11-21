@@ -280,7 +280,10 @@ static int alarmtimer_suspend(struct device *dev)
 		return 0;
 
 	if (ktime_to_ns(min) < 2 * NSEC_PER_SEC) {
-		pm_wakeup_event(dev, ktime_to_ms(min) + 1);
+		s64 ms = ktime_to_ms(min);
+		if (ms <= 0)
+			return -EBUSY;
+		pm_wakeup_event(dev, (unsigned int)ms + 1);
 		return -EBUSY;
 	}
 
