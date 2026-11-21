@@ -2527,7 +2527,7 @@ static int ufs_qcom_apply_dev_quirks(struct ufs_hba *hba)
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	/* Set the default auto-hiberate idle timer value to 1ms */
-	hba->ahit = FIELD_PREP(UFSHCI_AHIBERN8_TIMER_MASK, 1) |
+	hba->ahit = FIELD_PREP(UFSHCI_AHIBERN8_TIMER_MASK, 5) |
 		    FIELD_PREP(UFSHCI_AHIBERN8_SCALE_MASK, 3);
 	/* Set the clock gating delay to performance mode */
 	hba->clk_gating.delay_ms = UFS_QCOM_CLK_GATING_DELAY_MS_PERF;
@@ -3533,8 +3533,8 @@ static int ufs_qcom_set_cur_therm_state(struct thermal_cooling_device *tcd,
 		if (host->irq_affinity_support)
 			ufs_qcom_toggle_pri_affinity(hba, false);
 
-		/* Set the default auto-hiberate idle timer to 1 ms */
-		ufshcd_auto_hibern8_update(hba, ufs_qcom_us_to_ahit(1000));
+		/* Set the default auto-hiberate idle timer to 5 ms */
+		ufshcd_auto_hibern8_update(hba, ufs_qcom_us_to_ahit(5000));
 
 		/* Set the default auto suspend delay to 100 ms */
 		shost_for_each_device(sdev, hba->host)
