@@ -52,8 +52,8 @@ static void long_running_rt_task_notifier(void *unused, struct rq *rq)
 	 * been updated very recently. Use it directly, instead of
 	 * update_rq_clock_task() to avoid warnings.
 	 */
-	if (rq->clock_task -
-		per_cpu(rt_task_arrival_time, cpu)
+	if (rq->clock_task >= per_cpu(rt_task_arrival_time, cpu) &&
+	    rq->clock_task - per_cpu(rt_task_arrival_time, cpu)
 			> (u64)sysctl_sched_long_running_rt_task_ms * MSEC_TO_NSEC) {
 		printk_deferred("RT task %s (%d) runtime > %llu now=%llu task arrival time=%llu runtime=%llu\n",
 				curr->comm, curr->pid,
@@ -62,7 +62,8 @@ static void long_running_rt_task_notifier(void *unused, struct rq *rq)
 				per_cpu(rt_task_arrival_time, cpu),
 				rq->clock_task -
 				per_cpu(rt_task_arrival_time, cpu));
-		BUG();
+		WARN_ONCE(1, "WALT: RT task exceeded threshold\n");
+		per_cpu(rt_task_arrival_time, cpu) = 0;
 	}
 }
 
