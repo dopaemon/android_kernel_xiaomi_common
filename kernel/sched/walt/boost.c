@@ -23,6 +23,9 @@ void walt_init_tg(struct task_group *tg)
 {
 	struct walt_task_group *wtg;
 
+	if (!tg || !tg->android_vendor_data1)
+		return;
+
 	wtg = (struct walt_task_group *) tg->android_vendor_data1;
 
 	wtg->colocate = false;
@@ -37,6 +40,9 @@ void walt_init_tg(struct task_group *tg)
 void walt_init_topapp_tg(struct task_group *tg)
 {
 	struct walt_task_group *wtg;
+
+	if (!tg || !tg->android_vendor_data1)
+		return;
 
 	wtg = (struct walt_task_group *) tg->android_vendor_data1;
 
@@ -53,6 +59,9 @@ void walt_init_topapp_tg(struct task_group *tg)
 void walt_init_foreground_tg(struct task_group *tg)
 {
 	struct walt_task_group *wtg;
+
+	if (!tg || !tg->android_vendor_data1)
+		return;
 
 	wtg = (struct walt_task_group *) tg->android_vendor_data1;
 
@@ -281,11 +290,12 @@ static void sched_boost_disable_all(void)
 	int i;
 	int prev_boost = sched_boost_type;
 
-	if (prev_boost != NO_BOOST) {
+	if (prev_boost != NO_BOOST && prev_boost >= 0 &&
+	    prev_boost < ARRAY_SIZE(sched_boosts) && sched_boosts[prev_boost].exit)
 		sched_boosts[prev_boost].exit();
-		for (i = SCHED_BOOST_START; i < SCHED_BOOST_END; i++)
-			sched_boosts[i].refcount = 0;
-	}
+
+	for (i = SCHED_BOOST_START; i < SCHED_BOOST_END; i++)
+		sched_boosts[i].refcount = 0;
 }
 
 static void _sched_set_boost(int type)
