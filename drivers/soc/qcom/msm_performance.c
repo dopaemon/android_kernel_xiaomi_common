@@ -312,6 +312,8 @@ static ssize_t set_cpu_min_freq(struct kobject *kobj,
 		}
 
 		cp = strnchr(cp, strlen(cp), ' ');
+		if (!cp)
+			break;
 		cp++;
 	}
 
@@ -397,6 +399,8 @@ static ssize_t set_cpu_max_freq(struct kobject *kobj,
 		}
 
 		cp = strnchr(cp, strlen(cp), ' ');
+		if (!cp)
+			break;
 		cp++;
 	}
 
