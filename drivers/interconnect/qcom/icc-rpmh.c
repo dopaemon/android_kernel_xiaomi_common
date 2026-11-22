@@ -585,6 +585,11 @@ int qcom_icc_rpmh_remove(struct platform_device *pdev)
 {
 	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
 
+	if (!qp)
+		return 0;
+
+	of_platform_depopulate(&pdev->dev);
+
 	qcom_icc_debug_unregister(&qp->provider);
 	clk_bulk_put_all(qp->num_clks, qp->clks);
 
