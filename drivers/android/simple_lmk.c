@@ -103,6 +103,8 @@ static unsigned long find_victims(int *vindex)
 		 * a snapshot of the task's adj.
 		 */
 		sig = tsk->signal;
+		if (!sig)
+			continue;
 		adj = READ_ONCE(sig->oom_score_adj);
 		if (adj < 0 || sig->flags & SIGNAL_GROUP_EXIT ||
 		    (thread_group_empty(tsk) && tsk->flags & PF_EXITING))
@@ -260,6 +262,9 @@ static void scan_and_kill(void)
 		nr_to_kill = nr_found;
 	}
 
+	if (unlikely(!nr_to_kill))
+		return;
+
 	/*
 	 * Store the final number of victims for simple_lmk_mm_freed() and the
 	 * reaper thread, and indicate that reclaim is active.
@@ -330,7 +335,7 @@ static void scan_and_kill(void)
 	write_lock(&mm_free_lock);
 	reinit_completion(&reclaim_done);
 	reclaim_active = false;
-	nr_killed = (atomic_t)ATOMIC_INIT(0);
+	atomic_set(&nr_killed, 0);
 	write_unlock(&mm_free_lock);
 }
 
@@ -447,7 +452,7 @@ void simple_lmk_mm_freed(struct mm_struct *mm)
 	if (!test_bit(MMF_OOM_SKIP, &mm->flags))
 		return;
 
-	read_lock(&mm_free_lock);
+	write_lock(&mm_free_lock);
 	for (i = 0; i < nr_victims; i++) {
 		if (victims[i].mm == mm) {
 			/*
@@ -463,7 +468,7 @@ void simple_lmk_mm_freed(struct mm_struct *mm)
 			break;
 		}
 	}
-	read_unlock(&mm_free_lock);
+	write_unlock(&mm_free_lock);
 }
 
 static int simple_lmk_vmpressure_cb(struct notifier_block *nb,
