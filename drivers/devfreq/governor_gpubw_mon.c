@@ -95,6 +95,9 @@ static u32 generate_hint(struct devfreq_msm_adreno_tz_data *priv, int buslevel,
 	int wait_active_percent;
 	int gpu_percent;
 
+	if (!priv->bus.ram_time || !priv->bus.total_time)
+		return 0;
+
 	norm_max_cycles = (unsigned int)(priv->bus.ram_time) /
 			(unsigned int) priv->bus.total_time;
 	norm_cycles = (unsigned int)(priv->bus.ram_time + priv->bus.ram_wait) /
@@ -228,8 +231,17 @@ static int gpubw_start(struct devfreq *devfreq)
 	priv->bus.p_up = kzalloc(bus_size, GFP_KERNEL);
 	priv->bus.p_down = kzalloc(bus_size, GFP_KERNEL);
 	if (priv->bus.up == NULL || priv->bus.down == NULL ||
-		priv->bus.p_up == NULL || priv->bus.p_down == NULL)
+		priv->bus.p_up == NULL || priv->bus.p_down == NULL) {
+		kfree(priv->bus.up);
+		kfree(priv->bus.down);
+		kfree(priv->bus.p_up);
+		kfree(priv->bus.p_down);
+		priv->bus.up = NULL;
+		priv->bus.down = NULL;
+		priv->bus.p_up = NULL;
+		priv->bus.p_down = NULL;
 		return -ENOMEM;
+	}
 
 	/* Set up the cut-over percentages for the bus calculation. */
 	for (i = 0; i < priv->bus.num; i++) {
