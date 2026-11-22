@@ -1870,8 +1870,10 @@ static int _kgsl_alloc_contiguous(struct device *dev,
 	memdesc->attrs = attrs;
 
 	ret = kgsl_memdesc_sg_dma(memdesc, phys, size);
-	if (ret)
+	if (ret) {
 		dma_free_attrs(dev, (size_t) size, ptr, phys, attrs);
+		memdesc->hostptr = NULL;
+	}
 
 	return ret;
 }
