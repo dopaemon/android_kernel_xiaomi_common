@@ -1277,6 +1277,11 @@ static int get_ref_desc_olocked(struct binder_proc *proc,
 	 * is briefly released to allocate the new bitmap safely.
 	 */
 	nbits = dbitmap_grow_nbits(dmap);
+	if (!nbits) {
+		dbitmap_free(dmap);
+		*desc = slow_desc_lookup_olocked(proc, offset);
+		return 0;
+	}
 	binder_proc_unlock(proc);
 	new = bitmap_zalloc(nbits, GFP_KERNEL);
 	binder_proc_lock(proc);

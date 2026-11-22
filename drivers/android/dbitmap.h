@@ -94,9 +94,13 @@ dbitmap_shrink(struct dbitmap *dmap, unsigned long *new, unsigned int nbits)
 	dbitmap_replace(dmap, new, nbits);
 }
 
-/* Returns the nbits that a dbitmap can grow to. */
+#define DBITMAP_MAX_NBITS (1U << 24)
+
+/* Returns the nbits that a dbitmap can grow to, 0 if limit reached. */
 static inline unsigned int dbitmap_grow_nbits(struct dbitmap *dmap)
 {
+	if (dmap->nbits >= DBITMAP_MAX_NBITS)
+		return 0;
 	return dmap->nbits << 1;
 }
 
