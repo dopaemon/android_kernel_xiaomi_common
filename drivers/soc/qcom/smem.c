@@ -392,6 +392,9 @@ int qcom_smem_bust_hwspin_lock_by_host(unsigned int host)
 	if (host == SMEM_HOST_APPS || host >= SMEM_HOST_COUNT)
 		return -EINVAL;
 
+	if (!__smem || !__smem->hwlock)
+		return -EINVAL;
+
 	return hwspin_lock_bust(__smem->hwlock, SMEM_HOST_ID_TO_HWSPINLOCK_ID(host));
 }
 EXPORT_SYMBOL_GPL(qcom_smem_bust_hwspin_lock_by_host);
