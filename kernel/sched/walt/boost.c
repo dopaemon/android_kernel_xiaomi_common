@@ -23,7 +23,7 @@ void walt_init_tg(struct task_group *tg)
 {
 	struct walt_task_group *wtg;
 
-	if (!tg || !tg->android_vendor_data1)
+	if (!tg)
 		return;
 
 	wtg = (struct walt_task_group *) tg->android_vendor_data1;
@@ -41,7 +41,7 @@ void walt_init_topapp_tg(struct task_group *tg)
 {
 	struct walt_task_group *wtg;
 
-	if (!tg || !tg->android_vendor_data1)
+	if (!tg)
 		return;
 
 	wtg = (struct walt_task_group *) tg->android_vendor_data1;
@@ -60,7 +60,7 @@ void walt_init_foreground_tg(struct task_group *tg)
 {
 	struct walt_task_group *wtg;
 
-	if (!tg || !tg->android_vendor_data1)
+	if (!tg)
 		return;
 
 	wtg = (struct walt_task_group *) tg->android_vendor_data1;

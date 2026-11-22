@@ -167,10 +167,7 @@ static void walt_lb_check_for_rotation(struct rq *src_rq)
 		if (is_reserved(i))
 			continue;
 
-		if (!rq->misfit_task_load || !walt_fair_task(rq->curr))
-			continue;
-
-		if (!rq->curr->android_vendor_data1)
+		if (!rq->misfit_task_load || !rq->curr || !walt_fair_task(rq->curr))
 			continue;
 
 		wts = (struct walt_task_struct *) rq->curr->android_vendor_data1;
@@ -193,13 +190,10 @@ static void walt_lb_check_for_rotation(struct rq *src_rq)
 		if (is_reserved(i))
 			continue;
 
-		if (!walt_fair_task(rq->curr))
+		if (!rq->curr || !walt_fair_task(rq->curr))
 			continue;
 
 		if (rq->nr_running > 1)
-			continue;
-
-		if (!rq->curr->android_vendor_data1)
 			continue;
 
 		wts = (struct walt_task_struct *) rq->curr->android_vendor_data1;

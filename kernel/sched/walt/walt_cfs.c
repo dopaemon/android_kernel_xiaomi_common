@@ -1579,11 +1579,14 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 
 void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 {
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_rq *wrq;
+	struct walt_task_struct *wts;
 
-	if (!wts)
+	if (!rq || !p)
 		return;
+
+	wrq = &per_cpu(walt_rq, cpu_of(rq));
+	wts = (struct walt_task_struct *) p->android_vendor_data1;
 
 	if (wts->misfit)
 		wrq->walt_stats.nr_big_tasks++;
@@ -1598,11 +1601,14 @@ void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 
 void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 {
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+	struct walt_rq *wrq;
+	struct walt_task_struct *wts;
 
-	if (!wts)
+	if (!rq || !p)
 		return;
+
+	wrq = &per_cpu(walt_rq, cpu_of(rq));
+	wts = (struct walt_task_struct *) p->android_vendor_data1;
 
 	if (wts->misfit)
 		wrq->walt_stats.nr_big_tasks--;
