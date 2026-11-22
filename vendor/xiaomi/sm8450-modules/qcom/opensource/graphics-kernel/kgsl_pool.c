@@ -560,7 +560,7 @@ int kgsl_pool_alloc_page(int *page_size, struct page **pages,
 done:
 	kgsl_zero_page(page, order, dev);
 
-	for (j = 0; j < (*page_size >> PAGE_SHIFT); j++) {
+	for (j = 0; j < (1 << order); j++) {
 		p = nth_page(page, j);
 		pages[pcount] = p;
 		pcount++;
