@@ -7055,10 +7055,12 @@ again:
 	nr_node_reclaimed = sc->nr_reclaimed - nr_reclaimed;
 
 	/* Record the subtree's reclaim efficiency */
-	if (!sc->proactive)
+	if (!sc->proactive) {
+		unsigned long scanned = (sc->nr_scanned > nr_scanned) ?
+					(sc->nr_scanned - nr_scanned) : 0;
 		vmpressure(sc->gfp_mask, sc->target_mem_cgroup, true,
-			   sc->nr_scanned - nr_scanned, nr_node_reclaimed,
-			   sc->order);
+			   scanned, nr_node_reclaimed, sc->order);
+	}
 
 	if (nr_node_reclaimed)
 		reclaimable = true;
