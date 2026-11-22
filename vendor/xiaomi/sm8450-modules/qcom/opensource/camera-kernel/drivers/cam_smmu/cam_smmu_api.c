@@ -2631,7 +2631,7 @@ static int cam_smmu_alloc_scratch_buffer_add_to_list(int idx,
 	unsigned int iommu_dir,
 	dma_addr_t *virt_addr)
 {
-	unsigned long nents = virt_len / phys_len;
+	unsigned long nents;
 	struct cam_dma_buff_info *mapping_info = NULL;
 	size_t unmapped;
 	dma_addr_t iova = 0;
@@ -2641,6 +2641,11 @@ static int cam_smmu_alloc_scratch_buffer_add_to_list(int idx,
 	struct iommu_domain *domain = NULL;
 	struct page *page;
 	struct sg_table *table = NULL;
+
+	if (!phys_len || !virt_len)
+		return -EINVAL;
+
+	nents = virt_len / phys_len;
 
 	CAM_DBG(CAM_SMMU, "nents = %lu, idx = %d, virt_len  = %zx",
 		nents, idx, virt_len);
