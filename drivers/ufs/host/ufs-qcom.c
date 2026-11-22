@@ -6091,7 +6091,12 @@ static void ufs_qcom_hook_send_command(void *param, struct ufs_hba *hba,
 			u32 utag = (rq->mq_hctx->queue_num << BLK_MQ_UNIQUE_TAG_BITS) |
 						(rq->tag & BLK_MQ_UNIQUE_TAG_MASK);
 			u32 idx = blk_mq_unique_tag_to_hwq(utag);
-			struct ufs_hw_queue *hwq = &hba->uhq[idx];
+			struct ufs_hw_queue *hwq;
+
+			if (!hba->uhq || idx >= hba->nr_hw_queues)
+				return;
+
+			hwq = &hba->uhq[idx];
 
 			ufs_qcom_log_str(host, "<,%x,%d,%d,%d\n",
 							lrbp->cmd->cmnd[0],
@@ -6154,7 +6159,12 @@ static void ufs_qcom_hook_compl_command(void *param, struct ufs_hba *hba,
 			u32 utag = (rq->mq_hctx->queue_num << BLK_MQ_UNIQUE_TAG_BITS) |
 						(rq->tag & BLK_MQ_UNIQUE_TAG_MASK);
 			u32 idx = blk_mq_unique_tag_to_hwq(utag);
-			struct ufs_hw_queue *hwq = &hba->uhq[idx];
+			struct ufs_hw_queue *hwq;
+
+			if (!hba->uhq || idx >= hba->nr_hw_queues)
+				return;
+
+			hwq = &hba->uhq[idx];
 
 			ufs_qcom_log_str(host, ">,%x,%d,%d,%d\n",
 							lrbp->cmd->cmnd[0],
