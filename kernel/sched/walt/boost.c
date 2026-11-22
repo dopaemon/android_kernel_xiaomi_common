@@ -211,8 +211,14 @@ static int sched_effective_boost(void)
 
 static void sched_boost_disable(int type)
 {
-	struct sched_boost_data *sb = &sched_boosts[type];
-	int next_boost, prev_boost = sched_boost_type;
+	struct sched_boost_data *sb;
+	int next_boost, prev_boost;
+
+	if (type < 0 || type >= ARRAY_SIZE(sched_boosts))
+		return;
+
+	sb = &sched_boosts[type];
+	prev_boost = sched_boost_type;
 
 	if (sb->refcount <= 0)
 		return;
@@ -230,14 +236,22 @@ static void sched_boost_disable(int type)
 	 * be disabled. Disable it first and then apply
 	 * the next boost.
 	 */
-	sched_boosts[prev_boost].exit();
-	sched_boosts[next_boost].enter();
+	if (prev_boost >= 0 && prev_boost < ARRAY_SIZE(sched_boosts) && sched_boosts[prev_boost].exit)
+		sched_boosts[prev_boost].exit();
+	if (next_boost >= 0 && next_boost < ARRAY_SIZE(sched_boosts) && sched_boosts[next_boost].enter)
+		sched_boosts[next_boost].enter();
 }
 
 static void sched_boost_enable(int type)
 {
-	struct sched_boost_data *sb = &sched_boosts[type];
-	int next_boost, prev_boost = sched_boost_type;
+	struct sched_boost_data *sb;
+	int next_boost, prev_boost;
+
+	if (type < 0 || type >= ARRAY_SIZE(sched_boosts))
+		return;
+
+	sb = &sched_boosts[type];
+	prev_boost = sched_boost_type;
 
 	sb->refcount++;
 
@@ -256,8 +270,10 @@ static void sched_boost_enable(int type)
 	if (next_boost == prev_boost)
 		return;
 
-	sched_boosts[prev_boost].exit();
-	sched_boosts[next_boost].enter();
+	if (prev_boost >= 0 && prev_boost < ARRAY_SIZE(sched_boosts) && sched_boosts[prev_boost].exit)
+		sched_boosts[prev_boost].exit();
+	if (next_boost >= 0 && next_boost < ARRAY_SIZE(sched_boosts) && sched_boosts[next_boost].enter)
+		sched_boosts[next_boost].enter();
 }
 
 static void sched_boost_disable_all(void)
