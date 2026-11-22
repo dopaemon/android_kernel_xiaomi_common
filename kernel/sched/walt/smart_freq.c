@@ -23,7 +23,10 @@ int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int write,
 	mutex_lock(&freq_reason_mutex);
 	for (j = 0; j < num_sched_clusters; j++) {
 		for (i = 0; i < LEGACY_SMART_FREQ; i++) {
-			pos += snprintf(reason_dump + pos, 50, "%d:%d:%lu:%llu:%d\n", j, i,
+			if (pos >= sizeof(reason_dump))
+				break;
+			pos += scnprintf(reason_dump + pos, sizeof(reason_dump) - pos,
+			       "%d:%d:%lu:%llu:%d\n", j, i,
 			       default_freq_config[j].legacy_reason_config[i].freq_allowed,
 			       default_freq_config[j].legacy_reason_config[i].hyst_ns,
 			       !!(default_freq_config[j].smart_freq_participation_mask &
@@ -50,7 +53,10 @@ int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
 
 	for (j = 0; j < num_sched_clusters; j++) {
 		for (i = 0; i < SMART_FMAX_IPC_MAX; i++) {
-			pos += snprintf(reason_dump + pos, 50, "%d:%d:%lu:%lu:%llu:%d\n", j, i,
+			if (pos >= sizeof(reason_dump))
+				break;
+			pos += scnprintf(reason_dump + pos, sizeof(reason_dump) - pos,
+			       "%d:%d:%lu:%lu:%llu:%d\n", j, i,
 			       default_freq_config[j].ipc_reason_config[i].ipc,
 			       default_freq_config[j].ipc_reason_config[i].freq_allowed,
 			       default_freq_config[j].ipc_reason_config[i].hyst_ns,
@@ -101,6 +107,11 @@ int sched_smart_freq_legacy_freq_handler(struct ctl_table *table, int write,
 		id = 2;
 	else if (data == &sysctl_legacy_freq_levels_cluster3[0])
 		id = 3;
+
+	if (id == -1) {
+		mutex_unlock(&freq_reason_mutex);
+		return -EINVAL;
+	}
 
 	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
 	if (ret)
