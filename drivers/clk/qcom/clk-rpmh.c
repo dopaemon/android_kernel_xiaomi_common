@@ -944,7 +944,7 @@ static int clk_rpmh_probe(struct platform_device *pdev)
 		size_t aux_data_len;
 		const struct bcm_db *data;
 
-		if (!hw_clks[i])
+		if (!hw_clks[i] || !hw_clks[i]->init)
 			continue;
 
 		name = hw_clks[i]->init->name;
