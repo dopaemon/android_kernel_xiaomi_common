@@ -99,6 +99,9 @@ static void *kgsl_eventlog_alloc(u16 eventid, u32 size)
 void kgsl_eventlog_init(void)
 {
 	kgsl_eventlog = kzalloc(EVENTLOG_SIZE, GFP_KERNEL);
+	if (!kgsl_eventlog)
+		return;
+
 	eventlog_wptr = 0;
 
 	spin_lock_init(&lock);
