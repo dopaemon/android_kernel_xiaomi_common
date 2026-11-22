@@ -683,21 +683,30 @@ static void qos_cores_init(struct device *dev)
 							"qcom,qos-cores", i, &cpucores[i]);
 				if (err) {
 					dev_err(dev,
-						"%s: failed to read QOS coree for core:%d\n",
+						"%s: failed to read QOS core for core:%d\n",
 							__func__, i);
 					gcdsprm.b_silver_en = false;
+					break;
 				}
 			}
 
-			gcdsprm.coreno = cpucores;
+			if (gcdsprm.b_silver_en) {
+				gcdsprm.coreno = cpucores;
 
-			gcdsprm.dev_pm_qos_req = kcalloc(gcdsprm.corecount,
-					sizeof(struct dev_pm_qos_request), GFP_KERNEL);
+				gcdsprm.dev_pm_qos_req = kcalloc(gcdsprm.corecount,
+						sizeof(struct dev_pm_qos_request), GFP_KERNEL);
 
-			if (gcdsprm.dev_pm_qos_req == NULL) {
-				dev_err(dev,
-						"kcalloc failed for dev_pm_qos_req\n");
-				gcdsprm.b_silver_en = false;
+				if (gcdsprm.dev_pm_qos_req == NULL) {
+					dev_err(dev,
+							"kcalloc failed for dev_pm_qos_req\n");
+					gcdsprm.b_silver_en = false;
+					kfree(cpucores);
+					gcdsprm.coreno = NULL;
+					gcdsprm.corecount = 0;
+				}
+			} else {
+				kfree(cpucores);
+				gcdsprm.corecount = 0;
 			}
 		}
 	}
