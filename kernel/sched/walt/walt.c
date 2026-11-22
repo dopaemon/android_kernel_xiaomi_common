@@ -5331,6 +5331,8 @@ int walt_set_cpus_taken(struct cpumask *set)
 
 	if (unlikely(walt_disabled))
 		return -EAGAIN;
+	if (!set)
+		return -EINVAL;
 
 	spin_lock_irqsave(&cpus_taken_lock, flags);
 	for_each_cpu(cpu, set) {
@@ -5349,6 +5351,8 @@ int walt_unset_cpus_taken(struct cpumask *unset)
 
 	if (unlikely(walt_disabled))
 		return -EAGAIN;
+	if (!unset)
+		return -EINVAL;
 
 	spin_lock_irqsave(&cpus_taken_lock, flags);
 	for_each_cpu(cpu, unset) {
@@ -5364,7 +5368,13 @@ EXPORT_SYMBOL_GPL(walt_unset_cpus_taken);
 
 cpumask_t walt_get_cpus_taken(void)
 {
-	return walt_cpus_taken_mask;
+	unsigned long flags;
+	cpumask_t mask;
+
+	spin_lock_irqsave(&cpus_taken_lock, flags);
+	mask = walt_cpus_taken_mask;
+	spin_unlock_irqrestore(&cpus_taken_lock, flags);
+	return mask;
 }
 EXPORT_SYMBOL_GPL(walt_get_cpus_taken);
 
@@ -5375,6 +5385,8 @@ int walt_set_enforce_high_irq_cpus(struct cpumask *set)
 
 	if (unlikely(walt_disabled))
 		return -EAGAIN;
+	if (!set)
+		return -EINVAL;
 
 	spin_lock_irqsave(&enforce_high_irq_cpu_lock, flags);
 	for_each_cpu(cpu, set) {
@@ -5393,6 +5405,8 @@ int walt_unset_enforce_high_irq_cpus(struct cpumask *unset)
 
 	if (unlikely(walt_disabled))
 		return -EAGAIN;
+	if (!unset)
+		return -EINVAL;
 
 	spin_lock_irqsave(&enforce_high_irq_cpu_lock, flags);
 	for_each_cpu(cpu, unset) {
@@ -5408,7 +5422,13 @@ EXPORT_SYMBOL_GPL(walt_unset_enforce_high_irq_cpus);
 
 cpumask_t walt_get_enforce_high_irq_cpus(void)
 {
-	return walt_enforce_high_irq_cpu_mask;
+	unsigned long flags;
+	cpumask_t mask;
+
+	spin_lock_irqsave(&enforce_high_irq_cpu_lock, flags);
+	mask = walt_enforce_high_irq_cpu_mask;
+	spin_unlock_irqrestore(&enforce_high_irq_cpu_lock, flags);
+	return mask;
 }
 EXPORT_SYMBOL_GPL(walt_get_enforce_high_irq_cpus);
 
@@ -5416,6 +5436,8 @@ int walt_get_cpus_in_state1(struct cpumask *cpus)
 {
 	if (unlikely(walt_disabled))
 		return -EAGAIN;
+	if (!cpus)
+		return -EINVAL;
 
 	cpumask_or(cpus, cpu_partial_halt_mask, &sched_cluster[0]->cpus);
 	cpumask_andnot(cpus, cpus, cpu_halt_mask);
