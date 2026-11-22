@@ -1192,6 +1192,7 @@ static struct kgsl_process_private *kgsl_process_private_new(
 	if (IS_ERR(private->period)) {
 		int err = PTR_ERR(private->period);
 
+		put_pid(cur_pid);
 		kfree(private);
 		return ERR_PTR(err);
 	}
@@ -1225,6 +1226,7 @@ static struct kgsl_process_private *kgsl_process_private_new(
 		idr_destroy(&private->syncsource_idr);
 		put_pid(private->pid);
 		mmdrop(private->mm);
+		kfree(private->cmdline);
 
 		kfree(private);
 		private = ERR_PTR(err);
