@@ -74,20 +74,28 @@ static int create_cluster_state_node(struct device *dev, struct qcom_cluster_nod
 
 void remove_cluster_sysfs_nodes(struct lpm_cluster *cluster)
 {
-	struct generic_pm_domain *genpd = cluster->genpd;
-	struct kobject *kobj = cluster->dev_kobj;
+	struct generic_pm_domain *genpd;
+	struct kobject *kobj;
 	int i;
 
-	if (!qcom_lpm_kobj)
+	if (!qcom_lpm_kobj || !cluster)
 		return;
+
+	genpd = cluster->genpd;
+	if (!genpd)
+		return;
+
+	kobj = cluster->dev_kobj;
 
 	for (i = 0; i < genpd->state_count; i++) {
 		struct qcom_cluster_node *d = cluster->dev_node[i];
 
-		kobject_put(d->kobj);
+		if (d && d->kobj)
+			kobject_put(d->kobj);
 	}
 
-	kobject_put(kobj);
+	if (kobj)
+		kobject_put(kobj);
 }
 
 int create_cluster_sysfs_nodes(struct lpm_cluster *cluster)
