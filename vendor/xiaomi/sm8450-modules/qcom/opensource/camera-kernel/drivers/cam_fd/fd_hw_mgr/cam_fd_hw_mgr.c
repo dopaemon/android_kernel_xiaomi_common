@@ -2143,6 +2143,10 @@ int cam_fd_hw_mgr_init(struct device_node *of_node,
 
 	g_fd_hw_mgr.work_data = kcalloc(CAM_FD_WORKQ_NUM_TASK,
 		sizeof(struct cam_fd_mgr_work_data), GFP_KERNEL);
+	if (!g_fd_hw_mgr.work_data) {
+		rc = -ENOMEM;
+		goto destroy_workq;
+	}
 
 	for (i = 0; i < CAM_FD_WORKQ_NUM_TASK; i++)
 		g_fd_hw_mgr.work->task.pool[i].payload =
@@ -2181,6 +2185,8 @@ int cam_fd_hw_mgr_init(struct device_node *of_node,
 
 	return rc;
 
+destroy_workq:
+	cam_req_mgr_workq_destroy(&g_fd_hw_mgr.work);
 detach_smmu:
 	cam_smmu_destroy_handle(g_fd_hw_mgr.device_iommu.non_secure);
 	g_fd_hw_mgr.device_iommu.non_secure = -1;
