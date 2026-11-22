@@ -170,6 +170,11 @@ static void tcs_list_gen(struct bcm_voter *voter, int bucket,
 	memset(n, 0, sizeof(int) * (MAX_VCD + 1));
 
 	list_for_each_entry(bcm, bcm_list, list) {
+		if (idx >= MAX_BCMS || batch >= MAX_VCD) {
+			pr_err_once("bcm_voter: too many BCMs (%zu) or batches (%zu)\n", idx, batch);
+			break;
+		}
+
 		commit = false;
 		cur_vcd_size++;
 		if ((list_is_last(&bcm->list, bcm_list)) ||
@@ -193,7 +198,8 @@ static void tcs_list_gen(struct bcm_voter *voter, int bucket,
 		if (n[batch] >= MAX_RPMH_PAYLOAD) {
 			if (!commit) {
 				n[batch] -= cur_vcd_size;
-				n[batch + 1] = cur_vcd_size;
+				if (batch + 1 < MAX_VCD + 1)
+					n[batch + 1] = cur_vcd_size;
 			}
 			batch++;
 		}
