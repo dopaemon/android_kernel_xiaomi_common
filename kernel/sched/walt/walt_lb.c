@@ -408,8 +408,14 @@ static int walt_lb_pull_tasks(int dst_cpu, int src_cpu, struct task_struct **pul
 				success = stop_one_cpu_nowait(src_cpu,
 						stop_walt_lb_active_migration,
 						src_rq, &src_rq->active_balance_work);
-				if (!success)
+				if (!success) {
+					raw_spin_lock_irqsave(&src_rq->__lock, flags);
+					src_rq->active_balance = 0;
+					src_wrq->push_task = NULL;
+					raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
 					clear_reserved(dst_cpu);
+					put_task_struct(p);
+				}
 
 				return 0; /* we did not pull any task here */
 			}
@@ -754,9 +760,14 @@ void walt_lb_tick(struct rq *rq)
 	ret = stop_one_cpu_nowait(prev_cpu,
 			stop_walt_lb_active_migration, rq,
 			&rq->active_balance_work);
-	if (!ret)
+	if (!ret) {
+		raw_spin_lock_irqsave(&rq->__lock, flags);
+		rq->active_balance = 0;
+		prev_wrq->push_task = NULL;
+		raw_spin_unlock_irqrestore(&rq->__lock, flags);
 		clear_reserved(new_cpu);
-	else
+		put_task_struct(p);
+	} else
 		wake_up_if_idle(new_cpu);
 
 	return;
@@ -1189,8 +1200,13 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 				src_rq, &src_rq->active_balance_work);
 
 		if (!success) {
+			raw_spin_lock_irqsave(&src_rq->__lock, flags);
+			src_rq->active_balance = 0;
+			src_wrq->push_task = NULL;
+			raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
 			no_oscillate_reason = 101;
 			clear_reserved(dst_cpu);
+			put_task_struct(p);
 			goto out_fail;
 		} else {
 			wake_up_if_idle(dst_cpu);

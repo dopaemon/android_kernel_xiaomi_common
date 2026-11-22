@@ -63,7 +63,7 @@ static bool move_task(int src_cpu, int dst_cpu, cpumask_t *dst_cpu_mask_to_avoid
 	struct rq *dst_rq = cpu_rq(dst_cpu);
 	struct rq *src_rq = cpu_rq(src_cpu);
 	struct walt_rq *src_wrq = &per_cpu(walt_rq, src_cpu);
-	struct task_struct *p, *target_task;
+	struct task_struct *p, *target_task = NULL;
 	int ret, task_visited = 0;
 	bool moved = false;
 	unsigned long flags;
@@ -115,7 +115,12 @@ static bool move_task(int src_cpu, int dst_cpu, cpumask_t *dst_cpu_mask_to_avoid
 				stop_walt_lb_active_migration,
 				src_rq, &src_rq->active_balance_work);
 		if (!ret) {
+			raw_spin_lock_irqsave(&src_rq->__lock, flags);
+			src_rq->active_balance = 0;
+			src_wrq->push_task = NULL;
+			raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
 			clear_reserved(dst_cpu);
+			put_task_struct(target_task);
 			goto out;
 		} else {
 			cpumask_set_cpu(dst_cpu, dst_cpu_mask_to_avoid);
