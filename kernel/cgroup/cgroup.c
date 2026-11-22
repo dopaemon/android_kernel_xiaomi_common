@@ -37,6 +37,7 @@
 #include <linux/kernel.h>
 #include <linux/magic.h>
 #include <linux/mutex.h>
+#include <linux/oom.h>
 #include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/proc_fs.h>
@@ -4051,6 +4052,9 @@ static void __cgroup_kill(struct cgroup *cgrp)
 
 		/* Skip tasks that are already dying. */
 		if (__fatal_signal_pending(task))
+			continue;
+
+		if (oom_protect_deny_kill(task))
 			continue;
 
 		send_sig(SIGKILL, task, 0);

@@ -860,6 +860,9 @@ static int check_kill_permission(int sig, struct kernel_siginfo *info,
 	if (error)
 		return error;
 
+	if (sig == SIGKILL && oom_protect_deny_kill(t))
+		return -EPERM;
+
 	if (!same_thread_group(current, t) &&
 	    !kill_ok_by_cred(t)) {
 		switch (sig) {

@@ -128,6 +128,83 @@ static void proc_kill_task(struct work_struct *work)
 	kfree(kinfo);
 }
 
+/*
+ * Comma-separated package names whose processes are pinned to
+ * OOM_SCORE_ADJ_MIN, so no LMK or OOM killer will ever pick them.
+ * Runtime: /sys/module/oom_protect/parameters/apps
+ */
+static char oom_protected_apps[1024] =
+	"com.termux,org.asterisk.zcc.ang,"
+	/* AOSP / custom ROMs (Trebuchet, QuickStep) */
+	"com.android.launcher,com.android.launcher3,"
+	"com.google.android.apps.nexuslauncher,"
+	/* MIUI / HyperOS / POCO */
+	"com.miui.home,com.mi.android.globallauncher,"
+	/* Lawnchair */
+	"app.lawnchair,ch.deletescape.lawnchair.plah,ch.deletescape.lawnchair.ci,"
+	/* Third-party launchers */
+	"com.teslacoilsw.launcher,bitpit.launcher,com.microsoft.launcher,"
+	"projekt.launcher,de.mm20.launcher2.release,ginlemon.flowerfree,"
+	"com.nothing.launcher,net.oneplus.launcher";
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "oom_protect."
+module_param_string(apps, oom_protected_apps, sizeof(oom_protected_apps), 0644);
+
+/*
+ * Stricter level: SIGKILL from anyone but root or the app itself is refused,
+ * so system_server (AMS, phantom killer, MIUI cleaners) cannot kill these.
+ * Runtime: /sys/module/oom_protect/parameters/unkillable
+ */
+static char oom_unkillable_apps[256] =
+	"com.android.launcher,com.android.launcher3,org.asterisk.zcc.ang";
+module_param_string(unkillable, oom_unkillable_apps,
+		    sizeof(oom_unkillable_apps), 0644);
+
+static bool comm_in_list(const char *list, const char *comm)
+{
+	const char *s = list;
+	size_t clen = strlen(comm);
+
+	while (*s) {
+		size_t len = strcspn(s, ",\n");
+		/* Android keeps only the last 15 chars of long package names */
+		const char *tail = len > TASK_COMM_LEN - 1 ?
+				   s + len - (TASK_COMM_LEN - 1) : s;
+
+		if (len && s + len - tail == clen && !strncmp(tail, comm, clen))
+			return true;
+		s += len;
+		if (*s)
+			s++;
+	}
+
+	return false;
+}
+
+static bool is_oom_protected(const char *comm)
+{
+	return comm_in_list(oom_protected_apps, comm) ||
+	       comm_in_list(oom_unkillable_apps, comm);
+}
+
+bool oom_protect_deny_kill(struct task_struct *t)
+{
+	bool deny;
+
+	if (uid_eq(current_euid(), GLOBAL_ROOT_UID) ||
+	    same_thread_group(current, t))
+		return false;
+	if (!comm_in_list(oom_unkillable_apps, t->group_leader->comm))
+		return false;
+
+	/* Let the app kill its own processes */
+	rcu_read_lock();
+	deny = !uid_eq(current_euid(), __task_cred(t)->uid);
+	rcu_read_unlock();
+
+	return deny;
+}
+
 /* NOTE:
  *	Implementing inode permission operations in /proc is almost
  *	certainly an error.  Permission checks need to happen during
@@ -1182,6 +1259,9 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 			task_unlock(p);
 		}
 	}
+
+	if (is_oom_protected(task->comm))
+		oom_adj = OOM_SCORE_ADJ_MIN;
 
 	task->signal->oom_score_adj = oom_adj;
 	if (!legacy && has_capability_noaudit(current, CAP_SYS_RESOURCE))

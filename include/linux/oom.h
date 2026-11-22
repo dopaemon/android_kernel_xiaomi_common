@@ -115,4 +115,7 @@ extern struct task_struct *find_lock_task_mm(struct task_struct *p);
 
 /* call for adding killed process to reaper. */
 extern void add_to_oom_reaper(struct task_struct *p);
+
+/* fs/proc/base.c: SIGKILL to an oom_protect.unkillable app is refused */
+extern bool oom_protect_deny_kill(struct task_struct *t);
 #endif /* _INCLUDE_LINUX_OOM_H */
