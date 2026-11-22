@@ -63,6 +63,9 @@ static DEFINE_PER_CPU(struct sugov_cpu, sugov_cpu);
 
 static void sugov_update_rate_limit_us(struct sugov_policy *sg_policy)
 {
+	if (!sg_policy || !sg_policy->tunables)
+		return;
+
 	/*
 	 * Cast rate_limit_us before multiplication to force 64-bit arithmetic.
 	 * Otherwise, on 32-bit platforms, both operands are converted to
@@ -75,6 +78,9 @@ static void sugov_update_rate_limit_us(struct sugov_policy *sg_policy)
 static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 {
 	s64 delta_ns;
+
+	if (!sg_policy || !sg_policy->policy)
+		return false;
 
 	/*
 	 * Since cpufreq_update_util() is called with rq->lock held for
@@ -101,6 +107,10 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 	}
 
 	delta_ns = time - sg_policy->last_freq_update_time;
+	if (unlikely(delta_ns < 0)) {
+		sg_policy->last_freq_update_time = time;
+		return true;
+	}
 
 	return delta_ns >= sg_policy->freq_update_delay_ns;
 }
