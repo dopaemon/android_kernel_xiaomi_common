@@ -5903,6 +5903,9 @@ static int binder_ioctl_freeze(struct binder_freeze_info *info,
 {
 	int ret = 0;
 
+	if (!info || !target_proc || info->timeout_ms < 0)
+		return -EINVAL;
+
 	if (!info->enable) {
 		binder_inner_proc_lock(target_proc);
 		target_proc->sync_recv = false;
