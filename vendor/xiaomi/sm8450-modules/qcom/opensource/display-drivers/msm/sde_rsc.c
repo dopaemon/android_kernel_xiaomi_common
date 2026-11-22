@@ -180,6 +180,8 @@ void sde_rsc_client_destroy(struct sde_rsc_client *client)
 		}
 	}
 	mutex_lock(&rsc->client_lock);
+	if (rsc->primary_client == client)
+		rsc->primary_client = NULL;
 	list_del_init(&client->list);
 	mutex_unlock(&rsc->client_lock);
 
