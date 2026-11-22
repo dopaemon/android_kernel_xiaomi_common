@@ -3452,6 +3452,10 @@ out:
 			 * the offlined memory cgroups because of a
 			 * round-off error.
 			 */
+			if (unlikely(!denominator)) {
+				scan_balance = SCAN_EQUAL;
+				break;
+			}
 			scan = mem_cgroup_online(memcg) ?
 			       div64_u64(scan * fraction[file], denominator) :
 			       DIV64_U64_ROUND_UP(scan * fraction[file],
