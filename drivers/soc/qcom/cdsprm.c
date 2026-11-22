@@ -712,11 +712,18 @@ static void set_qos_latency(int latency)
 	if (gcdsprm.b_silver_en) {
 
 		for (ii = 0; ii < gcdsprm.corecount; ii++) {
+			struct device *cpu_dev;
+
 			cpu = gcdsprm.coreno[ii];
+			cpu_dev = get_cpu_device(cpu);
+			if (!cpu_dev) {
+				err = -ENODEV;
+				break;
+			}
 
 			if (!gcdsprm.qos_request) {
 				err = dev_pm_qos_add_request(
-						get_cpu_device(cpu),
+						cpu_dev,
 						&gcdsprm.dev_pm_qos_req[ii],
 						DEV_PM_QOS_RESUME_LATENCY,
 						latency);
