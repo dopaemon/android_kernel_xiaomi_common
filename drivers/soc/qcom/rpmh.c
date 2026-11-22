@@ -486,6 +486,9 @@ int rpmh_write_sleep_and_wake(const struct device *dev)
 	struct rpmh_ctrlr *ctrlr = get_rpmh_ctrlr(dev);
 	int ch, ret;
 
+	if (IS_ERR_OR_NULL(ctrlr))
+		return -EINVAL;
+
 	ch = rpmh_rsc_get_channel(ctrlr_to_drv(ctrlr));
 	if (ch < 0)
 		return ch;
@@ -514,10 +517,13 @@ int rpmh_write_sleep_and_wake_no_child(const struct device *dev)
 	struct rpmh_ctrlr *ctrlr = get_rpmh_ctrlr_no_child(dev);
 	int ch, ret;
 
+	if (IS_ERR_OR_NULL(ctrlr))
+		return -EINVAL;
+
 	ch = rpmh_rsc_get_channel(ctrlr_to_drv(ctrlr));
 	if (ch < 0) {
 		rpmh_rsc_debug_channel_busy(ctrlr_to_drv(ctrlr));
-		BUG_ON(1);
+		WARN_ON_ONCE(1);
 		return ch;
 	}
 
@@ -528,7 +534,7 @@ int rpmh_write_sleep_and_wake_no_child(const struct device *dev)
 	ret = rpmh_rsc_switch_channel(ctrlr_to_drv(ctrlr), ch);
 	if (ret) {
 		rpmh_rsc_debug_channel_busy(ctrlr_to_drv(ctrlr));
-		BUG_ON(1);
+		WARN_ON_ONCE(1);
 	}
 
 	return ret;
