@@ -252,7 +252,7 @@ static inline bool _walt_can_migrate_task(struct task_struct *p, int dst_cpu,
 		return false;
 
 	if (to_lower) {
-		if (wts->iowaited && (wts->demand_scaled < MIN_UTIL_FOR_STORAGE_BALANCING))
+		if (wts && wts->iowaited && (wts->demand_scaled < MIN_UTIL_FOR_STORAGE_BALANCING))
 			return false;
 		if (per_task_boost(p) == TASK_BOOST_STRICT_MAX &&
 				task_in_related_thread_group(p))
