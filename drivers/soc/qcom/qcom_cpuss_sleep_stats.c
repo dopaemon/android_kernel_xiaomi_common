@@ -689,8 +689,6 @@ static int qcom_cpuss_sleep_stats_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&t_info->complete_stats.node);
 
-	root_dir = debugfs_create_dir("qcom_cpuss_sleep_stats", NULL);
-	t_info->stats_rootdir = root_dir;
 	t_info->pdev = pdev;
 
 	memset(t_info->cpu_pcpu_map, U8_MAX, MAX_POSSIBLE_CPUS);
@@ -735,13 +733,19 @@ static int qcom_cpuss_sleep_stats_probe(struct platform_device *pdev)
 	if (!t_info->offsets)
 		return -ENODEV;
 
+	root_dir = debugfs_create_dir("qcom_cpuss_sleep_stats", NULL);
+	t_info->stats_rootdir = root_dir;
+	t_info->pdev = pdev;
+
 	/*
 	 * Function to read cfgs register to know lpm stats per cpu/cluster and
 	 * create debugfs
 	 */
 	ret = qcom_cpuss_read_lpm_and_residency_cfg_informaion(t_info);
-	if (ret)
+	if (ret) {
+		debugfs_remove_recursive(root_dir);
 		return ret;
+	}
 
 	debugfs_create_file("stats", 0444, root_dir,
 				(void *) &t_info->complete_stats.node,
