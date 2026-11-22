@@ -44,7 +44,7 @@ static void android_vh_allow_domain_state(void *unused,
 {
 	struct simple_lpm_cluster *cluster_simple_gov = to_cluster(genpd);
 
-	if (!cluster_simple_gov)
+	if (!cluster_simple_gov || idx >= MAX_CLUSTER_STATES)
 		return;
 
 	*allow = cluster_simple_gov->state_allowed[idx];
@@ -73,6 +73,7 @@ static int simple_lpm_cluster_simple_gov_remove(struct platform_device *pdev)
 	}
 
 	list_del(&cluster_simple_gov->list);
+	cluster_simple_gov->initialized = false;
 
 	return 0;
 }
@@ -109,10 +110,13 @@ static int simple_lpm_cluster_simple_gov_probe(struct platform_device *pdev)
 		struct generic_pm_domain *genpd = cluster_simple_gov->genpd;
 		struct genpd_power_state *states = &genpd->states[i];
 
-		do_div(states->residency_ns, cluster_cur_div);
-		do_div(states->power_on_latency_ns, cluster_cur_div);
-		do_div(states->power_off_latency_ns, cluster_cur_div);
-		cluster_simple_gov->state_allowed[i] = true;
+		if (cluster_cur_div > 0) {
+			do_div(states->residency_ns, cluster_cur_div);
+			do_div(states->power_on_latency_ns, cluster_cur_div);
+			do_div(states->power_off_latency_ns, cluster_cur_div);
+		}
+		if (i < MAX_CLUSTER_STATES)
+			cluster_simple_gov->state_allowed[i] = true;
 	}
 
 	return 0;
