@@ -202,6 +202,23 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
 
+	} else if (!strcmp(name, "SM8450") || !strcmp(name, "SM8475") || !strcmp(name, "WAIPIO")) {
+		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
+		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
+
+		/* G + P for storage boost */
+		if (num_sched_clusters > 1)
+			cpumask_andnot(&storage_boost_cpus, cpu_possible_mask, &cpu_array[0][0]);
+		else
+			cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
+
+		if (num_sched_clusters >= 3) {
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][1]);
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][2]);
+		}
+
 	} else if (!strcmp(name, "TUNA") || !strcmp(name, "TUNA7") || !strcmp(name, "TUNAP")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
