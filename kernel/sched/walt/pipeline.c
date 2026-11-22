@@ -216,7 +216,7 @@ static inline bool should_pipeline_pin_special(void)
 	 * of other system wide conditions.
 	 */
 	if (soc_feat(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING)) {
-		if (pipeline_demand(heavy_wts[0]) < sysctl_pipeline_special_task_util_thres)
+		if (heavy_wts[0] && pipeline_demand(heavy_wts[0]) < sysctl_pipeline_special_task_util_thres)
 			return true;
 		else
 			return false;
