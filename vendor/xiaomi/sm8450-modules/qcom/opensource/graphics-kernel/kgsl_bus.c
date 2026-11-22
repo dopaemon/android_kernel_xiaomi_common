@@ -116,7 +116,7 @@ static void validate_pwrlevels(struct kgsl_device *device, u32 *ibs,
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int i;
 
-	for (i = 0; i < pwr->num_pwrlevels - 1; i++) {
+	for (i = 0; i < pwr->num_pwrlevels; i++) {
 		struct kgsl_pwrlevel *pwrlevel = &pwr->pwrlevels[i];
 
 		if (pwrlevel->bus_freq >= count) {
