@@ -218,6 +218,8 @@ int snd_card_sysfs_init(void)
 	if (ret < 0) {
 		pr_err("%s: Failed to add kobject %s, err = %d\n",
 			__func__, dir, ret);
+		kobject_put(&snd_card_pdata->snd_card_kobj);
+		snd_card_pdata = NULL;
 		goto done;
 	}
 
@@ -232,6 +234,7 @@ int snd_card_sysfs_init(void)
 
 fail_create_file:
 	kobject_put(&snd_card_pdata->snd_card_kobj);
+	snd_card_pdata = NULL;
 done:
 	return ret;
 }
