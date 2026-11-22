@@ -6519,14 +6519,23 @@ static bool ufshcd_abort_one(struct request *rq, void *priv)
 	int *ret = priv;
 	u32 tag = rq->tag;
 	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(rq);
-	struct scsi_device *sdev = cmd->device;
-	struct Scsi_Host *shost = sdev->host;
-	struct ufs_hba *hba = shost_priv(shost);
+	struct scsi_device *sdev = cmd ? cmd->device : NULL;
+	struct Scsi_Host *shost;
+	struct ufs_hba *hba;
+	int cdb = -1;
+
+	if (!sdev || !sdev->host)
+		return true;
+
+	shost = sdev->host;
+	hba = shost_priv(shost);
 
 	*ret = ufshcd_try_to_abort_task(hba, tag);
+	if (hba->lrb && tag < hba->nutrs && hba->lrb[tag].cmd)
+		cdb = hba->lrb[tag].cmd->cmnd[0];
+
 	dev_err(hba->dev, "Aborting tag %d / CDB %#02x %s\n", tag,
-		hba->lrb[tag].cmd ? hba->lrb[tag].cmd->cmnd[0] : -1,
-		*ret ? "failed" : "succeeded");
+		cdb, *ret ? "failed" : "succeeded");
 
 	return *ret == 0;
 }
