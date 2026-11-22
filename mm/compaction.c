@@ -3027,7 +3027,9 @@ static bool kcompactd_node_suitable(pg_data_t *pgdat)
 {
 	int zoneid;
 	struct zone *zone;
-	enum zone_type highest_zoneidx = pgdat->kcompactd_highest_zoneidx;
+	enum zone_type highest_zoneidx = min_t(enum zone_type,
+					       pgdat->kcompactd_highest_zoneidx,
+					       pgdat->nr_zones - 1);
 
 	for (zoneid = 0; zoneid <= highest_zoneidx; zoneid++) {
 		zone = &pgdat->node_zones[zoneid];
@@ -3137,7 +3139,7 @@ static void kcompactd_do_work(pg_data_t *pgdat)
 
 void wakeup_kcompactd(pg_data_t *pgdat, int order, int highest_zoneidx)
 {
-	if (!order)
+	if (order <= 0 || order >= MAX_ORDER)
 		return;
 
 	if (pgdat->kcompactd_max_order < order)
