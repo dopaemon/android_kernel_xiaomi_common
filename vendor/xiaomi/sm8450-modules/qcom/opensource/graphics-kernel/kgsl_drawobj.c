@@ -645,6 +645,11 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 	event->context = NULL;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv) {
+		syncobj->numsyncs--;
+		kgsl_drawobj_put(drawobj);
+		return -ENOMEM;
+	}
 
 	set_bit(event->id, &syncobj->pending);
 
