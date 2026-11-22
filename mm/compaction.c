@@ -3079,6 +3079,9 @@ static void kcompactd_do_work(pg_data_t *pgdat)
 		if (!populated_zone(zone))
 			continue;
 
+		if (!zone_can_frag(zone))
+			continue;
+
 		if (compaction_deferred(zone, cc.order))
 			continue;
 
