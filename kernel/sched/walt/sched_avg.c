@@ -166,7 +166,8 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 		}
 
 		/* calculate the averge per-cpu utilization */
-		cstats_util_pct[cluster->id] = sum_util_pct / num_cpus;
+		if (cluster->id < MAX_CLUSTERS && num_cpus)
+			cstats_util_pct[cluster->id] = sum_util_pct / num_cpus;
 	}
 
 	for_each_possible_cpu(cpu) {
