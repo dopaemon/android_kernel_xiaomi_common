@@ -3187,15 +3187,20 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 		if (err <= 0) {
 			dev_err(dev, "1 vote is needed, bailing out: %d\n",
 				err);
+			of_node_put(group_node);
 			goto out_err;
 		}
 		qcg->votes = kmalloc(sizeof(*qcg->votes) * err, GFP_KERNEL);
-		if (!qcg->votes)
+		if (!qcg->votes) {
+			of_node_put(group_node);
 			goto out_err;
+		}
 		for (i = 0; i < err; i++) {
 			if (of_property_read_u32_index(group_node, "vote", i,
-						       &qcg->votes[i]))
+						       &qcg->votes[i])) {
+				of_node_put(group_node);
 				goto out_vote_err;
+			}
 		}
 		dev_dbg(dev, "%s: qcg: %p\n", __func__, qcg);
 		qcg->host = host;
