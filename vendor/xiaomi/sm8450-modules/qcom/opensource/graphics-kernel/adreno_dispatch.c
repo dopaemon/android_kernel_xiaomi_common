@@ -2440,7 +2440,7 @@ static struct adreno_ringbuffer *dispatch_get_rb(struct adreno_device *adreno_de
 	int level;
 
 	/* If preemption is disabled everybody goes on the same ringbuffer */
-	if (!adreno_is_preemption_enabled(adreno_dev))
+	if (!adreno_is_preemption_enabled(adreno_dev) || !adreno_dev->num_ringbuffers)
 		return &adreno_dev->ringbuffers[0];
 
 	/*
