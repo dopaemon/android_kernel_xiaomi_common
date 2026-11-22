@@ -381,11 +381,11 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		 * event, select this one to avoid getting stuck in the shallow
 		 * one for too long.
 		 */
-		if (drv->states[idx].target_residency_ns < TICK_NSEC &&
+		if (idx != -1 && drv->states[idx].target_residency_ns < TICK_NSEC &&
 		    s->target_residency_ns <= delta_tick)
 			idx = i;
 
-		return idx;
+		return idx >= 0 ? idx : 0;
 	}
 
 	if (idx == -1)
