@@ -2642,9 +2642,12 @@ int mievent_report(unsigned int eventid,const char *value,struct device *dev)
 {
 #if IS_ENABLED(CONFIG_MIEV)
 	struct misight_mievent *mievent;
-	char i2c_info[20];
+	char i2c_info[32];
 
-	sprintf(i2c_info,"%s",dev->kobj.name);
+	if (!dev || !dev->kobj.name)
+		return -EINVAL;
+
+	snprintf(i2c_info, sizeof(i2c_info), "%s", dev->kobj.name);
 	dev_info(dev, "%s: reg = %s, KeyWord = %s DFS report\n", __func__, i2c_info,value);
 	mievent  = cdev_tevent_alloc(eventid);
 	cdev_tevent_add_str(mievent, "I2cAddress",i2c_info);
