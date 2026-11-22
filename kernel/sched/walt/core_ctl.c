@@ -1210,7 +1210,8 @@ static void wake_up_core_ctl_thread(void)
 	core_ctl_pending = true;
 	spin_unlock_irqrestore(&core_ctl_pending_lock, flags);
 
-	wake_up_process(core_ctl_thread);
+	if (core_ctl_thread)
+		wake_up_process(core_ctl_thread);
 }
 
 static inline int set_cluster_boost(struct cluster_data *cluster, bool boost,
@@ -1927,8 +1928,11 @@ int core_ctl_init(void)
 	/* initialize our single kthread, after spin lock init */
 	core_ctl_thread = kthread_run(try_core_ctl, NULL, "core_ctl");
 
-	if (IS_ERR(core_ctl_thread))
-		return PTR_ERR(core_ctl_thread);
+	if (IS_ERR(core_ctl_thread)) {
+		ret = PTR_ERR(core_ctl_thread);
+		core_ctl_thread = NULL;
+		return ret;
+	}
 
 	sched_setscheduler_nocheck(core_ctl_thread, SCHED_FIFO, &param);
 
