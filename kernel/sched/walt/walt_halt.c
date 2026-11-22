@@ -63,7 +63,8 @@ void attach_tasks_core(struct list_head *tasks, struct rq *rq)
 		p = list_first_entry(tasks, struct task_struct, se.group_node);
 		list_del_init(&p->se.group_node);
 
-		BUG_ON(task_rq(p) != rq);
+		if (WARN_ON_ONCE(task_rq(p) != rq))
+			set_task_cpu(p, cpu_of(rq));
 		activate_task(rq, p, 0);
 		p->on_rq = TASK_ON_RQ_QUEUED;
 	}
