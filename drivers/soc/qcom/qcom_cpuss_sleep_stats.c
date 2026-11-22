@@ -214,6 +214,9 @@ static int get_cpu_lpm_read_offset(u8 cpu, u8 cpu_mode, u32 *regs)
 {
 	int offset;
 
+	if (!regs || cpu >= num_possible_cpus())
+		return -EINVAL;
+
 	switch (cpu_mode) {
 	case LPM_COUNTER_EN_C1:
 		offset = regs[APSS_LPM_COUNTER_CPUx_C1_LO_VAL] + (cpu * OFFSET_8BYTES);
@@ -238,6 +241,9 @@ static int get_cpu_lpm_read_offset(u8 cpu, u8 cpu_mode, u32 *regs)
 static int get_cpu_residency_read_offset(u8 cpu, u8 cpu_res_cfg, u32 *regs)
 {
 	int offset;
+
+	if (!regs || cpu >= num_possible_cpus())
+		return -EINVAL;
 
 	switch (cpu_res_cfg) {
 	case RESIDENCY_CNTR_C2_EN:
