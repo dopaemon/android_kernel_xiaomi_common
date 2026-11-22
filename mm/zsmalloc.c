@@ -1989,8 +1989,14 @@ static inline void zs_flush_migration(struct zs_pool *pool) { }
 static unsigned long zs_can_compact(struct size_class *class)
 {
 	unsigned long obj_wasted;
-	unsigned long obj_allocated = zs_stat_get(class, ZS_OBJS_ALLOCATED);
-	unsigned long obj_used = zs_stat_get(class, ZS_OBJS_INUSE);
+	unsigned long obj_allocated;
+	unsigned long obj_used;
+
+	if (!class || !class->objs_per_zspage)
+		return 0;
+
+	obj_allocated = zs_stat_get(class, ZS_OBJS_ALLOCATED);
+	obj_used = zs_stat_get(class, ZS_OBJS_INUSE);
 
 	if (obj_allocated <= obj_used)
 		return 0;
@@ -2071,6 +2077,9 @@ unsigned long zs_compact(struct zs_pool *pool)
 	struct size_class *class;
 	unsigned long pages_freed = 0;
 
+	if (!pool)
+		return 0;
+
 	/*
 	 * Pool compaction is performed under pool->lock so it is basically
 	 * single-threaded. Having more than one thread in __zs_compact()
@@ -2082,6 +2091,8 @@ unsigned long zs_compact(struct zs_pool *pool)
 
 	for (i = ZS_SIZE_CLASSES - 1; i >= 0; i--) {
 		class = pool->size_class[i];
+		if (!class)
+			continue;
 		if (class->index != i)
 			continue;
 		pages_freed += __zs_compact(pool, class);
