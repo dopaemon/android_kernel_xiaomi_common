@@ -54,7 +54,8 @@ int stop_walt_lb_active_migration(void *data)
 	if (busiest_rq->nr_running <= 1)
 		goto out_unlock;
 
-	BUG_ON(busiest_rq == target_rq);
+	if (WARN_ON_ONCE(busiest_rq == target_rq))
+		goto out_unlock;
 
 	if (task_on_rq_queued(push_task) &&
 			READ_ONCE(push_task->__state) == TASK_RUNNING &&
@@ -73,9 +74,16 @@ out_unlock: /* called with busiest_rq lock */
 	raw_spin_unlock(&busiest_rq->__lock);
 
 	if (push_task_detached) {
-		raw_spin_lock(&target_rq->__lock);
-		walt_attach_task(push_task, target_rq);
-		raw_spin_unlock(&target_rq->__lock);
+		if (likely(cpu_active(target_cpu))) {
+			raw_spin_lock(&target_rq->__lock);
+			walt_attach_task(push_task, target_rq);
+			raw_spin_unlock(&target_rq->__lock);
+		} else {
+			raw_spin_lock(&busiest_rq->__lock);
+			set_task_cpu(push_task, busiest_cpu);
+			walt_attach_task(push_task, busiest_rq);
+			raw_spin_unlock(&busiest_rq->__lock);
+		}
 	}
 
 	if (push_task)
