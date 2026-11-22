@@ -2322,6 +2322,9 @@ void zs_destroy_pool(struct zs_pool *pool)
 {
 	int i;
 
+	if (!pool)
+		return;
+
 	zs_unregister_shrinker(pool);
 	zs_flush_migration(pool);
 	zs_pool_stat_destroy(pool);
