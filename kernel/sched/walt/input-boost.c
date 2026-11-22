@@ -93,13 +93,15 @@ static void update_policy_online(void)
 		if (!policy) {
 			pr_err("%s: cpufreq policy not found for cpu%d\n",
 							__func__, i);
-			return;
+			goto out_unlock;
 		}
 
 		cpumask_andnot(&online_cpus, &online_cpus,
 						policy->related_cpus);
 		boost_adjust_notify(policy);
+		cpufreq_cpu_put(policy);
 	}
+out_unlock:
 	cpus_read_unlock();
 }
 
