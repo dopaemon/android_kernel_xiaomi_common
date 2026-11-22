@@ -85,6 +85,13 @@ static u32 _adjust_pwrlevel(struct kgsl_pwrctrl *pwr, u32 level, struct kgsl_pwr
 	/* Ensure that min pwrlevel is within thermal limit */
 	u32 min_pwrlevel = max_t(u32, pwr->min_pwrlevel, thermal_pwrlevel);
 
+	if (pwr->num_pwrlevels) {
+		if (max_pwrlevel >= pwr->num_pwrlevels)
+			max_pwrlevel = pwr->num_pwrlevels - 1;
+		if (min_pwrlevel >= pwr->num_pwrlevels)
+			min_pwrlevel = pwr->num_pwrlevels - 1;
+	}
+
 	switch (pwrc->type) {
 	case KGSL_CONSTRAINT_PWRLEVEL: {
 		switch (pwrc->sub_type) {
