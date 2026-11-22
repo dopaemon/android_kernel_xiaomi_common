@@ -3454,7 +3454,10 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 
 	mask = 0;
 	if (of_find_property(dev->of_node, "qcom,esi-affinity-mask", &mask)) {
-		num_cqs = mask/sizeof(*host->esi_affinity_mask);
+		num_cqs = mask / sizeof(*host->esi_affinity_mask);
+		if (num_cqs <= 0)
+			return;
+
 		host->esi_affinity_mask = devm_kcalloc(hba->dev, num_cqs,
 							sizeof(*host->esi_affinity_mask),
 							GFP_KERNEL);
@@ -3466,8 +3469,12 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 
 		if (mask < 0) {
 			dev_info(dev, "Not found esi-affinity-mask property values\n");
+			devm_kfree(hba->dev, host->esi_affinity_mask);
+			host->esi_affinity_mask = NULL;
 			return;
 		}
+
+		num_cqs = mask;
 
 		/* Populate esi mask */
 		for (i = 0; i < num_cqs; i++)
