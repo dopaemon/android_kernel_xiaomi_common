@@ -555,6 +555,8 @@ static int lpm_cluster_gov_remove(struct platform_device *pdev)
 	if (!cluster_gov)
 		return -ENODEV;
 
+	list_del(&cluster_gov->list);
+	cluster_gov->initialized = false;
 	pm_runtime_disable(&pdev->dev);
 	cluster_gov->genpd->flags &= ~GENPD_FLAG_MIN_RESIDENCY;
 	remove_cluster_sysfs_nodes(cluster_gov);
@@ -607,7 +609,9 @@ static int lpm_cluster_gov_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	if (create_cluster_sysfs_nodes(cluster_gov)) {
+	ret = create_cluster_sysfs_nodes(cluster_gov);
+	if (ret) {
+		dev_pm_genpd_remove_notifier(cluster_gov->dev);
 		pm_runtime_disable(&pdev->dev);
 		return ret;
 	}
