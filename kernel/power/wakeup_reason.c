@@ -112,7 +112,7 @@ static bool add_sibling_node_sorted(struct list_head *head, int irq)
 	struct list_head *predecessor = head;
 
 	if (unlikely(WARN_ON(!head)))
-		return NULL;
+		return false;
 
 	if (!list_empty(head))
 		list_for_each_entry(n, head, siblings) {
@@ -307,7 +307,7 @@ static ssize_t last_resume_reason_show(struct kobject *kobj,
 	spin_lock_irqsave(&wakeup_reason_lock, flags);
 
 	if (wakeup_reason == RESUME_ABORT) {
-		buf_offset = scnprintf(buf, PAGE_SIZE, "Abort: %s",
+		buf_offset = scnprintf(buf, PAGE_SIZE, "Abort: %s\n",
 				       non_irq_wake_reason);
 		spin_unlock_irqrestore(&wakeup_reason_lock, flags);
 		return buf_offset;
@@ -319,7 +319,7 @@ static ssize_t last_resume_reason_show(struct kobject *kobj,
 						PAGE_SIZE - buf_offset,
 						"%d %s\n", n->irq, n->irq_name);
 	else if (wakeup_reason == RESUME_ABNORMAL)
-		buf_offset = scnprintf(buf, PAGE_SIZE, "-1 %s",
+		buf_offset = scnprintf(buf, PAGE_SIZE, "-1 %s\n",
 				       non_irq_wake_reason);
 
 	spin_unlock_irqrestore(&wakeup_reason_lock, flags);
