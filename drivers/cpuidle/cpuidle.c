@@ -172,7 +172,11 @@ static noinstr void enter_s2idle_proper(struct cpuidle_driver *drv,
 
 	time_end = ns_to_ktime(local_clock_noinstr());
 
-	dev->states_usage[index].s2idle_time += ktime_us_delta(time_end, time_start);
+	{
+		s64 s2idle_delta = ktime_us_delta(time_end, time_start);
+		if (s2idle_delta > 0)
+			dev->states_usage[index].s2idle_time += s2idle_delta;
+	}
 	dev->states_usage[index].s2idle_usage++;
 	instrumentation_end();
 }
@@ -311,6 +315,8 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 		 * but that results in multiple copies of same code.
 		 */
 		diff = ktime_sub(time_end, time_start);
+		if (diff < 0)
+			diff = 0;
 
 		dev->last_residency_ns = diff;
 		dev->states_usage[entered_state].time_ns += diff;
