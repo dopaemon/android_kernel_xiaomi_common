@@ -1144,6 +1144,7 @@ void wcd938x_mbhc_deinit(struct snd_soc_component *component)
 	if (wcd938x_mbhc) {
 		wcd_mbhc_deinit(&wcd938x_mbhc->wcd_mbhc);
 		devm_kfree(component->dev, wcd938x_mbhc);
+		wcd938x->mbhc = NULL;
 	}
 }
 EXPORT_SYMBOL(wcd938x_mbhc_deinit);
