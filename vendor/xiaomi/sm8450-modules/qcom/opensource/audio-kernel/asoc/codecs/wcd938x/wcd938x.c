@@ -4658,7 +4658,10 @@ static int wcd938x_remove(struct platform_device *pdev)
 	struct wcd938x_priv *wcd938x = NULL;
 
 	wcd938x = platform_get_drvdata(pdev);
-	if (wcd938x && wcd938x->pdata) {
+	if (!wcd938x)
+		return 0;
+
+	if (wcd938x->pdata) {
 		of_node_put(wcd938x->pdata->rst_np);
 		of_node_put(wcd938x->pdata->rx_slave);
 		of_node_put(wcd938x->pdata->tx_slave);
