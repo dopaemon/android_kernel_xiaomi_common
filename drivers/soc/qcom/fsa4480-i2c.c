@@ -830,7 +830,8 @@ static int fsa4480_probe(struct i2c_client *i2c)
 		} else {
 			dev_err(fsa_priv->dev,
 				"Failed to get GPIO: %d\n", ret);
-			goto err_data;
+			rc = ret;
+			goto err_gpio;
 		}
 	}
 	if (fsa_priv->typec_gpio)
@@ -840,6 +841,17 @@ static int fsa4480_probe(struct i2c_client *i2c)
 	return 0;
 
 #if IS_ENABLED(CONFIG_XM_POWER_SUPPLY)
+err_gpio:
+	mutex_destroy(&fsa_priv->notification_lock);
+	if (fsa_priv->use_powersupply == 2) {
+		battmngr_notifier_unregister(&fsa_priv->nb);
+	} else if (fsa_priv->use_powersupply == 1) {
+		power_supply_unreg_notifier(&fsa_priv->nb);
+		power_supply_put(fsa_priv->usb_psy);
+	} else {
+		unregister_ucsi_glink_notifier(&fsa_priv->nb);
+	}
+	goto err_data;
 err_supply:
 	power_supply_put(fsa_priv->usb_psy);
 #endif
