@@ -1973,6 +1973,8 @@ int cam_fd_hw_mgr_deinit(struct device_node *of_node)
 	CAM_DBG(CAM_FD, "HW Mgr Deinit");
 
 	cam_req_mgr_workq_destroy(&g_fd_hw_mgr.work);
+	kfree(g_fd_hw_mgr.work_data);
+	g_fd_hw_mgr.work_data = NULL;
 
 	cam_smmu_destroy_handle(g_fd_hw_mgr.device_iommu.non_secure);
 	g_fd_hw_mgr.device_iommu.non_secure = -1;
@@ -2187,6 +2189,8 @@ int cam_fd_hw_mgr_init(struct device_node *of_node,
 
 destroy_workq:
 	cam_req_mgr_workq_destroy(&g_fd_hw_mgr.work);
+	kfree(g_fd_hw_mgr.work_data);
+	g_fd_hw_mgr.work_data = NULL;
 detach_smmu:
 	cam_smmu_destroy_handle(g_fd_hw_mgr.device_iommu.non_secure);
 	g_fd_hw_mgr.device_iommu.non_secure = -1;
