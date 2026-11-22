@@ -34,6 +34,9 @@ static int pm8916_reboot_mode_write(struct reboot_mode_driver *reboot,
 			(reboot, struct pm8916_pon, reboot_mode);
 	int ret;
 
+	if (!pon || !pon->regmap || pon->reason_shift < 0 || pon->reason_shift > 7)
+		return -EINVAL;
+
 	ret = regmap_update_bits(pon->regmap,
 				 pon->baseaddr + PON_SOFT_RB_SPARE,
 				 GENMASK(7, pon->reason_shift),
