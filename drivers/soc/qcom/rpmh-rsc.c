@@ -1376,8 +1376,9 @@ int rpmh_rsc_drv_enable(struct rsc_drv *drv, bool enable)
 {
 	int ret = 0, ch;
 	u32 chn_en;
+	unsigned long flags;
 
-	spin_lock(&drv->lock);
+	spin_lock_irqsave(&drv->lock, flags);
 
 	chn_en = readl_relaxed(drv->base + drv->regs[RSC_DRV_CHN_EN]);
 	if (chn_en == enable) {
@@ -1416,7 +1417,7 @@ int rpmh_rsc_drv_enable(struct rsc_drv *drv, bool enable)
 		writel_relaxed(enable, drv->base + drv->regs[RSC_DRV_CHN_EN]);
 	}
 exit:
-	spin_unlock(&drv->lock);
+	spin_unlock_irqrestore(&drv->lock, flags);
 	trace_rpmh_drv_enable(drv, enable, ret);
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
 	ipc_log_string(drv->ipc_log_ctx, "drv enable: %d ret: %d", enable, ret);
