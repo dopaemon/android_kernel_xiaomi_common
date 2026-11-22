@@ -150,6 +150,9 @@ static int cmd_db_get_header(const char *id, const struct entry_header **eh,
 	int ret, i, j;
 	u8 query[sizeof(ent->id)] __nonstring;
 
+	if (!id)
+		return -EINVAL;
+
 	ret = cmd_db_ready();
 	if (ret)
 		return ret;
