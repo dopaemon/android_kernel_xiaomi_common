@@ -46,6 +46,13 @@ static int msm_restart_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int msm_restart_remove(struct platform_device *pdev)
+{
+	unregister_restart_handler(&restart_nb);
+	pm_power_off = NULL;
+	return 0;
+}
+
 static const struct of_device_id of_msm_restart_match[] = {
 	{ .compatible = "qcom,pshold", },
 	{},
@@ -54,6 +61,7 @@ MODULE_DEVICE_TABLE(of, of_msm_restart_match);
 
 static struct platform_driver msm_restart_driver = {
 	.probe = msm_restart_probe,
+	.remove = msm_restart_remove,
 	.driver = {
 		.name = "msm-restart",
 		.of_match_table = of_match_ptr(of_msm_restart_match),
