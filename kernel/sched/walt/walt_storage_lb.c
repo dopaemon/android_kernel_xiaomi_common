@@ -131,8 +131,6 @@ static bool move_task(int src_cpu, int dst_cpu, cpumask_t *dst_cpu_mask_to_avoid
 		cpumask_set_cpu(dst_cpu, dst_cpu_mask_to_avoid);
 		if (unlikely(!cpu_active(dst_cpu) || !cpu_online(dst_cpu))) {
 			raw_spin_unlock_irqrestore(&src_rq->__lock, flags);
-			clear_reserved(dst_cpu);
-			put_task_struct(target_task);
 			goto out;
 		}
 		walt_detach_task(target_task, src_rq, dst_rq);

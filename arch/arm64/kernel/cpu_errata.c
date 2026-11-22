@@ -482,7 +482,7 @@ static struct midr_range broken_aarch32_aes[] = {
 #ifdef CONFIG_ARM64_WORKAROUND_SPECULATIVE_UNPRIV_LOAD
 static const struct midr_range erratum_spec_unpriv_load_list[] = {
 #ifdef CONFIG_ARM64_ERRATUM_3117295
-	MIDR_RANGE(MIDR_CORTEX_A510, 0, 0, 1, 1),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A510),
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_2966298
 	/* Cortex-A520 r0p0 to r0p1 */

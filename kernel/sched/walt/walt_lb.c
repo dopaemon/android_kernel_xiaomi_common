@@ -236,18 +236,8 @@ static void walt_lb_check_for_rotation(struct rq *src_rq)
 	}
 	double_rq_unlock(src_rq, dst_rq);
 
-	if (wr) {
-		if (!queue_work_on(src_cpu, system_highpri_wq, &wr->w)) {
-			double_rq_lock(src_rq, dst_rq);
-			dst_rq->active_balance = 0;
-			src_rq->active_balance = 0;
-			clear_reserved(src_cpu);
-			clear_reserved(dst_cpu);
-			put_task_struct(wr->src_task);
-			put_task_struct(wr->dst_task);
-			double_rq_unlock(src_rq, dst_rq);
-		}
-	}
+	if (wr)
+		queue_work_on(src_cpu, system_highpri_wq, &wr->w);
 }
 
 static inline bool _walt_can_migrate_task(struct task_struct *p, int dst_cpu,

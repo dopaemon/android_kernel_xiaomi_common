@@ -241,17 +241,12 @@ static void kcompressd_swapout(struct folio *folio)
 		.for_reclaim = 1,
 	};
 
-	folio_lock(folio);
-	if (folio_test_swapcache(folio)) {
-		if (zswap_store(folio)) {
-			folio_unlock(folio);
-			folio_end_writeback(folio);
-		} else {
-			__swap_writepage(&folio->page, &wbc);
-		}
-	} else {
+	if (zswap_store(folio)) {
+		folio_start_writeback(folio);
 		folio_unlock(folio);
 		folio_end_writeback(folio);
+	} else {
+		__swap_writepage(&folio->page, &wbc); /* unlocks the folio */
 	}
 
 	folio_put(folio);
@@ -296,13 +291,10 @@ static bool kcompressd_store(struct folio *folio)
 		queued = kfifo_put(&kcd->fifo, folio);
 	}
 
-	if (queued) {
-		folio_start_writeback(folio);
-		folio_unlock(folio);
+	if (queued)
 		wake_up_interruptible(&kcd->wait);
-	} else {
+	else
 		folio_put(folio);
-	}
 
 	/* Write out the displaced oldest folio before returning. */
 	if (head)

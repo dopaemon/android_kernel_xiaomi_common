@@ -5903,7 +5903,7 @@ static int binder_ioctl_freeze(struct binder_freeze_info *info,
 {
 	int ret = 0;
 
-	if (!info || !target_proc || info->timeout_ms < 0)
+	if (!info || !target_proc)
 		return -EINVAL;
 
 	if (!info->enable) {

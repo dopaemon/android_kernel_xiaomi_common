@@ -17,6 +17,7 @@
 #define AWAKE_BIT BIT(PROC_AWAKE_ID)
 static struct qcom_smem_state *state;
 static struct wakeup_source *notify_ws;
+static int sleepstate_irq;
 
 /**
  * sleepstate_pm_notifier() - PM notifier callback function.
@@ -69,6 +70,7 @@ static int smp2p_sleepstate_probe(struct platform_device *pdev)
 	ret = register_pm_notifier(&sleepstate_pm_nb);
 	if (ret) {
 		dev_err(dev, "%s: power state notif error %d\n", __func__, ret);
+		qcom_smem_state_put(state);
 		return ret;
 	}
 
@@ -94,6 +96,7 @@ static int smp2p_sleepstate_probe(struct platform_device *pdev)
 		dev_err(dev, "fail to register smp2p threaded_irq=%d\n", irq);
 		goto err;
 	}
+	sleepstate_irq = irq;
 	return 0;
 err:
 	wakeup_source_unregister(notify_ws);
@@ -105,6 +108,8 @@ err_ws:
 
 static int smp2p_sleepstate_remove(struct platform_device *pdev)
 {
+	/* devm would free the IRQ only after notify_ws is gone */
+	devm_free_irq(&pdev->dev, sleepstate_irq, &pdev->dev);
 	wakeup_source_unregister(notify_ws);
 	unregister_pm_notifier(&sleepstate_pm_nb);
 	qcom_smem_state_put(state);
