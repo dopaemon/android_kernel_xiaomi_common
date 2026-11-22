@@ -4656,15 +4656,17 @@ err:
 static int wcd938x_remove(struct platform_device *pdev)
 {
 	struct wcd938x_priv *wcd938x = NULL;
+	struct wcd938x_pdata *pdata = NULL;
 
 	wcd938x = platform_get_drvdata(pdev);
 	if (!wcd938x)
 		return 0;
 
-	if (wcd938x->pdata) {
-		of_node_put(wcd938x->pdata->rst_np);
-		of_node_put(wcd938x->pdata->rx_slave);
-		of_node_put(wcd938x->pdata->tx_slave);
+	pdata = dev_get_platdata(&pdev->dev);
+	if (pdata) {
+		of_node_put(pdata->rst_np);
+		of_node_put(pdata->rx_slave);
+		of_node_put(pdata->tx_slave);
 	}
 	component_master_del(&pdev->dev, &wcd938x_comp_ops);
 	mutex_destroy(&wcd938x->micb_lock);
