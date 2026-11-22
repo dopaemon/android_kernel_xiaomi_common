@@ -584,6 +584,9 @@ void ufshcd_print_tr(struct ufs_hba *hba, int tag, bool pr_prdt)
 	const struct ufshcd_lrb *lrbp;
 	int prdt_length;
 
+	if (!hba || !hba->lrb || tag < 0 || tag >= hba->nutrs)
+		return;
+
 	lrbp = &hba->lrb[tag];
 
 	dev_err(hba->dev, "UPIU[%d] - issue time %lld us\n",
@@ -622,9 +625,19 @@ void ufshcd_print_tr(struct ufs_hba *hba, int tag, bool pr_prdt)
 
 static bool ufshcd_print_tr_iter(struct request *req, void *priv)
 {
-	struct scsi_device *sdev = req->q->queuedata;
-	struct Scsi_Host *shost = sdev->host;
-	struct ufs_hba *hba = shost_priv(shost);
+	struct scsi_device *sdev;
+	struct Scsi_Host *shost;
+	struct ufs_hba *hba;
+
+	if (!req || !req->q)
+		return true;
+
+	sdev = req->q->queuedata;
+	if (!sdev || !sdev->host)
+		return true;
+
+	shost = sdev->host;
+	hba = shost_priv(shost);
 
 	ufshcd_print_tr(hba, req->tag, *(bool *)priv);
 
