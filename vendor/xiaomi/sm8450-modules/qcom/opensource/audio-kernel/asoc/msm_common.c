@@ -211,6 +211,8 @@ int snd_card_sysfs_init(void)
 	char dir[DIR_SZ] = "snd_card";
 
 	snd_card_pdata = kcalloc(1, sizeof(struct snd_card_pdata), GFP_KERNEL);
+	if (!snd_card_pdata)
+		return -ENOMEM;
 	ret = kobject_init_and_add(&snd_card_pdata->snd_card_kobj, &snd_card_ktype,
 		kernel_kobj, dir);
 	if (ret < 0) {
