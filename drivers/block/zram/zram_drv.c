@@ -2608,7 +2608,7 @@ static ssize_t disksize_store(struct device *dev,
 	disksize = memparse(buf, NULL);
 #endif
 
-	if (!disksize)
+	if (!disksize || disksize > (ULONG_MAX - PAGE_SIZE))
 		return -EINVAL;
 
 	down_write(&zram->init_lock);
