@@ -330,7 +330,12 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 				struct kgsl_memdesc *memdesc)
 {
 	int size;
-	struct kgsl_device *device = KGSL_MMU_DEVICE(pagetable->mmu);
+	struct kgsl_device *device;
+
+	if (!pagetable || !memdesc)
+		return -EINVAL;
+
+	device = KGSL_MMU_DEVICE(pagetable->mmu);
 
 	if (!memdesc->gpuaddr)
 		return -EINVAL;
@@ -441,7 +446,12 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
 		struct kgsl_memdesc *memdesc)
 {
 	int ret = 0;
-	struct kgsl_device *device = KGSL_MMU_DEVICE(pagetable->mmu);
+	struct kgsl_device *device;
+
+	if (!pagetable || !memdesc)
+		return -EINVAL;
+
+	device = KGSL_MMU_DEVICE(pagetable->mmu);
 
 	if (memdesc->size == 0)
 		return -EINVAL;
