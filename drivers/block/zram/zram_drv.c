@@ -3366,7 +3366,7 @@ static enum lru_status zram_shrink_cb(struct list_head *item, struct list_lru_on
     /* 释放zram slot锁 */
     zram_slot_unlock(zram, index);
     
-    ret = LRU_REMOVED_RETRY;
+    ret = LRU_RETRY;
 
 relock:
     /* 重新获取LRU锁 */
