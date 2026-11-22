@@ -1239,6 +1239,9 @@ static inline u64 scale_time_to_util(u64 d)
 	 * The denominator at most could be (8 * tick_size) >> SCHED_CAPACITY_SHIFT,
 	 * a value that easily fits a 32bit integer.
 	 */
+	if (unlikely(!walt_scale_demand_divisor))
+		return 0;
+
 	do_div(d, walt_scale_demand_divisor);
 	return d;
 }
