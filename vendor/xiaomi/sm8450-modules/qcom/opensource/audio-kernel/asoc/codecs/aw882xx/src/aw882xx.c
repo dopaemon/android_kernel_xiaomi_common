@@ -2564,6 +2564,12 @@ static void aw882xx_i2c_remove(struct i2c_client *i2c)
 	/*rm attr node*/
 	sysfs_remove_group(&i2c->dev.kobj, &aw882xx_attribute_group);
 
+	/*cancel pending delayed works*/
+	cancel_delayed_work_sync(&aw882xx->start_work);
+	cancel_delayed_work_sync(&aw882xx->interrupt_work);
+	cancel_delayed_work_sync(&aw882xx->dc_work);
+	cancel_delayed_work_sync(&aw882xx->fw_work);
+
 	/*free device resource */
 	aw882xx_device_remove(aw882xx->aw_pa);
 
