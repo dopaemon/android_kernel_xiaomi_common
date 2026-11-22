@@ -65,18 +65,23 @@ int kgsl_bus_update(struct kgsl_device *device,
 		buslevel = min_t(int, pwr->pwrlevels[0].bus_max,
 				cur + pwr->bus_mod);
 		buslevel = max_t(int, buslevel, 1);
+		if (pwr->ddr_table_count && buslevel >= pwr->ddr_table_count)
+			buslevel = pwr->ddr_table_count - 1;
 		pwr->cur_dcvs_buslevel = buslevel;
-		ab = _ab_buslevel_update(pwr, pwr->ddr_table[buslevel]);
+		ab = pwr->ddr_table ? _ab_buslevel_update(pwr, pwr->ddr_table[buslevel]) : 0;
 		break;
 		}
 	case KGSL_BUS_VOTE_MINIMUM:
 		/* Request bus level 1, minimum non-zero value */
-		pwr->cur_dcvs_buslevel = 1;
+		buslevel = 1;
+		if (pwr->ddr_table_count && buslevel >= pwr->ddr_table_count)
+			buslevel = pwr->ddr_table_count - 1;
+		pwr->cur_dcvs_buslevel = buslevel;
 		pwr->bus_mod = 0;
 		pwr->bus_percent_ab = 0;
 		pwr->bus_ab_mbytes = 0;
-		ab = _ab_buslevel_update(pwr,
-			pwr->ddr_table[pwr->cur_dcvs_buslevel]);
+		ab = pwr->ddr_table ? _ab_buslevel_update(pwr,
+			pwr->ddr_table[pwr->cur_dcvs_buslevel]) : 0;
 		break;
 	case KGSL_BUS_VOTE_RT_HINT_ON:
 		pwr->rt_bus_hint_active = true;
