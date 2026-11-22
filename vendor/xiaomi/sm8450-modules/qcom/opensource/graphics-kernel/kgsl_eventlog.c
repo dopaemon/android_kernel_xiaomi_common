@@ -112,6 +112,9 @@ void kgsl_eventlog_init(void)
 
 void kgsl_eventlog_exit(void)
 {
+	if (!kgsl_eventlog)
+		return;
+
 	kgsl_remove_from_minidump("KGSL_EVENTLOG", (u64) kgsl_eventlog,
 				__pa(kgsl_eventlog), EVENTLOG_SIZE);
 
