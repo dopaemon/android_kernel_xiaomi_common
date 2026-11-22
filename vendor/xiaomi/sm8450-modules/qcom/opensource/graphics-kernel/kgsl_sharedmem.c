@@ -1252,24 +1252,25 @@ static void _kgsl_free_pages(struct kgsl_memdesc *memdesc)
 {
 	int i;
 
-	for (i = 0; i < memdesc->page_count;) {
-		int n;
+	if (memdesc->pages) {
+		for (i = 0; i < memdesc->page_count;) {
+			int n;
 
-		if (!memdesc->pages[i]) {
-			i++;
-			continue;
+			if (!memdesc->pages[i]) {
+				i++;
+				continue;
+			}
+
+			n = 1 << compound_order(memdesc->pages[i]);
+			put_page(memdesc->pages[i]);
+
+			i += n;
 		}
 
-		n = 1 << compound_order(memdesc->pages[i]);
-		put_page(memdesc->pages[i]);
-
-		i += n;
+		memdesc->page_count = 0;
+		kvfree(memdesc->pages);
+		memdesc->pages = NULL;
 	}
-
-	memdesc->page_count = 0;
-	kvfree(memdesc->pages);
-
-	memdesc->pages = NULL;
 
 	if (!memdesc->shmem_filp)
 		return;
