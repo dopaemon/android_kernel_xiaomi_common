@@ -366,7 +366,8 @@ int sde_fence_register_hw_fences_wait(struct sde_hw_ctl *hw_ctl, struct dma_fenc
 				data->dma_context, seqno, 0);
 		if (!temp_array) {
 			SDE_ERROR("unable to create fence array, cant register for wait\n");
-			_cleanup_fences_refcount(fences, num_fences);
+			while (fence_list_index > 0)
+				dma_fence_put(fence_list[--fence_list_index]);
 			kfree(fence_list);
 			return -EINVAL;
 		}
