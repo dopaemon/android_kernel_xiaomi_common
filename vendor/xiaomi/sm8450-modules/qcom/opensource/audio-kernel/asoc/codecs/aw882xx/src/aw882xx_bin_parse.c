@@ -951,6 +951,9 @@ static int aw_dev_parse_get_vaild_prof(struct aw_device *aw_dev,
 			if (num >= prof_info->count) {
 				aw_dev_err(aw_dev->dev, "get scene num[%d] overflow count[%d]",
 						num, prof_info->count);
+				kfree(prof_info->prof_desc);
+				prof_info->prof_desc = NULL;
+				prof_info->count = 0;
 				return -ENOMEM;
 			}
 			prof_info->prof_desc[num] = prof_desc[i];
