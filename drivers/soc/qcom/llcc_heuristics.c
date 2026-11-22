@@ -175,9 +175,9 @@ static int heuristics_scid_probe(struct platform_device *pdev)
 
 	if (of_property_match_string(pdev->dev.parent->of_node,
 				"compatible", "qcom,sun-llcc") >= 0) {
-		heuristics_set_param(pdev, flag);
+		ret = heuristics_set_param(pdev, flag);
 	} else {
-		heuristics_set_param_v2(pdev, flag);
+		ret = heuristics_set_param_v2(pdev, flag);
 	}
 
 	return ret;
