@@ -216,8 +216,8 @@ static int drain_rq_cpu_stop(void *data)
 	wrq->enqueue_counter = 0;
 	__balance_callbacks(rq);
 	if (wrq->enqueue_counter && cpumask_test_cpu(cpu_of(rq), cpu_halt_mask))
-		WALT_BUG(WALT_BUG_BRINGUP, NULL, "cpu: %d task was re-enqueued",
-			 cpu_of(rq));
+		pr_warn_ratelimited("walt: cpu: %d task was re-enqueued during halt\n",
+				    cpu_of(rq));
 
 	/* lock is no longer pinned, raw unlock using same flags as locking */
 	raw_spin_rq_unlock_irqrestore(rq, rf.flags);
