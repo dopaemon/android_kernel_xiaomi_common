@@ -1390,6 +1390,7 @@ static int adspsleepmon_device_release(struct inode *inode, struct file *fp)
 
 		spin_unlock(&fl->hlock);
 		kfree(fl);
+		fp->private_data = NULL;
 
 		/*
 		 * Start/stop the timer based on
@@ -1402,16 +1403,18 @@ static int adspsleepmon_device_release(struct inode *inode, struct file *fp)
 					(num_sessions == num_lpi_sessions)) {
 
 				if (!num_sessions) {
-					memcpy(&g_adspsleepmon.backup_lpm_stats,
-							g_adspsleepmon.lpm_stats,
-							sizeof(struct sleep_stats));
+					if (!IS_ERR_OR_NULL(g_adspsleepmon.lpm_stats))
+						memcpy(&g_adspsleepmon.backup_lpm_stats,
+								g_adspsleepmon.lpm_stats,
+								sizeof(struct sleep_stats));
 					g_adspsleepmon.backup_lpm_timestamp =
 						__arch_counter_get_cntvct();
 					delay = g_adspsleepmon.lpm_wait_time;
 				} else {
-					memcpy(&g_adspsleepmon.backup_lpi_stats,
-							g_adspsleepmon.lpi_stats,
-							sizeof(struct sleep_stats));
+					if (!IS_ERR_OR_NULL(g_adspsleepmon.lpi_stats))
+						memcpy(&g_adspsleepmon.backup_lpi_stats,
+								g_adspsleepmon.lpi_stats,
+								sizeof(struct sleep_stats));
 					g_adspsleepmon.backup_lpi_timestamp =
 						__arch_counter_get_cntvct();
 					delay = g_adspsleepmon.lpi_wait_time;
