@@ -99,7 +99,16 @@ err:
 	wakeup_source_unregister(notify_ws);
 err_ws:
 	unregister_pm_notifier(&sleepstate_pm_nb);
+	qcom_smem_state_put(state);
 	return ret;
+}
+
+static int smp2p_sleepstate_remove(struct platform_device *pdev)
+{
+	wakeup_source_unregister(notify_ws);
+	unregister_pm_notifier(&sleepstate_pm_nb);
+	qcom_smem_state_put(state);
+	return 0;
 }
 
 static const struct of_device_id smp2p_slst_match_table[] = {
@@ -109,6 +118,7 @@ static const struct of_device_id smp2p_slst_match_table[] = {
 
 static struct platform_driver smp2p_sleepstate_driver = {
 	.probe = smp2p_sleepstate_probe,
+	.remove = smp2p_sleepstate_remove,
 	.driver = {
 		.name = "smp2p_sleepstate",
 		.of_match_table = smp2p_slst_match_table,
