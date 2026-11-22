@@ -385,7 +385,7 @@ static int cass_select_task_rq_fair(struct task_struct *p, int prev_cpu,
 	target_cpu = cass_select_task_rq(p, prev_cpu, wake_flags);
 	if (target_cpu >= 0 && target_cpu != prev_cpu) {
 		rcu_read_lock();
-		cpufreq_update_util(cpu_rq(target_cpu), SCHED_CPUFREQ_IOWAIT);
+		cpufreq_update_util(cpu_rq(target_cpu), p->in_iowait ? SCHED_CPUFREQ_IOWAIT : 0);
 		rcu_read_unlock();
 	}
 
