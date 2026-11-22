@@ -239,6 +239,12 @@ static int cpufreq_cdev_remove(struct platform_device *pdev)
 		cpuhp_remove_state_nocalls(cpu_hp_online);
 		cpu_hp_online = 0;
 	}
+	mutex_unlock(&qti_cpufreq_cdev_lock);
+
+	list_for_each_entry(cdev_data, &qti_cpufreq_cdev_list, node)
+		cancel_delayed_work_sync(&cdev_data->register_work);
+
+	mutex_lock(&qti_cpufreq_cdev_lock);
 	list_for_each_entry(cdev_data, &qti_cpufreq_cdev_list, node) {
 		if (!cdev_data->cdev)
 			continue;
