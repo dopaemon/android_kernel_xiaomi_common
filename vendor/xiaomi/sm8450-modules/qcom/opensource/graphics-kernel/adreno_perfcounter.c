@@ -202,7 +202,7 @@ int adreno_perfcounter_read_group(struct adreno_device *adreno_dev,
 
 				if (!ADRENO_ACQUIRE_CP_SEMAPHORE(adreno_dev, irq_flags)) {
 					ret = -EAGAIN;
-					break;
+					goto out_oob;
 				}
 				list[j].value = adreno_perfcounter_read(
 					adreno_dev, list[j].groupid, i);
@@ -212,6 +212,7 @@ int adreno_perfcounter_read_group(struct adreno_device *adreno_dev,
 		}
 	}
 
+out_oob:
 	adreno_perfcntr_active_oob_put(adreno_dev);
 
 	mutex_unlock(&device->mutex);
