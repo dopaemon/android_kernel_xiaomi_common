@@ -1101,6 +1101,7 @@ int llcc_slice_activate(struct llcc_slice_desc *desc)
 	}
 
 	if (test_bit(desc->slice_id, drv_data->bitmap)) {
+		atomic_inc_return(&desc->refcount);
 		mutex_unlock(&drv_data->lock);
 		return 0;
 	}
