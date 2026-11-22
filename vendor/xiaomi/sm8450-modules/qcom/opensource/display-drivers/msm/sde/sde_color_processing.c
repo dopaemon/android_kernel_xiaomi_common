@@ -2472,8 +2472,11 @@ void sde_cp_crtc_install_properties(struct drm_crtc *crtc)
 	 * crtcs.
 	 */
 	if (!priv->cp_property) {
-		priv->cp_property = kzalloc((sizeof(priv->cp_property) *
-				SDE_CP_CRTC_MAX_FEATURES), GFP_KERNEL);
+		priv->cp_property = kcalloc(SDE_CP_CRTC_MAX_FEATURES,
+				sizeof(*priv->cp_property), GFP_KERNEL);
+		if (!priv->cp_property)
+			goto exit;
+
 		setup_dspp_prop_install_funcs(dspp_prop_install_func);
 		setup_lm_prop_install_funcs(lm_prop_install_func);
 		setup_set_crtc_feature_wrappers(set_crtc_feature_wrappers);
