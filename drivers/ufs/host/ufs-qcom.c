@@ -3193,7 +3193,7 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 		qcg->votes = kmalloc(sizeof(*qcg->votes) * err, GFP_KERNEL);
 		if (!qcg->votes) {
 			of_node_put(group_node);
-			goto out_err;
+			goto out_vote_err;
 		}
 		for (i = 0; i < err; i++) {
 			if (of_property_read_u32_index(group_node, "vote", i,
