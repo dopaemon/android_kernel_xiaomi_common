@@ -178,9 +178,19 @@ static uint64_t find_deviation(struct lpm_cpu *cpu_gov, int *samples_history,
 {
 	uint64_t max, avg, stddev;
 	uint64_t thresh = LLONG_MAX;
-	struct cpuidle_driver *drv = cpu_gov->drv;
-	int divisor, i, last_level = drv->state_count - 1;
-	struct cpuidle_state *max_state = &drv->states[last_level];
+	struct cpuidle_driver *drv;
+	int divisor, i, last_level;
+	struct cpuidle_state *max_state;
+
+	if (!cpu_gov || !samples_history)
+		return 0;
+
+	drv = cpu_gov->drv;
+	if (!drv || drv->state_count <= 0)
+		return 0;
+
+	last_level = drv->state_count - 1;
+	max_state = &drv->states[last_level];
 
 	do {
 		max = avg = divisor = stddev = 0;
@@ -194,6 +204,10 @@ static uint64_t find_deviation(struct lpm_cpu *cpu_gov, int *samples_history,
 					max = value;
 			}
 		}
+
+		if (!divisor)
+			return 0;
+
 		do_div(avg, divisor);
 
 		for (i = 0; i < MAXSAMPLES; i++) {
@@ -205,6 +219,7 @@ static uint64_t find_deviation(struct lpm_cpu *cpu_gov, int *samples_history,
 				stddev += diff * diff;
 			}
 		}
+
 		do_div(stddev, divisor);
 		stddev = int_sqrt(stddev);
 
