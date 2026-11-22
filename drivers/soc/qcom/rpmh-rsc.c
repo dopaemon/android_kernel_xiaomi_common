@@ -1798,18 +1798,24 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 			continue;
 
 		ret = of_property_read_u32(np, "qcom,drv-id", &i);
-		if (ret)
+		if (ret) {
+			of_node_put(np);
 			return ret;
+		}
 
 		scnprintf(drv[i].name, sizeof(drv[i].name), "%s-drv-%d", name, i);
 
 		drv[i].base = devm_platform_ioremap_resource(pdev, i);
-		if (IS_ERR(drv[i].base))
+		if (IS_ERR(drv[i].base)) {
+			of_node_put(np);
 			return PTR_ERR(drv[i].base);
+		}
 
 		drv_dev = kzalloc(sizeof(*drv_dev), GFP_KERNEL);
-		if (!drv_dev)
+		if (!drv_dev) {
+			of_node_put(np);
 			return -ENOMEM;
+		}
 
 		drv[i].id = i;
 		drv[i].pdev = pdev;
@@ -1818,8 +1824,11 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 		drv_dev->of_node = np;
 		dev_set_name(drv_dev, "%s:%pOFn%d", dev_name(drv_dev->parent), np, i);
 		ret = device_register(drv_dev);
-		if (ret)
+		if (ret) {
+			put_device(drv_dev);
+			of_node_put(np);
 			return ret;
+		}
 
 		rsc_id = readl_relaxed(drv[i].base + RSC_DRV_ID);
 		major_ver = rsc_id & (MAJOR_VER_MASK << MAJOR_VER_SHIFT);
@@ -1833,8 +1842,11 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 			drv[i].regs = rpmh_rsc_reg_offset_ver_2_7;
 
 		ret = rpmh_probe_tcs_config(&drv[i]);
-		if (ret)
+		if (ret) {
+			device_unregister(drv_dev);
+			of_node_put(np);
 			return ret;
+		}
 
 		dev_set_drvdata(drv_dev, &drv[i]);
 		drv[i].initialized = true;
