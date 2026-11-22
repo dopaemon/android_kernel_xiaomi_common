@@ -1262,8 +1262,7 @@ static int fts_probe(struct spi_device *client)
 #ifndef SPI4_WIRE
 	client->mode |= SPI_3WIRE;
 #endif
-	if (!client->max_speed_hz)
-		client->max_speed_hz = SPI_CLOCK_FREQ;
+	client->max_speed_hz = SPI_CLOCK_FREQ;
 	client->bits_per_word = 8;
 	if (spi_setup(client) < 0) {
 		log_info(1, "%s: Unsupported SPI functionality\n", __func__);

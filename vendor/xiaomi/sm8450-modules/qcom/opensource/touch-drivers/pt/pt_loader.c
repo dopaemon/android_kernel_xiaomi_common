@@ -2961,10 +2961,6 @@ static void _pt_pip2_firmware_cont(const struct firmware *fw,
 			goto exit;
 		} else {
 			fw_img = kzalloc(PT_PIP2_MAX_FILE_SIZE, GFP_KERNEL);
-			if (!fw_img) {
-				ret = -ENOMEM;
-				goto exit;
-			}
 			us_fw_used = 1;
 			ret = cmd->nonhid_cmd->read_us_file(dev,
 				cd->pip2_us_file_path, fw_img, &fw_size);

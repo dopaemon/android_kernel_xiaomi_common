@@ -50,26 +50,6 @@ void raydium_mem_table_init(unsigned short u16_id)
 	g_rad_testfw_image = kzalloc(RAD_TESTFW_3X_SIZE, GFP_KERNEL);
 	g_rad_testpara_image = kzalloc(RAD_PARA_3X_SIZE + 4,
 				       GFP_KERNEL);
-
-	if (!g_rad_boot_image || !g_rad_init_image || !g_rad_fw_image ||
-	    !g_rad_para_image || !g_rad_testfw_image || !g_rad_testpara_image) {
-		LOGD(LOG_ERR, "[touch]Raydium table allocation failed\n");
-		kfree(g_rad_boot_image);
-		g_rad_boot_image = NULL;
-		kfree(g_rad_init_image);
-		g_rad_init_image = NULL;
-		kfree(g_rad_fw_image);
-		g_rad_fw_image = NULL;
-		kfree(g_rad_para_image);
-		g_rad_para_image = NULL;
-		kfree(g_rad_testfw_image);
-		g_rad_testfw_image = NULL;
-		kfree(g_rad_testpara_image);
-		g_rad_testpara_image = NULL;
-		g_u8_table_init = ERROR;
-		return;
-	}
-
 	g_u8_table_init = SUCCESS;
 }
 #if ENABLE_FW_LOADER

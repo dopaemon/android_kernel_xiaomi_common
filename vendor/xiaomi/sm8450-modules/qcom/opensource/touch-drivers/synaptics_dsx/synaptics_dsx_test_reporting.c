@@ -4698,15 +4698,7 @@ static void test_f55_init(struct synaptics_rmi4_data *rmi4_data)
 	rx_electrodes = f55->query.num_of_rx_electrodes;
 
 	f55->tx_assignment = kzalloc(tx_electrodes, GFP_KERNEL);
-	if (!f55->tx_assignment)
-		return;
-
 	f55->rx_assignment = kzalloc(rx_electrodes, GFP_KERNEL);
-	if (!f55->rx_assignment) {
-		kfree(f55->tx_assignment);
-		f55->tx_assignment = NULL;
-		return;
-	}
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
 			f55->control_base_addr + SENSOR_TX_MAPPING_OFFSET,
@@ -4716,10 +4708,6 @@ static void test_f55_init(struct synaptics_rmi4_data *rmi4_data)
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to read F55 tx assignment\n",
 				__func__);
-		kfree(f55->tx_assignment);
-		f55->tx_assignment = NULL;
-		kfree(f55->rx_assignment);
-		f55->rx_assignment = NULL;
 		return;
 	}
 
@@ -4731,10 +4719,6 @@ static void test_f55_init(struct synaptics_rmi4_data *rmi4_data)
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to read F55 rx assignment\n",
 				__func__);
-		kfree(f55->tx_assignment);
-		f55->tx_assignment = NULL;
-		kfree(f55->rx_assignment);
-		f55->rx_assignment = NULL;
 		return;
 	}
 

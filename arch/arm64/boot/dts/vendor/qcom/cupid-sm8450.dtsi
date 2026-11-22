@@ -202,7 +202,7 @@
 		fts,fod-y-size = <2140>;
 		fts,support-fod;
                 fts,support-super-resolution = <1>;
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12000000>;
 		fts,default-fw-name = "st_fts_l3.ftb";
 		fts,htp-fw-name = "st_fts_l3_thp.ftb";
 		fts,config-array-size = <1>;

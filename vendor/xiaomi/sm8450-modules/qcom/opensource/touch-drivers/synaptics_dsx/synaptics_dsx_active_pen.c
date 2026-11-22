@@ -260,8 +260,6 @@ static int apen_pressure(struct synaptics_rmi4_f12_query_8 *query_8)
 
 	size_of_query_9 = query_8->size_of_query9;
 	query_9 = kmalloc(size_of_query_9, GFP_KERNEL);
-	if (!query_9)
-		return -ENOMEM;
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
 			apen->query_base_addr + 9,
