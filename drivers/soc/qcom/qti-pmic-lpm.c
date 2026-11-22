@@ -324,6 +324,9 @@ static int qti_pmic_lpm_remove(struct platform_device *pdev)
 	int rc;
 	u8 val = 0;
 
+	unregister_syscore_ops(&qti_pmic_lpm_syscore_ops);
+	gchip = NULL;
+
 	rc = pmic_lpm_write(chip, SDAM_INT_REASON_REG, &val, 1);
 	if (rc < 0) {
 		pr_err("Failed to write to pmic sdam offset %#x, rc=%d\n",
