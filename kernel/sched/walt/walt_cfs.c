@@ -15,17 +15,35 @@
 
 static void create_util_to_cost_pd(struct em_perf_domain *pd)
 {
-	int util, cpu = cpumask_first(to_cpumask(pd->cpus));
+	int util, cpu;
 	unsigned long fmax;
 	unsigned long scale_cpu;
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
-	struct walt_sched_cluster *cluster = wrq->cluster;
-	struct em_perf_table *em_table = rcu_dereference(pd->em_table);
+	struct walt_rq *wrq;
+	struct walt_sched_cluster *cluster;
+	struct em_perf_table *em_table;
 	struct em_perf_state *ps;
+
+	if (!pd || pd->nr_perf_states <= 0)
+		return;
+
+	cpu = cpumask_first(to_cpumask(pd->cpus));
+	if (cpu >= nr_cpu_ids)
+		return;
+
+	wrq = &per_cpu(walt_rq, cpu);
+	cluster = wrq->cluster;
+	if (!cluster)
+		return;
+
+	em_table = rcu_dereference(pd->em_table);
+	if (!em_table)
+		return;
 
 	ps = &em_table->state[pd->nr_perf_states - 1];
 	fmax = (u64)ps->frequency;
 	scale_cpu = arch_scale_cpu_capacity(cpu);
+	if (!scale_cpu)
+		scale_cpu = 1024;
 
 	for (util = 0; util < 1024; util++) {
 		int j;
@@ -47,10 +65,15 @@ void create_util_to_cost(void)
 	struct perf_domain *pd;
 	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
 
+	if (!rd)
+		return;
+
 	rcu_read_lock();
 	pd = rcu_dereference(rd->pd);
-	for (; pd; pd = pd->next)
-		create_util_to_cost_pd(pd->em_pd);
+	for (; pd; pd = pd->next) {
+		if (pd->em_pd)
+			create_util_to_cost_pd(pd->em_pd);
+	}
 	rcu_read_unlock();
 }
 
