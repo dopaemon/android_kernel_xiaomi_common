@@ -1320,10 +1320,13 @@ static int cam_jpeg_mgr_release_hw(void *hw_mgr_priv, void *release_hw_args)
 	ctx_data = (struct cam_jpeg_hw_ctx_data *)release_hw->ctxt_to_hw_map;
 	if (!ctx_data->in_use) {
 		CAM_ERR(CAM_JPEG, "ctx is not in use");
-		mutex_unlock(&hw_mgr->hw_mgr_mutex);
 		return -EINVAL;
 	}
 	dev_type = ctx_data->jpeg_dev_acquire_info.dev_type;
+	if (dev_type >= CAM_JPEG_RES_TYPE_MAX) {
+		CAM_ERR(CAM_JPEG, "Invalid dev_type %u", dev_type);
+		return -EINVAL;
+	}
 
 	mutex_lock(&hw_mgr->hw_mgr_mutex);
 	if (hw_mgr->cdm_info[dev_type][0].ref_cnt == 0) {
@@ -1347,7 +1350,6 @@ static int cam_jpeg_mgr_release_hw(void *hw_mgr_priv, void *release_hw_args)
 
 	rc = cam_jpeg_mgr_release_ctx(hw_mgr, ctx_data);
 	if (rc) {
-		mutex_unlock(&hw_mgr->hw_mgr_mutex);
 		CAM_ERR(CAM_JPEG, "JPEG release ctx failed");
 		kfree(ctx_data->cdm_cmd);
 		ctx_data->cdm_cmd = NULL;
