@@ -2506,6 +2506,13 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	return 0;
 err:
+	if (pdata) {
+		of_node_put(pdata->fsa_handle);
+		of_node_put(pdata->dmic01_gpio_p);
+		of_node_put(pdata->dmic23_gpio_p);
+		of_node_put(pdata->dmic45_gpio_p);
+		of_node_put(pdata->dmic67_gpio_p);
+	}
 	devm_kfree(&pdev->dev, pdata);
 	printk("<%s><%d>: X, failed.\n", __func__, __LINE__);
 #if IS_ENABLED(CONFIG_MIEV)
