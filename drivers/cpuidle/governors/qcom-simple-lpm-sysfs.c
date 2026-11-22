@@ -153,7 +153,7 @@ static ssize_t simple_sleep_disabled_store(struct kobject *kobj,
 	ret = kstrtobool(buf, &val);
 	if (ret) {
 		pr_err("Invalid argument passed\n");
-		return count;
+		return ret;
 	}
 
 	simple_sleep_disabled = val;
@@ -168,9 +168,9 @@ static ssize_t cpu_latency_factor_store(struct kobject *kobj,
 	int val, ret;
 
 	ret = kstrtoint(buf, 0, &val);
-	if (ret || !val || val > MAX_LATENCY_DIV) {
+	if (ret || val <= 0 || val > MAX_LATENCY_DIV) {
 		pr_err("Invalid argument passed\n");
-		return count;
+		return ret ? ret : -EINVAL;
 	}
 
 	cur_div = val;
@@ -193,9 +193,9 @@ static ssize_t cluster_latency_factor_store(struct kobject *kobj,
 	struct simple_lpm_cluster *cluster_simple_gov;
 
 	ret = kstrtoint(buf, 0, &val);
-	if (ret || !val || val > MAX_LATENCY_DIV) {
+	if (ret || val <= 0 || val > MAX_LATENCY_DIV) {
 		pr_err("Invalid argument passed\n");
-		return count;
+		return ret ? ret : -EINVAL;
 	}
 
 	list_for_each_entry(cluster_simple_gov, &cluster_dev_list, list) {
@@ -207,7 +207,7 @@ static ssize_t cluster_latency_factor_store(struct kobject *kobj,
 			do_div(state->residency_ns, val);
 			state->power_on_latency_ns = state->power_on_latency_ns * cluster_cur_div;
 			do_div(state->power_on_latency_ns, val);
-			state->power_off_latency_ns = state->power_on_latency_ns * cluster_cur_div;
+			state->power_off_latency_ns = state->power_off_latency_ns * cluster_cur_div;
 			do_div(state->power_off_latency_ns, val);
 		}
 	}
@@ -249,6 +249,7 @@ int create_simple_gov_global_sysfs_nodes(void)
 {
 	struct kobject *cpuidle_kobj;
 	struct device *dev_root = bus_get_dev_root(&cpu_subsys);
+	int ret;
 
 	if (!dev_root)
 		return -EINVAL;
@@ -256,8 +257,16 @@ int create_simple_gov_global_sysfs_nodes(void)
 	cpuidle_kobj = &dev_root->kobj;
 
 	qcom_lpm_simple_kobj = kobject_create_and_add("qcom_simple_lpm", cpuidle_kobj);
-	if (!qcom_lpm_simple_kobj)
+	if (!qcom_lpm_simple_kobj) {
+		put_device(dev_root);
 		return -ENOMEM;
+	}
 
-	return sysfs_create_group(qcom_lpm_simple_kobj, &lpm_gov_attr_group);
+	ret = sysfs_create_group(qcom_lpm_simple_kobj, &lpm_gov_attr_group);
+	if (ret) {
+		kobject_put(qcom_lpm_simple_kobj);
+		qcom_lpm_simple_kobj = NULL;
+	}
+	put_device(dev_root);
+	return ret;
 }
