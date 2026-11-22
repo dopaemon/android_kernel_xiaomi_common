@@ -7994,6 +7994,11 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int highest_zoneidx)
 	psi_memstall_enter(&pflags);
 	__fs_reclaim_acquire(_THIS_IP_);
 
+	if (highest_zoneidx >= MAX_NR_ZONES)
+		highest_zoneidx = MAX_NR_ZONES - 1;
+	else if (highest_zoneidx < 0)
+		return order;
+
 	count_vm_event(PAGEOUTRUN);
 
 	/*
