@@ -251,24 +251,26 @@ static int __ref try_drain_rqs(void *data)
 	unsigned long flags;
 
 	while (!kthread_should_stop()) {
+		cpumask_t local_cpus;
+
 		raw_spin_lock_irqsave(&walt_drain_pending_lock, flags);
-		if (cpumask_weight(cpus_ptr)) {
-			cpumask_t local_cpus;
-
-			cpumask_copy(&local_cpus, cpus_ptr);
+		if (cpumask_empty(cpus_ptr)) {
+			set_current_state(TASK_INTERRUPTIBLE);
 			raw_spin_unlock_irqrestore(&walt_drain_pending_lock, flags);
-
-			for_each_cpu(cpu, &local_cpus)
-				cpu_drain_rq(cpu);
-
-			raw_spin_lock_irqsave(&walt_drain_pending_lock, flags);
-			cpumask_andnot(cpus_ptr, cpus_ptr, &local_cpus);
-
+			schedule();
+			set_current_state(TASK_RUNNING);
+			continue;
 		}
+
+		cpumask_copy(&local_cpus, cpus_ptr);
 		raw_spin_unlock_irqrestore(&walt_drain_pending_lock, flags);
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule();
-		set_current_state(TASK_RUNNING);
+
+		for_each_cpu(cpu, &local_cpus)
+			cpu_drain_rq(cpu);
+
+		raw_spin_lock_irqsave(&walt_drain_pending_lock, flags);
+		cpumask_andnot(cpus_ptr, cpus_ptr, &local_cpus);
+		raw_spin_unlock_irqrestore(&walt_drain_pending_lock, flags);
 	}
 
 	return 0;
