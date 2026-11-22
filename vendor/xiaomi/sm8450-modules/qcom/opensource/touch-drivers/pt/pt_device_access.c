@@ -2951,19 +2951,22 @@ int result_save(struct device *dev, char *buf,
 	int index = 0;
 	int byte_left;
 
-	out_buf = kzalloc(MAX_BUF_LEN, GFP_KERNEL);
 	if (configuration == NULL) {
 		pt_debug(dev, DL_WARN, "config is NULL");
-		return -ENOMEM;
+		return -EINVAL;
 	}
 	if (result == NULL) {
 		pt_debug(dev, DL_WARN, "result is NULL");
-		return -ENOMEM;
+		return -EINVAL;
 	}
 	if (cmcp_info == NULL) {
 		pt_debug(dev, DL_WARN, "cmcp_info is NULL");
-		return -ENOMEM;
+		return -EINVAL;
 	}
+
+	out_buf = kzalloc(MAX_BUF_LEN, GFP_KERNEL);
+	if (!out_buf)
+		return -ENOMEM;
 
 	index = save_header(out_buf, index, result);
 	index = save_engineering_data(dev, out_buf, index,
