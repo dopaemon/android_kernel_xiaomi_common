@@ -1530,8 +1530,10 @@ static int adsp_probe(struct platform_device *pdev)
 
 	snprintf(md_dev_name, ARRAY_SIZE(md_dev_name), "%s-md", pdev->dev.of_node->name);
 	adsp->minidump_dev = qcom_create_ramdump_device(md_dev_name, NULL);
-	if (!adsp->minidump_dev)
+	if (IS_ERR_OR_NULL(adsp->minidump_dev)) {
 		dev_err(&pdev->dev, "Unable to create %s minidump device.\n", md_dev_name);
+		adsp->minidump_dev = NULL;
+	}
 
 	qcom_add_ssr_subdev(rproc, &adsp->ssr_subdev, desc->ssr_name);
 	ret = rproc_add(rproc);
