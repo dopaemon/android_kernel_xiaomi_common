@@ -8133,8 +8133,14 @@ static inline unsigned long
 compute_energy(struct energy_env *eenv, struct perf_domain *pd,
 	       struct cpumask *pd_cpus, struct task_struct *p, int dst_cpu)
 {
-	unsigned long max_util = eenv_pd_max_util(eenv, pd_cpus, p, dst_cpu);
-	unsigned long busy_time = eenv->pd_busy_time;
+	unsigned long max_util;
+	unsigned long busy_time;
+
+	if (!pd || !pd->em_pd || !eenv || !eenv->cpu_cap)
+		return 0;
+
+	max_util = eenv_pd_max_util(eenv, pd_cpus, p, dst_cpu);
+	busy_time = eenv->pd_busy_time;
 
 	if (dst_cpu >= 0)
 		busy_time = min(eenv->pd_cap, busy_time + eenv->task_busy_time);
