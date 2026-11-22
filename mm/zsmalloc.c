@@ -1763,7 +1763,8 @@ static void inc_zspage_isolation(struct zspage *zspage)
 
 static void dec_zspage_isolation(struct zspage *zspage)
 {
-	VM_BUG_ON(zspage->isolated == 0);
+	if (WARN_ON_ONCE(zspage->isolated == 0))
+		return;
 	zspage->isolated--;
 }
 
@@ -1778,6 +1779,10 @@ static void replace_sub_page(struct size_class *class, struct zspage *zspage,
 
 	page = get_first_page(zspage);
 	do {
+		if (unlikely(idx >= ZS_MAX_PAGES_PER_ZSPAGE)) {
+			WARN_ON_ONCE(1);
+			break;
+		}
 		if (page == oldpage)
 			pages[idx] = newpage;
 		else
