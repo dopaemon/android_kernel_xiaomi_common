@@ -1286,9 +1286,6 @@ static void cam_sync_component_unbind(struct device *dev,
 {
 	int i;
 
-	if (!sync_dev)
-		return;
-
 	v4l2_device_unregister(sync_dev->vdev->v4l2_dev);
 	cam_sync_media_controller_cleanup(sync_dev);
 #if IS_REACHABLE(CONFIG_MSM_GLOBAL_SYNX)
@@ -1302,7 +1299,6 @@ static void cam_sync_component_unbind(struct device *dev,
 	for (i = 0; i < CAM_SYNC_MAX_OBJS; i++)
 		spin_lock_init(&sync_dev->row_spinlocks[i]);
 
-	mutex_destroy(&sync_dev->table_lock);
 	kfree(sync_dev);
 	sync_dev = NULL;
 }

@@ -140,23 +140,15 @@ end:
 
 void cam_soc_bus_client_unregister(void **client)
 {
-	struct cam_soc_bus_client *bus_client;
-	struct cam_soc_bus_client_data *bus_client_data;
-
-	if (!client || !*client)
-		return;
-
-	bus_client = (struct cam_soc_bus_client *) (*client);
-	bus_client_data = (struct cam_soc_bus_client_data *) bus_client->client_data;
-	if (!bus_client_data) {
-		kfree(bus_client);
-		*client = NULL;
-		return;
-	}
+	struct cam_soc_bus_client *bus_client =
+		(struct cam_soc_bus_client *) (*client);
+	struct cam_soc_bus_client_data *bus_client_data =
+		(struct cam_soc_bus_client_data *) bus_client->client_data;
 
 	icc_put(bus_client_data->icc_data);
 	kfree(bus_client_data);
 	bus_client->client_data = NULL;
 	kfree(bus_client);
 	*client = NULL;
+
 }

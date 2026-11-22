@@ -240,7 +240,6 @@ static int cam_icp_component_bind(struct device *dev,
 ctx_fail:
 	for (--i; i >= 0; i--)
 		cam_icp_context_deinit(&g_icp_dev.ctx_icp[i]);
-	cam_icp_hw_mgr_deinit();
 hw_init_fail:
 	kfree(hw_mgr_intf);
 hw_alloc_fail:

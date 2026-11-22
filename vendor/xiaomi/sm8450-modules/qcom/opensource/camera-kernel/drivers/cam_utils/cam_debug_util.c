@@ -70,16 +70,9 @@ ssize_t cam_debug_sysfs_node_store(struct device *dev,
 	char *value_str = NULL;
 	u64 value;
 
-	if (!buf || !count)
-		return -EINVAL;
-
 	CAM_INFO(CAM_UTIL, "Sysfs debug attr name:[%s] buf:[%s] bytes:[%d]",
 		attr->attr.name, buf, count);
-	local_buf = kzalloc(count + 1, GFP_KERNEL);
-	if (!local_buf)
-		return -ENOMEM;
-	memcpy(local_buf, buf, count);
-	local_buf[count] = '\0';
+	local_buf = kmemdup(buf, (count + sizeof(char)), GFP_KERNEL);
 	local_buf_temp = local_buf;
 	driver = strsep(&local_buf, "#");
 	if (!driver) {

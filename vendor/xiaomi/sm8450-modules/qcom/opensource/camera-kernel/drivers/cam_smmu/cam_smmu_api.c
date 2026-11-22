@@ -2238,7 +2238,7 @@ static int cam_smmu_map_buffer_validate(struct dma_buf *buf,
 	} else {
 		rc = -EINVAL;
 		CAM_ERR(CAM_SMMU, "Error: table sgl is null");
-		goto err_alloc;
+		goto err_unmap_sg;
 	}
 
 	/* fill up mapping_info */
@@ -2277,7 +2277,6 @@ static int cam_smmu_map_buffer_validate(struct dma_buf *buf,
 	return 0;
 
 err_alloc:
-	iommu_cb_set.cb_info[idx].io_mapping_size -= *len_ptr;
 	if (region_id == CAM_SMMU_REGION_SHARED) {
 		cam_smmu_free_iova(iova,
 			size,
@@ -2631,7 +2630,7 @@ static int cam_smmu_alloc_scratch_buffer_add_to_list(int idx,
 	unsigned int iommu_dir,
 	dma_addr_t *virt_addr)
 {
-	unsigned long nents;
+	unsigned long nents = virt_len / phys_len;
 	struct cam_dma_buff_info *mapping_info = NULL;
 	size_t unmapped;
 	dma_addr_t iova = 0;
@@ -2641,11 +2640,6 @@ static int cam_smmu_alloc_scratch_buffer_add_to_list(int idx,
 	struct iommu_domain *domain = NULL;
 	struct page *page;
 	struct sg_table *table = NULL;
-
-	if (!phys_len || !virt_len)
-		return -EINVAL;
-
-	nents = virt_len / phys_len;
 
 	CAM_DBG(CAM_SMMU, "nents = %lu, idx = %d, virt_len  = %zx",
 		nents, idx, virt_len);

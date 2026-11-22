@@ -548,14 +548,10 @@ static int cam_cpas_parse_node_tree(struct cam_cpas *cpas_core,
 			parent_node = of_parse_phandle(curr_node,
 				"parent-node", 0);
 			if (parent_node) {
-				if (!of_property_read_u32(parent_node, "cell-index",
-					&cell_idx) && cell_idx < CAM_CPAS_MAX_TREE_NODES) {
-					curr_node_ptr->parent_node =
-						soc_private->tree_node[cell_idx];
-				} else {
-					CAM_ERR(CAM_CPAS, "Invalid parent cell_idx %u", cell_idx);
-				}
-				of_node_put(parent_node);
+				of_property_read_u32(parent_node, "cell-index",
+					&cell_idx);
+				curr_node_ptr->parent_node =
+					soc_private->tree_node[cell_idx];
 			} else {
 				CAM_DBG(CAM_CPAS,
 					"no parent node at this level");

@@ -1800,11 +1800,6 @@ static int cam_soc_util_get_dt_clk_info(struct cam_hw_soc_info *soc_info)
 		return -EINVAL;
 	}
 
-	if (!soc_info->num_clk) {
-		CAM_ERR(CAM_UTIL, "Invalid number of clocks: 0");
-		return -EINVAL;
-	}
-
 	if ((num_clk_rates % soc_info->num_clk) != 0) {
 		CAM_ERR(CAM_UTIL,
 			"mismatch clk/rates, No of clocks=%d, No of rates=%d",

@@ -215,19 +215,10 @@ end:
 
 void cam_soc_bus_client_unregister(void **client)
 {
-	struct cam_soc_bus_client *bus_client;
-	struct cam_soc_bus_client_data *bus_client_data;
-
-	if (!client || !*client)
-		return;
-
-	bus_client = (struct cam_soc_bus_client *) (*client);
-	bus_client_data = (struct cam_soc_bus_client_data *) bus_client->client_data;
-	if (!bus_client_data) {
-		kfree(bus_client);
-		*client = NULL;
-		return;
-	}
+	struct cam_soc_bus_client *bus_client =
+		(struct cam_soc_bus_client *) (*client);
+	struct cam_soc_bus_client_data *bus_client_data =
+		(struct cam_soc_bus_client_data *) bus_client->client_data;
 
 	if (bus_client_data->dyn_vote)
 		cam_soc_bus_client_update_bw(bus_client, 0, 0);

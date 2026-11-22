@@ -411,9 +411,6 @@ void cam_sync_util_send_v4l2_event(uint32_t id,
 {
 	struct v4l2_event event;
 	__u64 *payload_data = NULL;
-	size_t max_payload_len;
-
-	memset(&event, 0, sizeof(event));
 
 	if (sync_dev->version == CAM_SYNC_V4L_EVENT_V2) {
 		struct cam_sync_ev_header_v2 *ev_header = NULL;
@@ -428,7 +425,6 @@ void cam_sync_util_send_v4l2_event(uint32_t id,
 		ev_header->evt_param[CAM_SYNC_EVENT_REASON_CODE_INDEX] =
 			event_cause;
 		payload_data = CAM_SYNC_GET_PAYLOAD_PTR_V2(event, __u64);
-		max_payload_len = sizeof(event.u.data) - sizeof(struct cam_sync_ev_header_v2);
 	} else {
 		struct cam_sync_ev_header *ev_header = NULL;
 
@@ -439,12 +435,9 @@ void cam_sync_util_send_v4l2_event(uint32_t id,
 		ev_header->sync_obj = sync_obj;
 		ev_header->status = status;
 		payload_data = CAM_SYNC_GET_PAYLOAD_PTR(event, __u64);
-		max_payload_len = sizeof(event.u.data) - sizeof(struct cam_sync_ev_header);
 	}
 
-	if (payload && len > 0)
-		memcpy(payload_data, payload, min_t(size_t, len, max_payload_len));
-
+	memcpy(payload_data, payload, len);
 	v4l2_event_queue(sync_dev->vdev, &event);
 	CAM_DBG(CAM_SYNC, "send v4l2 event version %d for sync_obj :%d",
 		sync_dev->version,

@@ -231,11 +231,10 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 		}
 
 		of_parent = of_get_parent(of_node);
-		if (!of_parent || of_property_read_u32(of_parent, "cell-index",
+		if (of_property_read_u32(of_parent, "cell-index",
 				&s_ctrl->cci_num) < 0)
 			/* Set default master 0 */
 			s_ctrl->cci_num = CCI_DEVICE_0;
-		of_node_put(of_parent);
 
 		s_ctrl->io_master_info.cci_client->cci_device
 			= s_ctrl->cci_num;

@@ -52,8 +52,6 @@ int cam_packet_util_validate_cmd_desc(struct cam_cmd_buf_desc *cmd_desc)
 	}
 
 	if ((cmd_desc->length > cmd_desc->size) ||
-		(cmd_desc->offset > cmd_desc->size) ||
-		(cmd_desc->offset + cmd_desc->length > cmd_desc->size) ||
 		(cmd_desc->mem_handle <= 0)) {
 		CAM_ERR(CAM_UTIL, "invalid cmd arg %d %d %d %d",
 			cmd_desc->offset, cmd_desc->length,

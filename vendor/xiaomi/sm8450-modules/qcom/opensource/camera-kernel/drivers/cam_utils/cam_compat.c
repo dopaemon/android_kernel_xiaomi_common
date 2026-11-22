@@ -28,9 +28,6 @@ int cam_reserve_icp_fw(struct cam_fw_alloc_info *icp_fw, size_t fw_length)
 	struct device_node *mem_node;
 	struct resource     res;
 
-	if (!icp_fw || !icp_fw->fw_dev)
-		return -EINVAL;
-
 	of_node = (icp_fw->fw_dev)->of_node;
 	mem_node = of_parse_phandle(of_node, "memory-region", 0);
 	if (!mem_node) {
