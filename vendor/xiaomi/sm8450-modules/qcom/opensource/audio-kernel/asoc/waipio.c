@@ -2534,8 +2534,14 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	if (card)
 		pdata = snd_soc_card_get_drvdata(card);
 
-	if (pdata)
+	if (pdata) {
+		of_node_put(pdata->fsa_handle);
+		of_node_put(pdata->dmic01_gpio_p);
+		of_node_put(pdata->dmic23_gpio_p);
+		of_node_put(pdata->dmic45_gpio_p);
+		of_node_put(pdata->dmic67_gpio_p);
 		common_pdata = pdata->common_pdata;
+	}
 
 	msm_common_snd_deinit(common_pdata);
 	snd_event_master_deregister(&pdev->dev);
