@@ -2238,7 +2238,7 @@ static int cam_smmu_map_buffer_validate(struct dma_buf *buf,
 	} else {
 		rc = -EINVAL;
 		CAM_ERR(CAM_SMMU, "Error: table sgl is null");
-		goto err_unmap_sg;
+		goto err_alloc;
 	}
 
 	/* fill up mapping_info */
@@ -2277,6 +2277,7 @@ static int cam_smmu_map_buffer_validate(struct dma_buf *buf,
 	return 0;
 
 err_alloc:
+	iommu_cb_set.cb_info[idx].io_mapping_size -= *len_ptr;
 	if (region_id == CAM_SMMU_REGION_SHARED) {
 		cam_smmu_free_iova(iova,
 			size,
