@@ -29,6 +29,9 @@ void qcom_icc_pre_aggregate(struct icc_node *node)
 	struct qcom_icc_node *qn;
 	struct qcom_icc_provider *qp;
 
+	if (!node || !node->data)
+		return;
+
 	qn = node->data;
 	qp = to_qcom_provider(node->provider);
 
@@ -62,6 +65,9 @@ int qcom_icc_aggregate(struct icc_node *node, u32 tag, u32 avg_bw,
 {
 	size_t i;
 	struct qcom_icc_node *qn;
+
+	if (!node || !node->data)
+		return -EINVAL;
 
 	qn = node->data;
 
@@ -116,6 +122,9 @@ int qcom_icc_set(struct icc_node *src, struct icc_node *dst)
 	else
 		node = src;
 
+	if (!node)
+		return -EINVAL;
+
 	qp = to_qcom_provider(node->provider);
 	qn = node->data;
 
@@ -128,6 +137,9 @@ int qcom_icc_set(struct icc_node *src, struct icc_node *dst)
 	}
 
 	if (qn->clk) {
+		if (!qn->buswidth)
+			return -EINVAL;
+
 		/*
 		 * Multiply by 1000 to convert the unit of bandwidth from KBps
 		 * to Bps, then divide by the bandwidth to get the clk rate in Hz.
@@ -181,7 +193,12 @@ EXPORT_SYMBOL(qcom_icc_get_bw_stub);
 
 int qcom_icc_get_bw(struct icc_node *node, u32 *avg, u32 *peak)
 {
-	struct qcom_icc_node *qn = node->data;
+	struct qcom_icc_node *qn;
+
+	if (!node || !node->data)
+		return -EINVAL;
+
+	qn = node->data;
 
 	*peak = qn->init_peak;
 	*avg  = qn->init_avg;
