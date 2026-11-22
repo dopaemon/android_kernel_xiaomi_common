@@ -284,7 +284,7 @@ static int spm_dev_probe(struct platform_device *pdev)
 		return PTR_ERR(drv->reg_base);
 
 	match_id = of_match_node(spm_match_table, pdev->dev.of_node);
-	if (!match_id)
+	if (!match_id || !match_id->data)
 		return -ENODEV;
 
 	drv->reg_data = match_id->data;
