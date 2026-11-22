@@ -764,6 +764,15 @@ void kgsl_pwrscale_close(struct kgsl_device *device)
 	pwr = &device->pwrctrl;
 	pwrscale = &device->pwrscale;
 
+	if (!IS_ERR_OR_NULL(pwrscale->devfreq_notify_worker))
+		kthread_destroy_worker(pwrscale->devfreq_notify_worker);
+
+	if (pwrscale->devfreq_wq) {
+		flush_workqueue(pwrscale->devfreq_wq);
+		destroy_workqueue(pwrscale->devfreq_wq);
+		pwrscale->devfreq_wq = NULL;
+	}
+
 	if (pwrscale->bus_devfreq) {
 		devfreq_remove_device(pwrscale->bus_devfreq);
 		pwrscale->bus_devfreq = NULL;
@@ -774,15 +783,6 @@ void kgsl_pwrscale_close(struct kgsl_device *device)
 
 	if (!pwrscale->devfreqptr)
 		return;
-
-	if (!IS_ERR_OR_NULL(pwrscale->devfreq_notify_worker))
-		kthread_destroy_worker(pwrscale->devfreq_notify_worker);
-
-	if (pwrscale->devfreq_wq) {
-		flush_workqueue(pwrscale->devfreq_wq);
-		destroy_workqueue(pwrscale->devfreq_wq);
-		pwrscale->devfreq_wq = NULL;
-	}
 
 	devfreq_remove_device(device->pwrscale.devfreqptr);
 	device->pwrscale.devfreqptr = NULL;
