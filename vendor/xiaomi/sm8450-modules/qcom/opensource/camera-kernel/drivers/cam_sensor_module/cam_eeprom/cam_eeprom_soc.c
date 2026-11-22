@@ -326,10 +326,11 @@ int cam_eeprom_parse_dt(struct cam_eeprom_ctrl_t *e_ctrl)
 		}
 
 		of_parent = of_get_parent(of_node);
-		if (of_property_read_u32(of_parent, "cell-index",
+		if (!of_parent || of_property_read_u32(of_parent, "cell-index",
 				&e_ctrl->cci_num) < 0)
 			/* Set default master 0 */
 			e_ctrl->cci_num = CCI_DEVICE_0;
+		of_node_put(of_parent);
 
 		e_ctrl->io_master_info.cci_client->cci_device = e_ctrl->cci_num;
 		CAM_DBG(CAM_EEPROM, "cci-index %d", e_ctrl->cci_num, rc);
