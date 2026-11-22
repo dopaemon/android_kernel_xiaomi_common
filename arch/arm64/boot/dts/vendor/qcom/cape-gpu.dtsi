@@ -30,7 +30,7 @@
 
 		qcom,chipid = <0x07030002>;
 
-		qcom,initial-pwrlevel = <12>;
+		qcom,initial-pwrlevel = <11>;
 
 		qcom,no-nap;
 

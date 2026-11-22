@@ -2,7 +2,7 @@
 
 	compatible = "qcom,adreno-gpu-gen7-0-1", "qcom,kgsl-3d0";
 
-	qcom,initial-pwrlevel = <11>;
+	qcom,initial-pwrlevel = <10>;
 
 	qcom,gpu-model = "Adreno730v2";
 	qcom,chipid = <0x07030001>;
