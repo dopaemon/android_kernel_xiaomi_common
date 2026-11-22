@@ -545,6 +545,11 @@ static int aw_dev_parse_check_acf_by_hdr(struct aw_container *aw_cfg)
 	uint8_t act_crc8 = 0;
 	int i;
 
+	if (!aw_cfg || !aw_cfg->data || aw_cfg->len < sizeof(struct aw_cfg_hdr)) {
+		aw_pr_err("invalid acf container or size");
+		return -EINVAL;
+	}
+
 	cfg_hdr = (struct aw_cfg_hdr *)aw_cfg->data;
 
 	/*check file type id is awinic acf file*/
@@ -608,6 +613,11 @@ static int aw_dev_parse_check_acf_by_hdr_v_1_0_0_0(struct aw_container *aw_cfg)
 	unsigned int hdr_ddt_len = 0;
 	uint8_t act_crc8 = 0;
 	int i;
+
+	if (!aw_cfg || !aw_cfg->data || aw_cfg->len < sizeof(struct aw_cfg_hdr)) {
+		aw_pr_err("invalid acf container or size");
+		return -EINVAL;
+	}
 
 	cfg_hdr = (struct aw_cfg_hdr *)aw_cfg->data;
 
@@ -1294,6 +1304,11 @@ int aw882xx_dev_parse_acf(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 	int ret;
 
 	aw_dev_info(aw_dev->dev, "enter");
+
+	if (!aw_cfg || !aw_cfg->data || aw_cfg->len < sizeof(struct aw_cfg_hdr)) {
+		aw_dev_err(aw_dev->dev, "invalid acf container or size");
+		return -EINVAL;
+	}
 
 	cfg_hdr = (struct aw_cfg_hdr *)aw_cfg->data;
 	switch (cfg_hdr->a_hdr_version) {
