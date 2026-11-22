@@ -2531,11 +2531,18 @@ static int kgsl_iommu_setup_context(struct kgsl_mmu *mmu,
 		return -ENOENT;
 
 	pdev = of_find_device_by_node(node);
+	if (!pdev) {
+		of_node_put(node);
+		return -ENODEV;
+	}
+
 	ret = of_dma_configure(&pdev->dev, node, true);
 	of_node_put(node);
 
-	if (ret)
+	if (ret) {
+		put_device(&pdev->dev);
 		return ret;
+	}
 
 	context->cb_num = -1;
 	context->name = name;
@@ -2679,11 +2686,18 @@ static int iommu_probe_secure_context(struct kgsl_device *device,
 		return -ENOENT;
 
 	pdev = of_find_device_by_node(node);
+	if (!pdev) {
+		of_node_put(node);
+		return -ENODEV;
+	}
+
 	ret = of_dma_configure(&pdev->dev, node, true);
 	of_node_put(node);
 
-	if (ret)
+	if (ret) {
+		put_device(&pdev->dev);
 		return ret;
+	}
 
 	context->cb_num = -1;
 	context->name = "gfx3d_secure";
@@ -2693,7 +2707,7 @@ static int iommu_probe_secure_context(struct kgsl_device *device,
 
 	context->domain = iommu_domain_alloc(&platform_bus_type);
 	if (!context->domain) {
-		/* FIXME: put away the device */
+		put_device(&pdev->dev);
 		return -ENODEV;
 	}
 
@@ -2703,7 +2717,7 @@ static int iommu_probe_secure_context(struct kgsl_device *device,
 		iommu_domain_free(context->domain);
 		context->domain = NULL;
 
-		/* FIXME: put away the device */
+		put_device(&pdev->dev);
 		return ret;
 	}
 
