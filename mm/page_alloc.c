@@ -269,6 +269,24 @@ struct per_cpu_zone_extra_data {
 
 static struct per_cpu_zone_extra_data zones_extra_data[__MAX_NR_ZONES];
 
+static inline unsigned long __percpu *get_zone_extra_pad(struct zone *zone)
+{
+	int zidx = zone_idx(zone);
+
+	if (zidx < 0 || zidx >= __MAX_NR_ZONES)
+		return NULL;
+	return zones_extra_data[zidx].pad;
+}
+
+static inline unsigned long __percpu **get_zone_extra_pad_ptr(struct zone *zone)
+{
+	int zidx = zone_idx(zone);
+
+	if (zidx < 0 || zidx >= __MAX_NR_ZONES)
+		return NULL;
+	return &zones_extra_data[zidx].pad;
+}
+
 #ifdef CONFIG_GCC_PLUGIN_LATENT_ENTROPY
 volatile unsigned long latent_entropy __latent_entropy;
 EXPORT_SYMBOL(latent_entropy);
@@ -2652,7 +2670,7 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 	int pindex;
 	bool free_high;
 
-	trace_android_vh_pcp_alloc_factor_adjust(zone, zones_extra_data[zone_idx(zone)].pad,
+	trace_android_vh_pcp_alloc_factor_adjust(zone, get_zone_extra_pad(zone),
 			pcp, page, migratetype, order);
 	__count_vm_events(PGFREE, 1 << order);
 	pindex = order_to_pindex(migratetype, order);
@@ -3051,7 +3069,7 @@ struct page *___rmqueue_pcplist(struct zone *zone, unsigned int order,
 				goto get_list;
 
 			trace_android_vh_nr_pcp_alloc(pcp, zone,
-				&(zones_extra_data[zone_idx(zone)].pad), order, &batch);
+				get_zone_extra_pad_ptr(zone), order, &batch);
 			/*
 			 * Scale batch relative to order if batch implies
 			 * free pages can be stored on the PCP. Batch can
