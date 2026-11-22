@@ -243,7 +243,7 @@ s32 cpu_latency_qos_limit(void)
  */
 bool cpu_latency_qos_request_active(struct pm_qos_request *req)
 {
-	return req->qos == &cpu_latency_constraints;
+	return req && req->qos == &cpu_latency_constraints;
 }
 EXPORT_SYMBOL_GPL(cpu_latency_qos_request_active);
 

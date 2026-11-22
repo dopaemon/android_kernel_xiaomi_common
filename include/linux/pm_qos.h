@@ -294,7 +294,7 @@ static inline s32 dev_pm_qos_raw_resume_latency(struct device *dev)
 
 static inline int freq_qos_request_active(struct freq_qos_request *req)
 {
-	return !IS_ERR_OR_NULL(req->qos);
+	return req && !IS_ERR_OR_NULL(req->qos);
 }
 
 void freq_constraints_init(struct freq_constraints *qos);
