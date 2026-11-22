@@ -3229,11 +3229,14 @@ static int cpu_to_cluster_id(struct ufs_qcom_host *host, u32 cpu)
 {
 	int i;
 
+	if (!host || !host->cpu_info)
+		return -EINVAL;
+
 	for (i = 0; i < host->num_cpus; i++) {
 		if (cpumask_test_cpu(cpu, &host->cpu_info[i].default_cluster_mask))
-			break;
+			return i;
 	}
-	return i;
+	return -EINVAL;
 }
 
 /**
@@ -3246,8 +3249,16 @@ static int cpu_to_cluster_id(struct ufs_qcom_host *host, u32 cpu)
 static void ufs_qcom_get_new_esi_affinity(struct ufs_qcom_host *host, int cid, int pos)
 {
 	int i;
-	int max_cpu = host->cpu_info[cid].last_cpu;
-	int min_cpu = host->cpu_info[cid].first_cpu;
+	int max_cpu, min_cpu;
+
+	if (!host || !host->cpu_info || !host->esi_affinity_mask)
+		return;
+
+	if (cid < 0 || cid >= host->num_cpus)
+		return;
+
+	max_cpu = host->cpu_info[cid].last_cpu;
+	min_cpu = host->cpu_info[cid].first_cpu;
 
 	for (i = max_cpu; i >= min_cpu; i--) {
 		if (cpumask_test_cpu(i, &host->esi_mask))
@@ -3267,6 +3278,9 @@ static int ufs_qcom_first_partial_cpu(struct ufs_qcom_host *host)
 {
 	int i;
 	int index = -1;
+
+	if (!host || !host->cpu_info)
+		return -1;
 
 	for (i = 0 ; i < host->num_cpus; i++) {
 		if (cpumask_weight(&host->cpu_info[i].available_cluster_mask) !=
@@ -3292,7 +3306,11 @@ static void ufs_qcom_update_esi_affinity_mask(struct ufs_qcom_host *host, int nu
 	int i, j, pos = 0;
 	int last_cpu = -1;
 	int qultivate_cid = -1;
+	int num_clusters;
 	u32 cpu;
+
+	if (!host || !host->cpu_info || !host->esi_affinity_mask)
+		return;
 
 	first_hole_index = ufs_qcom_first_partial_cpu(host);
 
@@ -3301,10 +3319,13 @@ static void ufs_qcom_update_esi_affinity_mask(struct ufs_qcom_host *host, int nu
 		return;
 	}
 
-	for (i = 0 ; i < host->num_cpus; i++)
+	num_clusters = min_t(int, host->num_cpus, MAX_NUM_CLUSTERS);
+	for (i = 0 ; i < num_clusters; i++)
 		cpumask_copy(&localclustermask[i], &host->cpu_info[i].available_cluster_mask);
 
 	qultivate_cid = cpu_to_cluster_id(host, first_hole_index);
+	if (qultivate_cid < 0)
+		return;
 
   /**
    *  If any of CPU from any cluster is Fused, hole is created at last index
@@ -3344,10 +3365,10 @@ static void ufs_qcom_update_esi_affinity_mask(struct ufs_qcom_host *host, int nu
    *  current cluster index (i), all subsequent
    *  clusters is left shited by no of hole present in current cluster.
    */
-	for (i = qultivate_cid ; i < (host->num_cpus - 1); i++) {
+	for (i = qultivate_cid ; i < (num_clusters - 1); i++) {
 		pos = cpumask_weight(&host->cpu_info[i].default_cluster_mask) -
 			cpumask_weight(&localclustermask[i]);
-		for (j = i + 1; j < host->num_cpus ; j++) {
+		for (j = i + 1; j < num_clusters ; j++) {
 			if (pos)
 				localclustermask[j].bits[0] =
 					(host->cpu_info[j].available_cluster_mask.bits[0]) << pos;
@@ -3358,7 +3379,8 @@ static void ufs_qcom_update_esi_affinity_mask(struct ufs_qcom_host *host, int nu
 		cpu = host->esi_affinity_mask[i];
 		cid = cpu_to_cluster_id(host, cpu);
 
-		if (BIT(i) & localclustermask[cid].bits[0]) {
+		if (cid >= 0 && cid < num_clusters &&
+		    (BIT(i) & localclustermask[cid].bits[0])) {
 			host->esi_affinity_mask[j] = host->esi_affinity_mask[i];
 			j++;
 		}
@@ -3378,7 +3400,7 @@ static void ufs_qcom_update_esi_affinity_mask(struct ufs_qcom_host *host, int nu
 		cid = cpu_to_cluster_id(host, cpu);
 		if (host->esi_affinity_mask[i] < first_hole_index)
 			continue;
-		else
+		else if (cid >= 0 && cid < host->num_cpus)
 			ufs_qcom_get_new_esi_affinity(host, cid, i);
 	}
 
