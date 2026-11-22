@@ -614,7 +614,7 @@ static void pwrscale_of_ca_aware(struct kgsl_device *device)
 
 	pwrscale->ctxt_aware_target_pwrlevel = 1;
 
-	node = of_find_node_by_name(parent, "qcom,gpu-pwrlevel-bins");
+	node = of_get_child_by_name(parent, "qcom,gpu-pwrlevel-bins");
 	if (node == NULL) {
 		pwrscale_of_get_ca_target_pwrlevel(device, parent);
 		return;
