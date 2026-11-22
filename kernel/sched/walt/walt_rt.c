@@ -54,10 +54,10 @@ static void long_running_rt_task_notifier(void *unused, struct rq *rq)
 	 */
 	if (rq->clock_task -
 		per_cpu(rt_task_arrival_time, cpu)
-			> sysctl_sched_long_running_rt_task_ms * MSEC_TO_NSEC) {
-		printk_deferred("RT task %s (%d) runtime > %u now=%llu task arrival time=%llu runtime=%llu\n",
+			> (u64)sysctl_sched_long_running_rt_task_ms * MSEC_TO_NSEC) {
+		printk_deferred("RT task %s (%d) runtime > %llu now=%llu task arrival time=%llu runtime=%llu\n",
 				curr->comm, curr->pid,
-				sysctl_sched_long_running_rt_task_ms * MSEC_TO_NSEC,
+				(u64)sysctl_sched_long_running_rt_task_ms * MSEC_TO_NSEC,
 				rq->clock_task,
 				per_cpu(rt_task_arrival_time, cpu),
 				rq->clock_task -
