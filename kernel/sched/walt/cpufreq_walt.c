@@ -179,6 +179,9 @@ static void waltgov_track_cycles(struct waltgov_policy *wg_policy,
 	u64 next_ws = wg_policy->last_ws + sched_ravg_window;
 
 	upto = min(upto, next_ws);
+	if (upto <= wg_policy->last_cyc_update_time)
+		return;
+
 	/* Track cycles in current window */
 	delta_ns = upto - wg_policy->last_cyc_update_time;
 	delta_ns *= prev_freq;
@@ -1440,7 +1443,8 @@ static int waltgov_init(struct cpufreq_policy *policy)
 	cpufreq_enable_fast_switch(policy);
 
 	if (policy->fast_switch_possible && !policy->fast_switch_enabled)
-		BUG_ON(1);
+		pr_warn_once("waltgov: fast switch possible but enable failed for cpu %d\n",
+			     policy->cpu);
 
 	wg_policy = waltgov_policy_alloc(policy);
 	if (!wg_policy) {
