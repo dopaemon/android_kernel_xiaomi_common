@@ -176,7 +176,7 @@ static unsigned long limits_mitigation_notify(struct limits_dcvs_hw *hw)
 	if (capacity > max_capacity)
 		capacity = max_capacity;
 
-	arch_update_thermal_pressure(&hw->core_map, freq_val);
+	arch_update_thermal_pressure(&hw->core_map, lmh_max_limit);
 
 	pr_debug("CPU:%d capacity:%lu max_capacity:%lu lmh_limit:%lu cluster_fmax:%lu\n",
 			cpumask_first(&hw->core_map), capacity, max_capacity,
