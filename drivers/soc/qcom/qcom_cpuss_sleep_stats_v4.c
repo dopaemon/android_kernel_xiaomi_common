@@ -95,12 +95,12 @@ static int qcom_cpuss_sleep_stats_v4_probe(struct platform_device *pdev)
 	if (IS_ERR(pdata->base))
 		return PTR_ERR(pdata->base);
 
-	pdata->rootdir = debugfs_create_dir("qcom_cpuss_sleep_stats", NULL);
-	pdata->pdev = pdev;
-
 	pdata->offset = (struct stats_config *)of_device_get_match_data(&pdev->dev);
 	if (!pdata->offset)
 		return -EINVAL;
+
+	pdata->rootdir = debugfs_create_dir("qcom_cpuss_sleep_stats", NULL);
+	pdata->pdev = pdev;
 
 	qcom_create_count_file(pdata);
 	qcom_create_resindency_file(pdata);
