@@ -3320,7 +3320,7 @@ static enum lru_status zram_shrink_cb(struct list_head *item, struct list_lru_on
     /* 检查页面是否仍然有效 */
     if (!zram_allocated(zram, index)) {
         zram_slot_unlock(zram, index);
-        ret = LRU_SKIP;
+        ret = LRU_RETRY;
         goto relock;
     }
     
@@ -3328,7 +3328,7 @@ static enum lru_status zram_shrink_cb(struct list_head *item, struct list_lru_on
     if (zram_test_flag(zram, index, ZRAM_PP_SLOT) ||
         zram_test_flag(zram, index, ZRAM_WB)) {
         zram_slot_unlock(zram, index);
-        ret = LRU_SKIP;
+        ret = LRU_RETRY;
         goto relock;
     }
 
@@ -3338,7 +3338,7 @@ static enum lru_status zram_shrink_cb(struct list_head *item, struct list_lru_on
             /* 1. 干净的文件页：直接释放 */
             zram_free_page(zram, index);
             zram_slot_unlock(zram, index);
-            ret = LRU_REMOVED_RETRY; /* 让 walker 继续尝试下个元素 */
+            ret = LRU_RETRY; /* 让 walker 继续尝试下个元素 */
             goto relock;
         } else {
             /* 2. 脏文件页：踢出 LRU 并且清除 idle，不触发回写 */
@@ -3346,7 +3346,7 @@ static enum lru_status zram_shrink_cb(struct list_head *item, struct list_lru_on
                 zram_lru_del(zram, entry); /* 本身携带安全锁操作 */
             zram_clear_flag(zram, index, ZRAM_IDLE);
             zram_slot_unlock(zram, index);
-            ret = LRU_REMOVED_RETRY;
+            ret = LRU_RETRY;
             goto relock;
         }
     }
