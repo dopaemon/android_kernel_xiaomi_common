@@ -506,10 +506,15 @@ static int cam_flash_component_bind(struct device *dev,
 		}
 
 		of_parent = of_get_parent(pdev->dev.of_node);
-		if (of_property_read_u32(of_parent, "cell-index",
-				&fctrl->cci_num) < 0)
-		/* Set default master 0 */
+		if (of_parent) {
+			if (of_property_read_u32(of_parent, "cell-index",
+					&fctrl->cci_num) < 0)
+				/* Set default master 0 */
+				fctrl->cci_num = CCI_DEVICE_0;
+			of_node_put(of_parent);
+		} else {
 			fctrl->cci_num = CCI_DEVICE_0;
+		}
 
 		fctrl->io_master_info.cci_client->cci_device = fctrl->cci_num;
 		CAM_DBG(CAM_FLASH, "cci-index %d", fctrl->cci_num, rc);
