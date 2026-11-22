@@ -383,6 +383,9 @@ static int aw_qcom_write_msg_to_dsp(int msg_num, uint32_t msg_id, char *data_ptr
 	int32_t *dsp_msg = NULL;
 	int msg_len = (int)(sizeof(aw_dsp_msg_t) + size);
 
+	if (msg_num < 0 || msg_num >= MSG_PARAM_ID_MAX)
+		return -EINVAL;
+
 	mutex_lock(&g_aw_dsp_msg_lock);
 	dsp_msg = kzalloc(msg_len, GFP_KERNEL);
 	if (!dsp_msg) {
@@ -419,6 +422,9 @@ static int aw_qcom_read_msg_from_dsp(int msg_num, uint32_t msg_id, char *data_pt
 {
 	int ret;
 	aw_dsp_msg_t cmd_msg;
+
+	if (msg_num < 0 || msg_num >= MSG_PARAM_ID_MAX)
+		return -EINVAL;
 
 	mutex_lock(&g_aw_dsp_msg_lock);
 	cmd_msg.type = AW_DSP_MSG_TYPE_CMD;
