@@ -111,9 +111,16 @@ EXPORT_SYMBOL_GPL(ufshcd_mcq_config_mac);
 struct ufs_hw_queue *ufshcd_mcq_req_to_hwq(struct ufs_hba *hba,
 					 struct request *req)
 {
-	struct blk_mq_hw_ctx *hctx = READ_ONCE(req->mq_hctx);
+	struct blk_mq_hw_ctx *hctx;
 
-	return hctx ? &hba->uhq[hctx->queue_num] : NULL;
+	if (!hba || !hba->uhq || !req)
+		return NULL;
+
+	hctx = READ_ONCE(req->mq_hctx);
+	if (!hctx || hctx->queue_num >= hba->nr_hw_queues)
+		return NULL;
+
+	return &hba->uhq[hctx->queue_num];
 }
 
 /**
