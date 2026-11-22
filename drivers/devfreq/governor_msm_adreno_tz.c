@@ -412,9 +412,10 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq)
 
 	/*
 	 * If the decision is to move to a different level, make sure the GPU
-	 * frequency changes.
+	 * frequency changes. Ignore negative error codes from TrustZone.
 	 */
-	if (val) {
+	if (val && val >= -((int)devfreq->profile->max_state) &&
+	    val < (int)devfreq->profile->max_state) {
 		level += val;
 		level = max(level, 0);
 		level = min_t(int, level, devfreq->profile->max_state - 1);
