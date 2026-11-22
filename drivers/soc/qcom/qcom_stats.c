@@ -1140,6 +1140,8 @@ static int qcom_stats_probe(struct platform_device *pdev)
 	return 0;
 
 fail:
+	if (!IS_ERR_OR_NULL(drv->qmp))
+		qmp_put(drv->qmp);
 	device_destroy(drv->stats_class, drv->dev_no);
 	class_destroy(drv->stats_class);
 	cdev_del(&drv->stats_cdev);
@@ -1152,6 +1154,9 @@ fail_create_stats_device:
 static int qcom_stats_remove(struct platform_device *pdev)
 {
 	struct stats_drvdata *drv = platform_get_drvdata(pdev);
+
+	if (!IS_ERR_OR_NULL(drv->qmp))
+		qmp_put(drv->qmp);
 
 	device_destroy(drv->stats_class, drv->dev_no);
 	class_destroy(drv->stats_class);
