@@ -1568,6 +1568,9 @@ static void try_shrink_dmap(struct binder_proc *proc)
 		return;
 
 	new = bitmap_zalloc(nbits, GFP_KERNEL);
+	if (!new)
+		return;
+
 	binder_proc_lock(proc);
 	dbitmap_shrink(dmap, new, nbits);
 	binder_proc_unlock(proc);
