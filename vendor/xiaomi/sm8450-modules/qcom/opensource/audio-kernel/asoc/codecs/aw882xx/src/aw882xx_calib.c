@@ -1742,6 +1742,11 @@ static int aw_cali_misc_read_dsp(struct aw_device *aw_dev, aw_ioctl_msg_t *msg)
 	int data_len = msg->data_len;
 	char *data_ptr = NULL;
 
+	if (data_len <= 0 || data_len > PAGE_SIZE) {
+		aw_dev_err(aw_dev->dev, "invalid data_len: %d\n", data_len);
+		return -EINVAL;
+	}
+
 	data_ptr = kzalloc(data_len, GFP_KERNEL);
 	if (!data_ptr) {
 		aw_dev_err(aw_dev->dev, "malloc failed !");
@@ -1769,6 +1774,11 @@ static int aw_cali_misc_write_dsp(struct aw_device *aw_dev, aw_ioctl_msg_t *msg)
 	uint32_t dsp_msg_id = (uint32_t)msg->opcode_id;
 	int data_len = msg->data_len;
 	char *data_ptr = NULL;
+
+	if (data_len <= 0 || data_len > PAGE_SIZE) {
+		aw_dev_err(aw_dev->dev, "invalid data_len: %d\n", data_len);
+		return -EINVAL;
+	}
 
 	data_ptr = kzalloc(data_len, GFP_KERNEL);
 	if (!data_ptr) {
