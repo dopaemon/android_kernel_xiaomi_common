@@ -1582,6 +1582,9 @@ void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 
+	if (!wts)
+		return;
+
 	if (wts->misfit)
 		wrq->walt_stats.nr_big_tasks++;
 
@@ -1598,6 +1601,9 @@ void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 
+	if (!wts)
+		return;
+
 	if (wts->misfit)
 		wrq->walt_stats.nr_big_tasks--;
 
@@ -1607,8 +1613,17 @@ void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 	if (walt_flag_test(p, WALT_TRAILBLAZER_BIT))
 		wrq->walt_stats.nr_trailblazer_tasks--;
 
-	BUG_ON(wrq->walt_stats.nr_big_tasks < 0);
-	BUG_ON(wrq->walt_stats.nr_trailblazer_tasks < 0);
+	if (WARN_ONCE(wrq->walt_stats.nr_big_tasks < 0,
+		      "walt: nr_big_tasks underflow on cpu %d\n", cpu_of(rq)))
+		wrq->walt_stats.nr_big_tasks = 0;
+
+	if (WARN_ONCE(wrq->walt_stats.nr_rtg_high_prio_tasks < 0,
+		      "walt: nr_rtg_high_prio_tasks underflow on cpu %d\n", cpu_of(rq)))
+		wrq->walt_stats.nr_rtg_high_prio_tasks = 0;
+
+	if (WARN_ONCE(wrq->walt_stats.nr_trailblazer_tasks < 0,
+		      "walt: nr_trailblazer_tasks underflow on cpu %d\n", cpu_of(rq)))
+		wrq->walt_stats.nr_trailblazer_tasks = 0;
 }
 
 void walt_cfs_init(void)
