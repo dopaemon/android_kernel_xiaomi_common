@@ -182,7 +182,7 @@ static void inputboost_input_event(struct input_handle *handle,
 	if (now - last_input_time < MIN_INPUT_INTERVAL)
 		return;
 
-	if (work_pending(&input_boost_work))
+	if (!input_boost_wq || work_pending(&input_boost_work))
 		return;
 
 	queue_work(input_boost_wq, &input_boost_work);
