@@ -56,7 +56,7 @@ unsigned int sched_get_cluster_util_pct(struct walt_sched_cluster *cluster)
 {
 	unsigned int cluster_util_pct = 0;
 
-	if (cluster->id < MAX_CLUSTERS)
+	if (cluster && cluster->id < MAX_CLUSTERS)
 		cluster_util_pct = cstats_util_pct[cluster->id];
 
 	return cluster_util_pct;
@@ -88,8 +88,10 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 	if (unlikely(walt_disabled))
 		return NULL;
 
-	if (!period)
+	if (curr_time <= last_get_time)
 		goto done;
+
+	period = curr_time - last_get_time;
 
 	/* read and reset nr_running counts */
 	for_each_possible_cpu(cpu) {
