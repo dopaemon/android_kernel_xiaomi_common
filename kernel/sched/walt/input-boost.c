@@ -93,7 +93,7 @@ static void update_policy_online(void)
 		if (!policy) {
 			pr_err("%s: cpufreq policy not found for cpu%d\n",
 							__func__, i);
-			goto out_unlock;
+			continue;
 		}
 
 		cpumask_andnot(&online_cpus, &online_cpus,
@@ -101,7 +101,6 @@ static void update_policy_online(void)
 		boost_adjust_notify(policy);
 		cpufreq_cpu_put(policy);
 	}
-out_unlock:
 	cpus_read_unlock();
 }
 
@@ -122,7 +121,7 @@ static void do_input_boost_rem(struct work_struct *work)
 
 	if (sched_boost_active) {
 		ret = sched_set_boost(0);
-		if (!ret)
+		if (ret)
 			pr_err("input-boost: sched boost disable failed\n");
 		sched_boost_active = false;
 	}
