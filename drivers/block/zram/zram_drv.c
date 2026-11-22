@@ -1750,9 +1750,9 @@ static int write_same_filled_page(struct zram *zram, unsigned long fill,
 	zram_set_flag(zram, index, ZRAM_SAME);
 	zram_set_handle(zram, index, fill);
 
-	if (PageAnon(page)) {
+	if (page && PageAnon(page)) {
 		zram_set_flag(zram, index, ZRAM_PAGE_ANON);
-	} else {
+	} else if (page) {
 		zram_set_flag(zram, index, ZRAM_PAGE_FILE);
 		/* 块层写入时常设 Writeback，因此两者需一并判断 */
 		if (PageDirty(page) || PageWriteback(page))
@@ -1800,9 +1800,9 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
 	zram_set_obj_size(zram, index, PAGE_SIZE);
 	zram_set_priority(zram, index, prio);
 
-	if (PageAnon(page)) {
+	if (page && PageAnon(page)) {
 		zram_set_flag(zram, index, ZRAM_PAGE_ANON);
-	} else {
+	} else if (page) {
 		zram_set_flag(zram, index, ZRAM_PAGE_FILE);
 		if (PageDirty(page) || PageWriteback(page))
 			zram_set_flag(zram, index, ZRAM_PAGE_DIRTY);
@@ -1910,9 +1910,9 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	zram_set_obj_size(zram, index, comp_len);
 	zram_set_priority(zram, index, prio);
 
-	if (PageAnon(page)) {
+	if (page && PageAnon(page)) {
 		zram_set_flag(zram, index, ZRAM_PAGE_ANON);
-	} else {
+	} else if (page) {
 		zram_set_flag(zram, index, ZRAM_PAGE_FILE);
 		if (PageDirty(page) || PageWriteback(page))
 			zram_set_flag(zram, index, ZRAM_PAGE_DIRTY);
@@ -1926,7 +1926,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 
 out:
 	if (zstrm)
-		zcomp_stream_put(zram->comps[prio]);
+		zcomp_stream_put(zram->comps[last_prio]);
 	return ret;
 }
 
