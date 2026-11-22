@@ -4344,6 +4344,7 @@ struct wcd938x_pdata *wcd938x_populate_dt_data(struct device *dev)
 	if (!pdata->regulator || (pdata->num_supplies <= 0)) {
 		dev_err(dev, "%s: no power supplies defined for codec\n",
 			__func__);
+		of_node_put(pdata->rst_np);
 		return NULL;
 	}
 
@@ -4657,6 +4658,11 @@ static int wcd938x_remove(struct platform_device *pdev)
 	struct wcd938x_priv *wcd938x = NULL;
 
 	wcd938x = platform_get_drvdata(pdev);
+	if (wcd938x && wcd938x->pdata) {
+		of_node_put(wcd938x->pdata->rst_np);
+		of_node_put(wcd938x->pdata->rx_slave);
+		of_node_put(wcd938x->pdata->tx_slave);
+	}
 	component_master_del(&pdev->dev, &wcd938x_comp_ops);
 	mutex_destroy(&wcd938x->micb_lock);
 	mutex_destroy(&wcd938x->wakeup_lock);
