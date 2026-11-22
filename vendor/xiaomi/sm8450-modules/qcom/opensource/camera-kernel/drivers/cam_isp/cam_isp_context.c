@@ -6406,6 +6406,7 @@ static int __cam_isp_ctx_acquire_hw_v1(struct cam_context *ctx,
 
 	if (cmd->data_size < sizeof(*acquire_hw_info)) {
 		CAM_ERR(CAM_ISP, "data_size is not a valid value");
+		rc = -EINVAL;
 		goto end;
 	}
 
@@ -6596,6 +6597,7 @@ static int __cam_isp_ctx_acquire_hw_v2(struct cam_context *ctx,
 
 	if (cmd->data_size < sizeof(*acquire_hw_info)) {
 		CAM_ERR(CAM_ISP, "data_size is not a valid value");
+		rc = -EINVAL;
 		goto end;
 	}
 
