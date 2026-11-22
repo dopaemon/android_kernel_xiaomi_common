@@ -340,6 +340,16 @@ static int gdsc_enable(struct regulator_dev *rdev)
 	if (sc->skip_disable_before_enable)
 		return 0;
 
+	if (sc->toggle_logic) {
+		for (i = 0; i < sc->path_count; i++) {
+			ret = icc_set_bw(sc->paths[i], 1, 1);
+			if (ret) {
+				dev_err(&rdev->dev, "Failed to vote BW for %d, ret=%d\n", i, ret);
+				return ret;
+			}
+		}
+	}
+
 	if (sc->root_en || sc->force_root_en) {
 		clk_prepare_enable(sc->clocks[sc->root_clk_idx]);
 		sc->is_root_clk_voted = true;
@@ -349,21 +359,14 @@ static int gdsc_enable(struct regulator_dev *rdev)
 	if (regval & HW_CONTROL_MASK) {
 		dev_warn(&rdev->dev, "Invalid enable while %s is under HW control\n",
 				sc->rdesc.name);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto err_hw_ctrl;
 	}
 
 	if (sc->clk_ctrl_count)
 		gdsc_clk_ctrl(sc, true);
 
 	if (sc->toggle_logic) {
-		for (i = 0; i < sc->path_count; i++) {
-			ret = icc_set_bw(sc->paths[i], 1, 1);
-			if (ret) {
-				dev_err(&rdev->dev, "Failed to vote BW for %d, ret=%d\n", i, ret);
-				return ret;
-			}
-		}
-
 		if (sc->sw_reset_count) {
 			for (i = 0; i < sc->sw_reset_count; i++)
 				regmap_set_bits(sc->sw_resets[i], REG_OFFSET,
@@ -469,6 +472,17 @@ static int gdsc_enable(struct regulator_dev *rdev)
 
 	sc->is_gdsc_enabled = true;
 
+	return ret;
+
+err_hw_ctrl:
+	if (sc->is_root_clk_voted) {
+		clk_disable_unprepare(sc->clocks[sc->root_clk_idx]);
+		sc->is_root_clk_voted = false;
+	}
+	if (sc->toggle_logic) {
+		for (i = 0; i < sc->path_count; i++)
+			icc_set_bw(sc->paths[i], 0, 0);
+	}
 	return ret;
 }
 
