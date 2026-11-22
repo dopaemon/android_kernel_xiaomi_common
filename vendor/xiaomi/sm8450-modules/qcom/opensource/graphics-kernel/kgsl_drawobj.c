@@ -91,8 +91,10 @@ void kgsl_drawobj_destroy_object(struct kref *kref)
 	struct kgsl_drawobj *drawobj = container_of(kref,
 		struct kgsl_drawobj, refcount);
 
-	kgsl_context_put(drawobj->context);
-	drawobj->destroy_object(drawobj);
+	if (drawobj->context)
+		kgsl_context_put(drawobj->context);
+	if (drawobj->destroy_object)
+		drawobj->destroy_object(drawobj);
 }
 
 void kgsl_dump_syncpoints(struct kgsl_device *device,
