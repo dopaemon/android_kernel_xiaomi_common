@@ -627,6 +627,7 @@ static int enter_state(suspend_state_t state)
 	pm_pr_dbg("Finishing wakeup.\n");
 	suspend_finish();
  Unlock:
+	events_check_enabled = false;
 	mutex_unlock(&system_transition_mutex);
 	return error;
 }
