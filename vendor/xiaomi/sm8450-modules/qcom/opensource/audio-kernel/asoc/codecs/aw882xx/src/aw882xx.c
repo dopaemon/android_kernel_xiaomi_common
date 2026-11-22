@@ -1897,7 +1897,7 @@ static ssize_t aw882xx_reg_show(struct device *dev,
 	for (i = 0; i < reg_num; i++) {
 		if (aw882xx->aw_pa->ops.aw_check_rd_access(i)) {
 			aw882xx_i2c_read(aw882xx, i, &reg_val);
-			len += snprintf(buf+len, PAGE_SIZE-len,
+			len += scnprintf(buf+len, PAGE_SIZE-len,
 				"reg:0x%02x=0x%04x\n", i, reg_val);
 		}
 	}
@@ -1932,7 +1932,7 @@ static ssize_t aw882xx_rw_show(struct device *dev,
 
 	if (aw882xx->aw_pa->ops.aw_check_rd_access(aw882xx->rw_reg_addr)) {
 		aw882xx_i2c_read(aw882xx, aw882xx->rw_reg_addr, &reg_val);
-		len += snprintf(buf + len, PAGE_SIZE - len,
+		len += scnprintf(buf + len, PAGE_SIZE - len,
 			"reg:0x%02x=0x%04x\n", aw882xx->rw_reg_addr, reg_val);
 	}
 	return len;
