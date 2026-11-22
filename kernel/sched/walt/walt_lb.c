@@ -162,6 +162,9 @@ static void walt_lb_check_for_rotation(struct rq *src_rq)
 		if (!rq->misfit_task_load || !walt_fair_task(rq->curr))
 			continue;
 
+		if (!rq->curr->android_vendor_data1)
+			continue;
+
 		wts = (struct walt_task_struct *) rq->curr->android_vendor_data1;
 		wait = wc - wts->last_enqueued_ts;
 		if (wait > max_wait) {
@@ -186,6 +189,9 @@ static void walt_lb_check_for_rotation(struct rq *src_rq)
 			continue;
 
 		if (rq->nr_running > 1)
+			continue;
+
+		if (!rq->curr->android_vendor_data1)
 			continue;
 
 		wts = (struct walt_task_struct *) rq->curr->android_vendor_data1;
