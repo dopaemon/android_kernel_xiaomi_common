@@ -1461,9 +1461,24 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 	 */
 	spin_lock(&pool->lock);
 	obj = handle_to_obj(handle);
+	if (unlikely(!obj)) {
+		spin_unlock(&pool->lock);
+		cache_free_handle(pool, handle);
+		return;
+	}
 	obj_to_page(obj, &f_page);
 	zspage = get_zspage(f_page);
+	if (unlikely(!zspage)) {
+		spin_unlock(&pool->lock);
+		cache_free_handle(pool, handle);
+		return;
+	}
 	class = zspage_class(pool, zspage);
+	if (unlikely(!class)) {
+		spin_unlock(&pool->lock);
+		cache_free_handle(pool, handle);
+		return;
+	}
 
 	class_stat_dec(class, ZS_OBJS_INUSE, 1);
 	obj_free(class->size, obj);
