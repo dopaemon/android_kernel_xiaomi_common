@@ -1471,10 +1471,6 @@ static int aw882xx_codec_probe(aw_snd_soc_codec_t *aw_codec)
 		return -EINVAL;
 	}
 
-	INIT_DELAYED_WORK(&aw882xx->start_work, aw882xx_startup_work);
-	INIT_DELAYED_WORK(&aw882xx->interrupt_work, aw882xx_interrupt_work);
-	INIT_DELAYED_WORK(&aw882xx->dc_work, aw882xx_dc_prot_work);
-	INIT_DELAYED_WORK(&aw882xx->fw_work, aw882xx_request_firmware);
 
 	aw882xx->codec = aw_codec;
 #ifndef CONFIG_TARGET_PRODUCT_ZIYI
@@ -2475,6 +2471,12 @@ static int aw882xx_i2c_probe(struct i2c_client *i2c)
 	}
 
 	i2c_set_clientdata(i2c, aw882xx);
+
+	/* i2c remove cancels these even if the codec never probed */
+	INIT_DELAYED_WORK(&aw882xx->start_work, aw882xx_startup_work);
+	INIT_DELAYED_WORK(&aw882xx->interrupt_work, aw882xx_interrupt_work);
+	INIT_DELAYED_WORK(&aw882xx->dc_work, aw882xx_dc_prot_work);
+	INIT_DELAYED_WORK(&aw882xx->fw_work, aw882xx_request_firmware);
 
 	ret = aw882xx_parse_dt(&i2c->dev, aw882xx, np);
 	if (ret) {
