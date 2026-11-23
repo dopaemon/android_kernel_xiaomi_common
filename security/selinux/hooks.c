@@ -110,6 +110,7 @@ struct selinux_state selinux_state;
 #ifdef CONFIG_KSU_SUSFS
 extern bool ksu_selinux_hide_running __read_mostly;
 extern int susfs_security_context_to_sid(const char *scontext, u32 scontext_len, u32 *sid, gfp_t gfp);
+extern int susfs_security_context_to_sid_force(const char *scontext, u32 scontext_len, u32 *sid);
 #endif // #ifdef CONFIG_KSU_SUSFS
 
 /* SECMARK reference count */
@@ -3375,6 +3376,158 @@ static void selinux_inode_post_setxattr(struct dentry *dentry, const char *name,
 	isec->initialized = LABEL_INITIALIZED;
 	spin_unlock(&isec->lock);
 }
+
+#ifdef CONFIG_KSU_SUSFS
+static int susfs_selinux_inode_setxattr(struct mnt_idmap *idmap,
+				  struct dentry *dentry, const char *name,
+				  const void *value, size_t size, int flags)
+{
+	struct inode *inode = d_backing_inode(dentry);
+	struct inode_security_struct *isec;
+	struct superblock_security_struct *sbsec;
+	struct common_audit_data ad;
+	u32 newsid, sid = current_sid();
+	int rc = 0;
+
+	if (strcmp(name, XATTR_NAME_SELINUX)) {
+		rc = cap_inode_setxattr(dentry, name, value, size, flags);
+		if (rc)
+			return rc;
+
+		/* Not an attribute we recognize, so just check the
+		   ordinary setattr permission. */
+		return dentry_has_perm(current_cred(), dentry, FILE__SETATTR);
+	}
+
+	if (!selinux_initialized())
+		return (inode_owner_or_capable(idmap, inode) ? 0 : -EPERM);
+
+	sbsec = selinux_superblock(inode->i_sb);
+	if (!(sbsec->flags & SBLABEL_MNT))
+		return -EOPNOTSUPP;
+
+	if (!inode_owner_or_capable(idmap, inode))
+		return -EPERM;
+
+	ad.type = LSM_AUDIT_DATA_DENTRY;
+	ad.u.dentry = dentry;
+
+	isec = backing_inode_security(dentry);
+	rc = avc_has_perm(sid, isec->sid, isec->sclass,
+			  FILE__RELABELFROM, &ad);
+	if (rc)
+		return rc;
+
+	rc = susfs_security_context_to_sid(value, size, &newsid,
+				     GFP_KERNEL);
+	if (rc == -EINVAL) {
+		if (!has_cap_mac_admin(true)) {
+			struct audit_buffer *ab;
+			size_t audit_size;
+
+			/* We strip a nul only if it is at the end, otherwise the
+			 * context contains a nul and we should audit that */
+			if (value) {
+				const char *str = value;
+
+				if (str[size - 1] == '\0')
+					audit_size = size - 1;
+				else
+					audit_size = size;
+			} else {
+				audit_size = 0;
+			}
+			ab = audit_log_start(audit_context(),
+					     GFP_ATOMIC, AUDIT_SELINUX_ERR);
+			if (!ab)
+				return rc;
+			audit_log_format(ab, "op=setxattr invalid_context=");
+			audit_log_n_untrustedstring(ab, value, audit_size);
+			audit_log_end(ab);
+
+			return rc;
+		}
+		rc = susfs_security_context_to_sid_force(value,
+						   size, &newsid);
+	}
+	if (rc)
+		return rc;
+
+	rc = avc_has_perm(sid, newsid, isec->sclass,
+			  FILE__RELABELTO, &ad);
+	if (rc)
+		return rc;
+
+	rc = security_validate_transition(isec->sid, newsid,
+					  sid, isec->sclass);
+	if (rc)
+		return rc;
+
+	return avc_has_perm(newsid,
+			    sbsec->sid,
+			    SECCLASS_FILESYSTEM,
+			    FILESYSTEM__ASSOCIATE,
+			    &ad);
+}
+
+static void susfs_selinux_inode_post_setxattr(struct dentry *dentry, const char *name,
+					const void *value, size_t size,
+					int flags)
+{
+	struct inode *inode = d_backing_inode(dentry);
+	struct inode_security_struct *isec;
+	u32 newsid;
+	int rc;
+
+	if (strcmp(name, XATTR_NAME_SELINUX)) {
+		/* Not an attribute we recognize, so nothing to do. */
+		return;
+	}
+
+	if (!selinux_initialized()) {
+		/* If we haven't even been initialized, then we can't validate
+		 * against a policy, so leave the label as invalid. It may
+		 * resolve to a valid label on the next revalidation try if
+		 * we've since initialized.
+		 */
+		return;
+	}
+
+	rc = susfs_security_context_to_sid_force(value, size,
+					   &newsid);
+	if (rc) {
+		pr_err("SELinux:  unable to map context to SID"
+		       "for (%s, %lu), rc=%d\n",
+		       inode->i_sb->s_id, inode->i_ino, -rc);
+		return;
+	}
+
+	isec = backing_inode_security(dentry);
+	spin_lock(&isec->lock);
+	isec->sclass = inode_mode_to_security_class(inode->i_mode);
+	isec->sid = newsid;
+	isec->initialized = LABEL_INITIALIZED;
+	spin_unlock(&isec->lock);
+}
+
+static int handle_selinux_inode_setxattr(struct mnt_idmap *idmap,
+				  struct dentry *dentry, const char *name,
+				  const void *value, size_t size, int flags)
+{
+	if ((likely(current_uid().val >= 10000 && ksu_selinux_hide_running)))
+		return susfs_selinux_inode_setxattr(idmap, dentry, name, value, size, flags);
+	return selinux_inode_setxattr(idmap, dentry, name, value, size, flags);
+}
+
+static void handle_selinux_inode_post_setxattr(struct dentry *dentry, const char *name,
+					const void *value, size_t size,
+					int flags)
+{
+	if ((likely(current_uid().val >= 10000 && ksu_selinux_hide_running)))
+		return susfs_selinux_inode_post_setxattr(dentry, name, value, size, flags);
+	return selinux_inode_post_setxattr(dentry, name, value, size, flags);
+}
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 static int selinux_inode_getxattr(struct dentry *dentry, const char *name)
 {
@@ -7474,8 +7627,13 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_permission, selinux_inode_permission),
 	LSM_HOOK_INIT(inode_setattr, selinux_inode_setattr),
 	LSM_HOOK_INIT(inode_getattr, selinux_inode_getattr),
+#ifdef CONFIG_KSU_SUSFS
+	LSM_HOOK_INIT(inode_setxattr, handle_selinux_inode_setxattr),
+	LSM_HOOK_INIT(inode_post_setxattr, handle_selinux_inode_post_setxattr),
+#else
 	LSM_HOOK_INIT(inode_setxattr, selinux_inode_setxattr),
 	LSM_HOOK_INIT(inode_post_setxattr, selinux_inode_post_setxattr),
+#endif // #ifdef CONFIG_KSU_SUSFS
 	LSM_HOOK_INIT(inode_getxattr, selinux_inode_getxattr),
 	LSM_HOOK_INIT(inode_listxattr, selinux_inode_listxattr),
 	LSM_HOOK_INIT(inode_removexattr, selinux_inode_removexattr),

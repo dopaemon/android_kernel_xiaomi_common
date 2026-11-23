@@ -4245,6 +4245,20 @@ int susfs_security_context_str_to_sid(const char *scontext, u32 *sid, gfp_t gfp)
 				       sid, gfp);
 }
 
+int susfs_security_context_to_sid_default(const char *scontext, u32 scontext_len,
+				    u32 *sid, u32 def_sid, gfp_t gfp_flags)
+{
+	return susfs_security_context_to_sid_core(scontext, scontext_len,
+					    sid, def_sid, gfp_flags, 1);
+}
+
+int susfs_security_context_to_sid_force(const char *scontext, u32 scontext_len,
+				  u32 *sid)
+{
+	return susfs_security_context_to_sid_core(scontext, scontext_len,
+					    sid, SECSID_NULL, GFP_KERNEL, 1);
+}
+
 void susfs_security_compute_av_user(u32 ssid,
 			      u32 tsid,
 			      u16 tclass,
