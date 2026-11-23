@@ -192,8 +192,8 @@ endif
 endif
 
 # Pin upstream version for the history-preserving subtree import.
-# Upstream base: b90876426197f5d35c3003bf42d8bf927dc20181
-KSU_GIT_VERSION := 3501
+# Upstream base: 896f45a78c0806cfd585c4e14e6989f867b143d7
+KSU_GIT_VERSION := 3646
 KSU_GIT_TAG := v3.4.2
 KSU_GIT_VERSION_VALID := 1
 

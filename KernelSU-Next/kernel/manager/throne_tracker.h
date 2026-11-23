@@ -4,6 +4,9 @@
 #include <linux/types.h>
 #include <linux/namei.h>
 #include <linux/spinlock.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif
 
 #ifdef CONFIG_KSU_DISABLE_MANAGER
 static inline void ksu_throne_tracker_init(void)
@@ -24,6 +27,18 @@ void ksu_throne_tracker_init(void);
 void ksu_throne_tracker_exit(void);
 
 void track_throne(bool prune_only);
+
+static inline void susfs_renew_uid_filters(void)
+{
+#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+	// Renew the priority uid bitmap filter
+	susfs_parse_priority_app_strings();
+#endif
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	// Renew the sus path uid bitmap filter
+	susfs_parse_sus_path_app_strings();
+#endif
+}
 
 /*
  * small helper to check if lock is held / file stability

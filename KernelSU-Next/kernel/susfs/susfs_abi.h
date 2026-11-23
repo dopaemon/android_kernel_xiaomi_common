@@ -22,6 +22,7 @@
 #define CMD_SUSFS_SET_ANDROID_DATA_ROOT_PATH    0x55551 /* deprecated */
 #define CMD_SUSFS_SET_SDCARD_ROOT_PATH          0x55552 /* deprecated */
 #define CMD_SUSFS_ADD_SUS_PATH_LOOP             0x55553
+#define CMD_SUSFS_SET_SUS_PATH_UID_FILTER       0x55554
 #define CMD_SUSFS_ADD_SUS_MOUNT                 0x55560 /* deprecated */
 #define CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS 0x55561
 #define CMD_SUSFS_UMOUNT_FOR_ZYGOTE_ISO_SERVICE 0x55562 /* deprecated */
@@ -78,6 +79,12 @@ enum UID_SCHEME {
 
 struct st_susfs_sus_path {
 	char target_pathname[SUSFS_MAX_LEN_PATHNAME];
+	int err;
+};
+
+/* sus_path uid filter */
+struct st_susfs_sus_path_uid_filter {
+	char app_strings[SUSFS_APP_STR_BUF_SIZE];
 	int err;
 };
 
@@ -181,6 +188,24 @@ struct st_susfs_variant {
 struct st_susfs_enabled_features {
 	char enabled_features[SUSFS_ENABLED_FEATURES_SIZE];
 	int err;
+};
+
+/* Feature registry for the reboot(2) supercall (ABI-visible numbering).  A
+ * layer arms its feature only after its init returned 0, so a non-fatal layer
+ * that failed is neither advertised by SHOW_ENABLED_FEATURES nor allowed to
+ * have its commands hijacked. */
+enum susfs_feature {
+	SUSFS_FEAT_SUS_PATH = 0,
+	SUSFS_FEAT_SUS_MOUNT,
+	SUSFS_FEAT_SUS_KSTAT,
+	SUSFS_FEAT_SPOOF_UNAME,
+	SUSFS_FEAT_ENABLE_LOG,
+	SUSFS_FEAT_HIDE_SYMS,
+	SUSFS_FEAT_SPOOF_CMDLINE,
+	SUSFS_FEAT_OPEN_REDIRECT,
+	SUSFS_FEAT_SUS_MAP,
+	SUSFS_FEAT_AVC_SPOOF,	/* commands only: no upstream CONFIG_* line for it */
+	SUSFS_FEAT_COUNT,
 };
 
 #endif

@@ -16,7 +16,7 @@
  * reverse redirected) keep the open/inode lookups O(1) average; the slot array itself stays the stable storage.  susfs_open_redirect_rules counts live rules, so
  * the name layer stops paying a lookup once the last rule is gone.
  * uid_scheme: enum UID_SCHEME (susfs_abi.h:67-73), all five values with upstream's predicates (susfs.c:941-964); two of
- * the five need state an LKM cannot read - see or_uid_matches() / or_in_su_domain().
+ * the five need state an LKM cannot read - see the open view / or_in_su_domain().
  * Reverse disguise: upstream registers TWO hash entries per rule (susfs.c:844-863), the second with
  * reversed_lookup_only = true and the two pathnames swapped, and every "where did this file come from" reporter answers
  * from it - vfs_readlink() patch:510-548, do_proc_readlink() (/proc/<pid>/fd/N, exe, cwd, root) patch:1062-1083, fdinfo
@@ -57,12 +57,17 @@
 #include <linux/security.h>	/* security_secctx_to_secid */
 #include "susfs_abi.h"
 #include "susfs_log.h"
-#include "susfs.h"		/* susfs_expose_proc, sus_path_lsm_active */
+#include "sus_path.h"
+#include "susfs_control.h"
+#include "susfs_helpers.h"
+#include "susfs_open_redirect.h"
 #include "symbol_resolver.h"	/* find_kernel_symbol_exact */
 #include "ksu_umount_gate.h"	/* susfs_is_current_proc_umounted_app (issue #34) */
 #include "ksu_allow_gate.h"	/* the control-node gate is su's own */
 #include "susfs_kprobe.h"
+#include "susfs_hooks.h"
 #include "susfs_or_entry.h"	/* susfs_or_entry_armed(): the forward direction lives there now */
+#include "susfs_open_data.h"
 
 #define SUS_OR_MAX 512
 #define OR_HASH_BITS 10
@@ -166,7 +171,7 @@ static unsigned int or_free[SUS_OR_MAX];
 static unsigned int or_free_n;
 /* How many rules are live right now, which is what the name-layer hook reads before it resolves anything: the hook runs
  * for every open() on the system, so a table that once had a rule must not keep costing a path lookup after that rule
- * was deleted.  Written under or_lock, read locklessly (susfs.h states the contract). */
+ * was deleted.  Written under or_lock, read locklessly (susfs_open_redirect.h states the contract). */
 unsigned int susfs_open_redirect_rules;
 static DEFINE_MUTEX(or_lock);
 
@@ -224,33 +229,6 @@ static bool or_reverse_visible(void)
 }
 
 /* uid_scheme decision, mirroring upstream's switch in susfs_open_redirect_spoof_do_sys_openat() (susfs.c:941-964). */
-static bool or_uid_matches(int scheme)
-{
-	switch (scheme) {
-	case UID_NON_APP_PROC:			/* susfs.c:942-945 */
-		return current_uid().val % 100000 < 10000;
-	case UID_ROOT_PROC_EXCEPT_SU_PROC:	/* susfs.c:946-949 */
-		return current_uid().val == 0 && !or_in_su_domain();
-	case UID_NON_SU_PROC:			/* susfs.c:950-953 */
-		return !or_in_su_domain();
-	case UID_UMOUNTED_APP_PROC:		/* susfs.c:954-957 */
-		/* Upstream: TIF_PROC_UMOUNTED && uid >= 10000 (susfs_def.h:122-125).  The flag is set
-		 * by the SUSFS-patched KernelSU and this kernel has no such patch, so the same
-		 * question is put to KernelSU by uid instead (ksu_umount_gate.h, issue #34).  What
-		 * that substitution cannot reproduce is the flag's per-THREAD grain: a process of an
-		 * umounted uid that was not forked from zygote answers yes here and no upstream. */
-		return susfs_is_current_proc_umounted_app();
-	case UID_UMOUNTED_PROC:			/* susfs.c:958-961 */
-		/* Upstream: TIF_PROC_UMOUNTED alone, with no uid condition at all - which is how it
-		 * covers init-derived processes.  Same substitution as above, and the uid half is
-		 * deliberately NOT added here: that is the whole difference between this scheme and
-		 * the one above. */
-		return susfs_is_current_proc_umounted();
-	default:				/* susfs.c:962-963 */
-		return false;
-	}
-}
-
 static struct sus_or_entry *or_find_by_path(const char *target)
 {
 	int i;
@@ -446,25 +424,44 @@ static struct sus_or_entry *or_find_by_inode(unsigned long ino, dev_t dev, unsig
  * counts as "no rule" - the caller then runs the original syscall, which is always correct.
  * The table read is lockless for the same reason the probes' is: `dead` is cleared LAST by the
  * writer, so a non-dead entry has complete fields. */
-bool susfs_open_redirect_match_path(const struct path *path, char *buf, size_t buflen)
+bool susfs_open_redirect_in_su_domain(void)
+{
+	return or_in_su_domain();
+}
+
+int susfs_open_rule_facts_path(const struct path *path,
+			       struct susfs_open_rule_facts *facts)
 {
 	struct inode *inode;
 	struct sus_or_entry *e;
-	bool hit = false;
 
-	if (!READ_ONCE(nor) || !path->dentry)
-		return false;
+	if (!facts)
+		return -EINVAL;
+	memset(facts, 0, sizeof(*facts));
+	if (!READ_ONCE(nor) || !path || !path->dentry)
+		return 0;
 	inode = d_inode(path->dentry);
 	if (!inode)
-		return false;
+		return 0;
 
 	rcu_read_lock();
 	e = or_find_by_inode(inode->i_ino, inode->i_sb->s_dev, inode->i_generation);
-	if (e && or_uid_matches(e->uid_scheme) && e->redirected_pathname[0] &&
-	    strscpy(buf, e->redirected_pathname, buflen) >= 0)
-		hit = true;
+	if (e && e->redirected_pathname[0]) {
+		facts->matched = true;
+		facts->uid_scheme = e->uid_scheme;
+		strscpy(facts->redirected, e->redirected_pathname,
+			sizeof(facts->redirected));
+	}
 	rcu_read_unlock();
-	return hit;
+	return 0;
+}
+
+bool susfs_open_redirect_match_path(const struct path *path, char *buf, size_t buflen)
+{
+	struct susfs_open_rule_facts f;
+
+	susfs_open_rule_facts_path(path, &f);
+	return f.matched && strscpy(buf, f.redirected, buflen) >= 0;
 }
 
 /* Reverse direction: keyed on the redirected (really opened) inode, published like or_find_by_inode(). */
@@ -837,6 +834,29 @@ static struct kretprobe kr_or_maps = {
 	.data_size = sizeof(struct or_maps_args),
 	.maxactive = 16,
 };
+
+/* The three reverse faces are best-effort: the forward redirect is already live
+ * and each probe only closes one report path, so their installation is allowed
+ * to degrade (the centre reports which one failed and keeps the rest). */
+static const struct susfs_hook_probe or_dpath_probe = { .kr = &kr_or_dpath };
+static const struct susfs_hook_probe or_statfs_probe = { .kr = &kr_or_vfs_statfs };
+static const struct susfs_hook_probe or_maps_probe = { .kr = &kr_or_maps };
+
+static struct susfs_hook or_dpath_hook = {
+	.owner = "open_redirect", .name = "d_path",
+	.target = SUSFS_HOOK_TARGET_D_PATH,
+	.probes = &or_dpath_probe, .nprobes = 1,
+};
+static struct susfs_hook or_statfs_hook = {
+	.owner = "open_redirect", .name = "vfs_statfs",
+	.target = SUSFS_HOOK_TARGET_VFS_STATFS,
+	.probes = &or_statfs_probe, .nprobes = 1,
+};
+static struct susfs_hook or_maps_hook = {
+	.owner = "open_redirect", .name = "show_map_vma",
+	.target = SUSFS_HOOK_TARGET_SHOW_MAP_VMA,
+	.probes = &or_maps_probe, .nprobes = 1,
+};
 static bool or_maps_registered;
 
 /* ---- reverse face 4: /proc/<pid>/fdinfo/N ----
@@ -979,6 +999,22 @@ static int or_fdinfo_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 static struct kretprobe kr_or_fdinfo[OR_FDINFO_MAX];
 static int n_or_fdinfo_probes;
 
+#define OR_FDINFO_HOOK(idx) \
+	static const struct susfs_hook_probe or_fdinfo_probe_##idx = { .kr = &kr_or_fdinfo[idx] }; \
+	static struct susfs_hook or_fdinfo_hook_##idx = { \
+		.owner = "open_redirect", .name = "seq_show/fdinfo", \
+		.target = SUSFS_HOOK_TARGET_SEQ_SHOW, \
+		.probes = &or_fdinfo_probe_##idx, .nprobes = 1, \
+	}
+
+OR_FDINFO_HOOK(0); OR_FDINFO_HOOK(1); OR_FDINFO_HOOK(2); OR_FDINFO_HOOK(3);
+OR_FDINFO_HOOK(4); OR_FDINFO_HOOK(5); OR_FDINFO_HOOK(6); OR_FDINFO_HOOK(7);
+
+static struct susfs_hook *const or_fdinfo_hooks[OR_FDINFO_MAX] = {
+	&or_fdinfo_hook_0, &or_fdinfo_hook_1, &or_fdinfo_hook_2, &or_fdinfo_hook_3,
+	&or_fdinfo_hook_4, &or_fdinfo_hook_5, &or_fdinfo_hook_6, &or_fdinfo_hook_7,
+};
+
 static bool or_registered;
 static bool or_dpath_registered;
 static bool or_statfs_registered;
@@ -1018,10 +1054,9 @@ static void or_register_reverse(void)
 		return;
 
 	if (!or_dpath_registered) {
-		rc = register_kretprobe(&kr_or_dpath);
-		if (rc) {
-			susfs_krp_forget_addr(&kr_or_dpath);
-			pr_warn("open_redirect: register_kretprobe(d_path) failed %d - readlink not disguised (or already inlined)\n",
+		rc = susfs_hook_register(&or_dpath_hook);
+		if (rc < 0) {
+			pr_warn("open_redirect: hook_register(d_path) failed %d - readlink not disguised (or already inlined)\n",
 				rc);
 		} else {
 			or_dpath_registered = true;
@@ -1030,10 +1065,9 @@ static void or_register_reverse(void)
 	}
 
 	if (!or_statfs_registered) {
-		rc = register_kretprobe(&kr_or_vfs_statfs);
-		if (rc) {
-			susfs_krp_forget_addr(&kr_or_vfs_statfs);
-			pr_warn("open_redirect: register_kretprobe(vfs_statfs) failed %d - statfs not disguised (or already inlined)\n",
+		rc = susfs_hook_register(&or_statfs_hook);
+		if (rc < 0) {
+			pr_warn("open_redirect: hook_register(vfs_statfs) failed %d - statfs not disguised (or already inlined)\n",
 				rc);
 		} else {
 			or_statfs_registered = true;
@@ -1041,10 +1075,9 @@ static void or_register_reverse(void)
 		}
 	}
 	if (!or_maps_registered) {
-		rc = register_kretprobe(&kr_or_maps);
-		if (rc) {
-			susfs_krp_forget_addr(&kr_or_maps);
-			pr_warn("open_redirect: register_kretprobe(show_map_vma) failed %d - the maps dev:ino stays the redirected file's\n",
+		rc = susfs_hook_register(&or_maps_hook);
+		if (rc < 0) {
+			pr_warn("open_redirect: hook_register(show_map_vma) failed %d - the maps dev:ino stays the redirected file's\n",
 				rc);
 		} else {
 			or_maps_registered = true;
@@ -1067,11 +1100,10 @@ static void or_register_reverse(void)
 			kr->handler = or_fdinfo_ret;
 			kr->data_size = sizeof(struct seq_file *);
 			kr->maxactive = 16;
-			rc = register_kretprobe(kr);
-			if (rc) {
-				pr_warn("open_redirect: register_kretprobe(seq_show @%px) failed %d\n",
+			rc = susfs_hook_register(or_fdinfo_hooks[i]);
+			if (rc < 0) {
+				pr_warn("open_redirect: hook_register(seq_show @%px) failed %d\n",
 					(void *)addrs[i], rc);
-				susfs_krp_forget_addr(kr);
 				continue;
 			}
 			n_or_fdinfo_probes++;
@@ -1093,27 +1125,20 @@ static void or_unregister(void)
 	{
 		int i;
 
-		for (i = 0; i < OR_FDINFO_MAX; i++) {
-			if (!kr_or_fdinfo[i].kp.addr)
-				continue;
-			unregister_kretprobe(&kr_or_fdinfo[i]);
-			susfs_krp_forget_addr(&kr_or_fdinfo[i]);
-		}
+		for (i = 0; i < OR_FDINFO_MAX; i++)
+			susfs_hook_unregister(or_fdinfo_hooks[i]);
 		n_or_fdinfo_probes = 0;
 	}
 	if (or_maps_registered) {
-		unregister_kretprobe(&kr_or_maps);
-		susfs_krp_forget_addr(&kr_or_maps);
+		susfs_hook_unregister(&or_maps_hook);
 		or_maps_registered = false;
 	}
 	if (or_statfs_registered) {
-		unregister_kretprobe(&kr_or_vfs_statfs);
-		susfs_krp_forget_addr(&kr_or_vfs_statfs);
+		susfs_hook_unregister(&or_statfs_hook);
 		or_statfs_registered = false;
 	}
 	if (or_dpath_registered) {
-		unregister_kretprobe(&kr_or_dpath);
-		susfs_krp_forget_addr(&kr_or_dpath);
+		susfs_hook_unregister(&or_dpath_hook);
 		or_dpath_registered = false;
 	}
 

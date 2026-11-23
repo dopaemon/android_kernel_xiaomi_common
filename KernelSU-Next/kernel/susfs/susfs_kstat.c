@@ -52,11 +52,17 @@
 #include <linux/version.h>	/* LINUX_VERSION_CODE: the inode ctime accessor */
 #include "susfs_abi.h"
 #include "susfs_log.h"
-#include "susfs.h"	/* susfs_expose_proc, sus_path_dirent_filter(), SUS_NR_GETDENTS*_COMPAT */
+#include "sus_path.h"
+#include "susfs_control.h"
+#include "susfs_dirent.h"
+#include "susfs_helpers.h"
+#include "susfs_kstat.h"
 #include "susfs_fp_hook.h"	/* struct susfs_fp_hook + install/remove/drain: the table entries */
 #include "ksu_umount_gate.h"	/* susfs_is_current_proc_umounted_app (issue #34) */
 #include "ksu_allow_gate.h"	/* the control-node gate is su's own */
 #include "susfs_kprobe.h"
+#include "susfs_hooks.h"
+#include "susfs_kstat_view.h"
 
 /* KSTAT_SPOOF_* bits live in susfs_abi.h (upstream declares them in susfs.h next to struct
  * st_susfs_sus_kstat).  KSTAT_AUTO_SPOOF* below are /proc-interface masks, not supercall ABI. */
@@ -177,9 +183,16 @@ static_assert(offsetof(struct stat, st_ctime) == ST_CTIME_OFF, "stat.st_ctime");
  * every app uid, the manager and su-granted apps included.
  * Without any gate the spoofing would be visible to root too, wider than upstream.  Writers
  * (supercall, /proc) are configuration and stay ungated. */
+static bool susfs_kstat_table_empty(void);
+
 static bool susfs_kstat_gate_ok(void)
 {
-	return susfs_is_current_proc_umounted_app();
+	struct susfs_kstat_view v = {
+		.table_empty = susfs_kstat_table_empty(),
+		.caller_is_umounted_app = susfs_is_current_proc_umounted_app(),
+	};
+
+	return susfs_kstat_gate_allowed(&v);
 }
 
 /* ---- table access ----
@@ -220,6 +233,19 @@ static bool susfs_kstat_lookup(unsigned long ino, dev_t dev,
 	}
 	spin_unlock_irqrestore(&kstat_table_lock, flags);
 	return found;
+}
+
+static bool susfs_kstat_rule_allows(const struct sus_kstat_snapshot *s)
+{
+	struct susfs_kstat_view v = {
+		.table_empty = false,
+		.caller_is_umounted_app = true,
+		.rule_matched = true,
+		.buffer_ok = true,
+		.spoof_flags = s->flags,
+	};
+
+	return susfs_kstat_decide_core(&v) == SUSFS_KSTAT_LOOKUP;
 }
 
 /* Writer-side lookup by path: safe without the spinlock, since every caller holds kstat_lock. */
@@ -384,6 +410,8 @@ static int kstat_map_vma_ret(struct kretprobe_instance *ri, struct pt_regs *regs
 	if (!susfs_kstat_lookup(inode->i_ino,
 				new_encode_dev(inode->i_sb->s_dev), &snap))
 		return 0;
+	if (!susfs_kstat_rule_allows(&snap))
+		return 0;
 	if (!(snap.flags & (KSTAT_SPOOF_INO | KSTAT_SPOOF_DEV)))
 		return 0;
 
@@ -430,6 +458,19 @@ static struct kretprobe krp_kstat_map_vma = {
 	.maxactive = 16,
 };
 
+static const struct susfs_hook_probe kstat_map_probe = {
+	.kr = &krp_kstat_map_vma,
+	.required = true,
+};
+
+static struct susfs_hook kstat_map_hook = {
+	.owner = "kstat",
+	.name = "maps-dev-ino",
+	.target = SUSFS_HOOK_TARGET_SHOW_MAP_VMA,
+	.probes = &kstat_map_probe,
+	.nprobes = 1,
+};
+
 static bool kstat_maps_registered;
 
 /* Registering sleeps, so this runs from the rule-management paths (process context).  It is NOT
@@ -459,16 +500,13 @@ static void kstat_maps_arm(void)
 		mutex_unlock(&kstat_maps_ctl_lock);
 		return;
 	}
-	rc = register_kretprobe(&krp_kstat_map_vma);
-	if (rc) {
+	rc = susfs_hook_register(&kstat_map_hook);
+	if (rc < 0) {
 		/* Every later rule operation retries this arming (kstat_maps_arm() is called from
-		 * the add/update/clear paths and from the supercall), so the struct has to come back
-		 * clear: a failure that happened after the symbol was resolved leaves .addr set, and
-		 * the retry would be refused with -EINVAL instead of trying again - see
-		 * susfs_kprobe.h.  Safe under the lock. */
-		susfs_krp_forget_addr(&krp_kstat_map_vma);
+		 * the add/update/clear paths and from the supercall), so the probes have to come
+		 * back clear: the centre already forgets the resolved address on failure. */
 		mutex_unlock(&kstat_maps_ctl_lock);
-		pr_warn("susfs_kstat: register_kretprobe(show_map_vma) failed %d - maps keeps printing the real dev:ino\n",
+		pr_warn("susfs_kstat: hook_register(show_map_vma) failed %d - maps keeps printing the real dev:ino\n",
 			rc);
 	} else {
 		kstat_maps_registered = true;
@@ -490,10 +528,8 @@ static void kstat_maps_disarm(void)
 		mutex_unlock(&kstat_maps_ctl_lock);
 		return;
 	}
-	unregister_kretprobe(&krp_kstat_map_vma);
-	susfs_krp_forget_addr(&krp_kstat_map_vma);
-	kstat_maps_registered = false;
-	mutex_unlock(&kstat_maps_ctl_lock);
+	susfs_hook_unregister(&kstat_map_hook);
+	kstat_maps_registered = false;	mutex_unlock(&kstat_maps_ctl_lock);
 }
 
 /* Why the vfs_getattr fallback is not here any more (it stood exactly where these counters now
@@ -571,10 +607,14 @@ static long kstat_unlisted_seen[KSTAT_UNLISTED_SEEN];
 
 static void kstat_note_unlisted(long nr)
 {
-	int slot;
+	unsigned int slot;
 
 	atomic_inc(&n_kstat_unlisted);
-	slot = atomic_inc_return(&kstat_unlisted_next) - 1;
+	/* atomic_t is int: after ~2^31 hits the counter wraps negative, and a
+	 * negative slot indexed kstat_unlisted_seen before the array - the UBSAN
+	 * panic at kstat_sys_exit+0x364 reported in issues #110 and #201.  The
+	 * counter may still wrap; the slot must not. */
+	slot = (unsigned int)atomic_inc_return(&kstat_unlisted_next) - 1;
 	kstat_unlisted_seen[slot % KSTAT_UNLISTED_SEEN] = nr;
 }
 
@@ -619,6 +659,8 @@ static bool susfs_kstat_spoof_statbuf(struct kstat_call_state *st, unsigned long
 		atomic_inc(&st->cnt->miss_lookup);
 		return false;
 	}
+	if (!susfs_kstat_rule_allows(&snap))
+		return false;
 
 	if (e->flags & KSTAT_SPOOF_INO) {
 		v = e->spoofed_ino;
@@ -906,6 +948,8 @@ static bool susfs_kstat_spoof_compat_statbuf(struct kstat_call_state *st, unsign
 		atomic_inc(&st->cnt->miss_lookup);
 		return false;
 	}
+	if (!susfs_kstat_rule_allows(&snap))
+		return false;
 
 	if (e->flags & KSTAT_SPOOF_INO) {
 		v32 = (unsigned int)e->spoofed_ino;
@@ -1052,6 +1096,8 @@ static bool susfs_kstat_spoof_compat_stat(struct kstat_call_state *st, unsigned 
 		atomic_inc(&st->cnt->miss_lookup);
 		return false;
 	}
+	if (!susfs_kstat_rule_allows(&snap))
+		return false;
 
 	if (e->flags & KSTAT_SPOOF_INO) {
 		if (e->spoofed_ino > 0xffffffffUL) {
@@ -1312,6 +1358,8 @@ static bool susfs_kstat_spoof_statx(struct kstat_call_state *st, unsigned long s
 		atomic_inc(&st->cnt->miss_lookup);
 		return false;
 	}
+	if (!susfs_kstat_rule_allows(&snap))
+		return false;
 
 	eff = req_mask | buf_mask;
 
@@ -2106,6 +2154,9 @@ static struct proc_dir_entry *kstat_proc_entry;
  * above says why and what it cost. */
 static int kstat_hooks_armed;
 
+/* One centre registration per table entry; the table itself stays here. */
+static struct susfs_hook kstat_reg[ARRAY_SIZE(kstat_hooks)];
+
 int susfs_kstat_init(void)
 {
 	int rc;
@@ -2124,8 +2175,12 @@ int susfs_kstat_init(void)
 	for (i = 0; i < (int)ARRAY_SIZE(kstat_hooks); i++) {
 		struct susfs_fp_hook *h = &kstat_hooks[i];
 
-		rc = susfs_fp_install(h);
-		if (rc) {
+		kstat_reg[i].owner = "kstat";
+		kstat_reg[i].name = h->name;
+		kstat_reg[i].target = SUSFS_HOOK_TARGET_FP;
+		kstat_reg[i].fp = h;
+		rc = susfs_hook_register(&kstat_reg[i]);
+		if (rc < 0) {
 			pr_warn("kstat: %s not installed (%d) - that entry answers the kernel's own way\n",
 				h->name, rc);
 			continue;
@@ -2175,11 +2230,9 @@ void susfs_kstat_exit(void)
 	 * (guarded on `installed` and on the count), because this runs both for the rollback of a
 	 * failed load and for the unload of a loaded module. */
 	for (i = 0; i < (int)ARRAY_SIZE(kstat_hooks); i++) {
-		struct susfs_fp_hook *h = &kstat_hooks[i];
-
-		if (!h->installed)
+		if (kstat_reg[i].backend == SUSFS_HOOK_BACKEND_NONE)
 			continue;
-		susfs_fp_remove(h);
+		susfs_hook_unregister(&kstat_reg[i]);
 	}
 	if (kstat_hooks_armed) {
 		susfs_fp_drain();

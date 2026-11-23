@@ -36,8 +36,9 @@
 #include <linux/fs.h>
 #include <asm/unistd.h>
 
-#include "susfs.h"
+#include "susfs_create_gate.h"
 #include "susfs_fp_hook.h"
+#include "susfs_hooks.h"
 #include "susfs_create_data.h"
 #include "susfs_create_policy.h"
 #include "susfs_create_vfs.h"
@@ -46,10 +47,10 @@
 /* The AArch32 table numbers (arch/arm/tools/syscall.tbl); the native ones come
  * from __NR_*.  Kept spelled out for the same reason susfs_fp_hook.h spells the
  * compat indexes out: the two tables do not share a numbering. */
-#define COMPAT_MKNODAT_NR	33
-#define COMPAT_MKDIRAT_NR	34
-#define COMPAT_SYMLINKAT_NR	36
-#define COMPAT_LINKAT_NR	37
+#define COMPAT_MKNODAT_NR	324
+#define COMPAT_MKDIRAT_NR	323
+#define COMPAT_SYMLINKAT_NR	331
+#define COMPAT_LINKAT_NR	330
 
 static susfs_syscall_fn_t create_orig(enum susfs_create_syscall id)
 {
@@ -65,18 +66,22 @@ static __nocfi noinline long create_wrap_mkdirat(const struct pt_regs *regs)
 {
 	susfs_syscall_fn_t orig = create_orig(SUSFS_CREATE_MKDIRAT);
 	long ret;
+	int handled;
 
 	if (!orig)
 		return -ENOSYS;
-	/* Let the kernel answer first.  Only a successful "it already exists"
-	 * needs the hidden-name translation; absent names, ".", ".." and
-	 * trailing non-name components keep the kernel's own answer. */
-	ret = orig(regs);
-	if (ret == -EEXIST &&
-	    susfs_create_name_hidden((int)regs->regs[0],
-				     (const char __user *)regs->regs[1]))
+	if (susfs_create_name_hidden((int)regs->regs[0],
+				     (const char __user *)regs->regs[1],
+				     SUSFS_CREATE_VIEW_MKDIRAT, false))
 		return -EACCES;
-	return ret;
+	if (susfs_create_commit_enabled()) {
+		ret = susfs_create_mkdirat_commit((int)regs->regs[0],
+						  (const char __user *)regs->regs[1],
+						  (umode_t)regs->regs[2], &handled);
+		if (handled)
+			return ret;
+	}
+	return orig(regs);
 }
 
 static __nocfi noinline long create_wrap_mknodat(const struct pt_regs *regs)
@@ -85,7 +90,7 @@ static __nocfi noinline long create_wrap_mknodat(const struct pt_regs *regs)
 
 	if (!orig)
 		return -ENOSYS;
-	if (susfs_create_name_hidden((int)regs->regs[0], (const char __user *)regs->regs[1]))
+	if (susfs_create_name_hidden((int)regs->regs[0], (const char __user *)regs->regs[1], SUSFS_CREATE_VIEW_MKNODAT, false))
 		return -EACCES;
 	return orig(regs);
 }
@@ -97,7 +102,7 @@ static __nocfi noinline long create_wrap_symlinkat(const struct pt_regs *regs)
 
 	if (!orig)
 		return -ENOSYS;
-	if (susfs_create_name_hidden((int)regs->regs[1], (const char __user *)regs->regs[2]))
+	if (susfs_create_name_hidden((int)regs->regs[1], (const char __user *)regs->regs[2], SUSFS_CREATE_VIEW_SYMLINKAT, false))
 		return -EACCES;
 	return orig(regs);
 }
@@ -111,9 +116,9 @@ static __nocfi noinline long create_wrap_linkat(const struct pt_regs *regs)
 
 	if (!orig)
 		return -ENOSYS;
-	if (susfs_create_name_hidden((int)regs->regs[0], (const char __user *)regs->regs[1]))
+	if (susfs_create_name_hidden((int)regs->regs[0], (const char __user *)regs->regs[1], SUSFS_CREATE_VIEW_LINKAT, true))
 		return -ENOENT;
-	if (susfs_create_name_hidden((int)regs->regs[2], (const char __user *)regs->regs[3]))
+	if (susfs_create_name_hidden((int)regs->regs[2], (const char __user *)regs->regs[3], SUSFS_CREATE_VIEW_LINKAT, false))
 		return -EACCES;
 	return orig(regs);
 }
@@ -122,15 +127,22 @@ static __nocfi noinline long create_wrap_compat_mkdirat(const struct pt_regs *re
 {
 	susfs_syscall_fn_t orig = create_orig_compat(SUSFS_CREATE_MKDIRAT);
 	long ret;
+	int handled;
 
 	if (!orig)
 		return -ENOSYS;
-	ret = orig(regs);
-	if (ret == -EEXIST &&
-	    susfs_create_name_hidden((int)regs->regs[0],
-				     (const char __user *)regs->regs[1]))
+	if (susfs_create_name_hidden((int)regs->regs[0],
+				     (const char __user *)regs->regs[1],
+				     SUSFS_CREATE_VIEW_MKDIRAT, false))
 		return -EACCES;
-	return ret;
+	if (susfs_create_commit_enabled()) {
+		ret = susfs_create_mkdirat_commit((int)regs->regs[0],
+						  (const char __user *)regs->regs[1],
+						  (umode_t)regs->regs[2], &handled);
+		if (handled)
+			return ret;
+	}
+	return orig(regs);
 }
 
 static __nocfi noinline long create_wrap_compat_mknodat(const struct pt_regs *regs)
@@ -139,7 +151,7 @@ static __nocfi noinline long create_wrap_compat_mknodat(const struct pt_regs *re
 
 	if (!orig)
 		return -ENOSYS;
-	if (susfs_create_name_hidden((int)regs->regs[0], (const char __user *)regs->regs[1]))
+	if (susfs_create_name_hidden((int)regs->regs[0], (const char __user *)regs->regs[1], SUSFS_CREATE_VIEW_MKNODAT, false))
 		return -EACCES;
 	return orig(regs);
 }
@@ -150,7 +162,7 @@ static __nocfi noinline long create_wrap_compat_symlinkat(const struct pt_regs *
 
 	if (!orig)
 		return -ENOSYS;
-	if (susfs_create_name_hidden((int)regs->regs[1], (const char __user *)regs->regs[2]))
+	if (susfs_create_name_hidden((int)regs->regs[1], (const char __user *)regs->regs[2], SUSFS_CREATE_VIEW_SYMLINKAT, false))
 		return -EACCES;
 	return orig(regs);
 }
@@ -161,9 +173,9 @@ static __nocfi noinline long create_wrap_compat_linkat(const struct pt_regs *reg
 
 	if (!orig)
 		return -ENOSYS;
-	if (susfs_create_name_hidden((int)regs->regs[0], (const char __user *)regs->regs[1]))
+	if (susfs_create_name_hidden((int)regs->regs[0], (const char __user *)regs->regs[1], SUSFS_CREATE_VIEW_LINKAT, true))
 		return -ENOENT;
-	if (susfs_create_name_hidden((int)regs->regs[2], (const char __user *)regs->regs[3]))
+	if (susfs_create_name_hidden((int)regs->regs[2], (const char __user *)regs->regs[3], SUSFS_CREATE_VIEW_LINKAT, false))
 		return -EACCES;
 	return orig(regs);
 }
@@ -182,6 +194,8 @@ static struct susfs_fp_hook create_hooks[] = {
 	  .name = "create/linkat", .sym = "__arm64_sys_linkat",
 	  .wrapper = create_wrap_linkat, .wrapper_compat = create_wrap_compat_linkat },
 };
+
+static struct susfs_hook create_reg[ARRAY_SIZE(create_hooks)];
 
 int susfs_create_gate_init(void)
 {
@@ -207,8 +221,12 @@ int susfs_create_gate_init(void)
 	for (i = 0; i < (int)ARRAY_SIZE(create_hooks); i++) {
 		struct susfs_fp_hook *h = &create_hooks[i];
 
-		rc = susfs_fp_install(h);
-		if (rc) {
+		create_reg[i].owner = "create_gate";
+		create_reg[i].name = h->name;
+		create_reg[i].target = SUSFS_HOOK_TARGET_FP;
+		create_reg[i].fp = h;
+		rc = susfs_hook_register(&create_reg[i]);
+		if (rc < 0) {
 			pr_warn("create_gate: %s not installed (%d) - that syscall answers the kernel's own way\n",
 				h->name, rc);
 			continue;
@@ -235,11 +253,9 @@ void susfs_create_gate_exit(void)
 	int i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(create_hooks); i++) {
-		struct susfs_fp_hook *h = &create_hooks[i];
-
-		if (!h->installed)
+		if (create_reg[i].backend == SUSFS_HOOK_BACKEND_NONE)
 			continue;
-		susfs_fp_remove(h);
+		susfs_hook_unregister(&create_reg[i]);
 		armed++;
 	}
 	if (armed)
