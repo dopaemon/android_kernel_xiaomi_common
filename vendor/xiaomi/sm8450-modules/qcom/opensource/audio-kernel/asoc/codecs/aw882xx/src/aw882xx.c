@@ -1498,6 +1498,11 @@ static void aw882xx_codec_remove(aw_snd_soc_codec_t *aw_codec)
 	struct aw882xx *aw882xx =
 		aw_componet_codec_ops.codec_get_drvdata(aw_codec);
 	aw_dev_info(aw882xx->dev, "enter");
+	/* Armed timers would otherwise queue onto the destroyed workqueue */
+	cancel_delayed_work_sync(&aw882xx->start_work);
+	cancel_delayed_work_sync(&aw882xx->interrupt_work);
+	cancel_delayed_work_sync(&aw882xx->dc_work);
+	cancel_delayed_work_sync(&aw882xx->fw_work);
 	aw882xx_dev_deinit(aw882xx->aw_pa);
 	destroy_workqueue(aw882xx->work_queue);
 	aw882xx->work_queue = NULL;
@@ -1509,6 +1514,11 @@ static int aw882xx_codec_remove(aw_snd_soc_codec_t *aw_codec)
 		aw_componet_codec_ops.codec_get_drvdata(aw_codec);
 
 	aw_dev_info(aw882xx->dev, "enter");
+	/* Armed timers would otherwise queue onto the destroyed workqueue */
+	cancel_delayed_work_sync(&aw882xx->start_work);
+	cancel_delayed_work_sync(&aw882xx->interrupt_work);
+	cancel_delayed_work_sync(&aw882xx->dc_work);
+	cancel_delayed_work_sync(&aw882xx->fw_work);
 	aw882xx_dev_deinit(aw882xx->aw_pa);
 	destroy_workqueue(aw882xx->work_queue);
 	aw882xx->work_queue = NULL;
