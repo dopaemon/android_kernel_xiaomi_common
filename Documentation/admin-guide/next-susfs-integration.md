@@ -2,18 +2,18 @@
 
 This tree follows the Android 15 / 6.6 recipe in
 `WildKernels/GKI_KernelSU_SUSFS` at
-`c6d44eb9110888ad0cbc8e172d0d64eaa7df3e1e`, applied to the Xiaomi kernel
+`54d549fd (updated from c6d44eb9110888ad0cbc8e172d0d64eaa7df3e1e)`, applied to the Xiaomi kernel
 base `6c93f14f14f5` (6.6.144).
 
 ## Sources
 
 | Component | Repository | Revision |
 | --- | --- | --- |
-| KernelSU-Next | https://github.com/pershoot/KernelSU-Next (`dev-susfs`) | `e152fbbaa4aaa67517663e162039d209a7aba08e` |
-| SUSFS | https://gitlab.com/simonpunk/susfs4ksu (`gki-android15-6.6`) | `ec03d0c73b821afa1d5037d6d493216f59744fcb` |
+| KernelSU-Next | https://github.com/pershoot/KernelSU-Next (`dev-susfs`) | `38b873ca8526328bc0221ac1e8340bb27768d998` |
+| SUSFS | https://gitlab.com/simonpunk/susfs4ksu (`gki-android15-6.6`) | `f98f08223bbf469cc0a1542166383d253557fc32` |
 | Patch collection | https://github.com/WildKernels/kernel_patches | `b6690c6c66a05f873faf460daaaac1c84de9d720` |
-| Baseband Guard | https://github.com/vc-teahouse/Baseband-guard | `028ff7fd509e2104596da7cc1ef8e6ce2a0c9082` |
-| NoMount | https://github.com/maxsteeel/nomount (`dev`) | `c7d3fff08a07bde1d5b0f419e950d4aef71dce89` |
+| Baseband Guard | https://github.com/vc-teahouse/Baseband-guard | `48d9fdea643bcb41d204541400e9d8656b97a54f` |
+| NoMount | https://github.com/maxsteeel/nomount (`dev`) | `2e696f6dabd24617285119b39a90129663f8d711` |
 | DroidSpaces | https://github.com/ravindu644/Droidspaces-OSS | `cdadb9eb5d0f86aacffff60776333e6f6b73a30a` |
 
 KernelSU-Next, Baseband Guard and NoMount are imported with full Git subtree
@@ -34,7 +34,7 @@ patches record their source revision in the corresponding commit message.
    `161c058fed5544a6573d87124f346dadd5c4962d`.
 4. Wire `drivers/kernelsu`, apply the priority helper and fanotify compatibility
    scripts, and pin Next's version to the upstream `dev` merge-base
-   `b90876426197f5d35c3003bf42d8bf927dc20181` (version 33501, tag v3.4.2).
+   `896f45a78c0806cfd585c4e14e6989f867b143d7` (version 33646, tag v3.4.2).
 5. Apply the Android 15 / 6.6 BBRv3 patch and integrate Baseband Guard.
 6. Apply DroidSpaces' `fix_sysvipc_kabi_6_7_8` patch, then the 6.6 NTSync
    compatibility patch, NTSync base patch and Unicode 6.1+ fix.
