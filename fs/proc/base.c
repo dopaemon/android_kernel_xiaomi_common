@@ -157,8 +157,7 @@ static char oom_protected_apps[1024] =
  * so system_server (AMS, phantom killer, MIUI cleaners) cannot kill these.
  * Runtime: /sys/module/oom_protect/parameters/unkillable
  */
-static char oom_unkillable_apps[256] =
-	"com.android.launcher,com.android.launcher3,org.asterisk.zcc.ang";
+static char oom_unkillable_apps[256];
 
 #define OOM_PROTECT_MAX_UIDS	64
 #define AID_APP_START		10000
