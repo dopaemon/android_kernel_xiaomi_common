@@ -217,14 +217,22 @@ static void add_numeric_uids(const char *list, uid_t *uids, int *n)
 
 static void oom_protect_resolve(struct work_struct *work)
 {
+	/* The work never runs concurrently with itself */
+	static char apps[sizeof(oom_protected_apps)];
+	static char unkill[sizeof(oom_unkillable_apps)];
 	uid_t prot[OOM_PROTECT_MAX_UIDS] = {}, unk[OOM_PROTECT_MAX_UIDS] = {};
 	int np = 0, nu = 0, i;
 	void *buf = NULL;
 	ssize_t size;
 
+	/* Don't hold the global param lock across file I/O */
 	kernel_param_lock(THIS_MODULE);
-	add_numeric_uids(oom_protected_apps, prot, &np);
-	add_numeric_uids(oom_unkillable_apps, unk, &nu);
+	strscpy(apps, oom_protected_apps, sizeof(apps));
+	strscpy(unkill, oom_unkillable_apps, sizeof(unkill));
+	kernel_param_unlock(THIS_MODULE);
+
+	add_numeric_uids(apps, prot, &np);
+	add_numeric_uids(unkill, unk, &nu);
 
 	/* Lines are "<package> <uid> ..." */
 	size = kernel_read_file_from_path_initns("/data/system/packages.list", 0,
@@ -240,9 +248,9 @@ static void oom_protect_resolve(struct work_struct *work)
 				char *u = sp + 1;
 				char *ue = memchr(u, ' ', eol - u) ?: eol;
 
-				if (name_in_list(oom_protected_apps, s, sp - s))
+				if (name_in_list(apps, s, sp - s))
 					add_uid(prot, &np, u, ue - u);
-				if (name_in_list(oom_unkillable_apps, s, sp - s))
+				if (name_in_list(unkill, s, sp - s))
 					add_uid(unk, &nu, u, ue - u);
 			}
 			s = eol + 1;
@@ -250,7 +258,6 @@ static void oom_protect_resolve(struct work_struct *work)
 		vfree(buf);
 		oom_protect_resolved = true;
 	}
-	kernel_param_unlock(THIS_MODULE);
 
 	/* Keep the last good table if packages.list is briefly unreadable */
 	if (size <= 0 && oom_protect_resolved)
@@ -1351,6 +1358,7 @@ static ssize_t oom_adj_read(struct file *file, char __user *buf, size_t count,
 static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 {
 	struct mm_struct *mm = NULL;
+	int requested;
  	char task_comm[TASK_COMM_LEN];
 	struct task_struct *task;
 	int err = 0;
@@ -1400,8 +1408,9 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 	}
 
 	/* Keep the requested floor; only the effective value is pinned */
+	requested = oom_adj;
 	if (!legacy && has_capability_noaudit(current, CAP_SYS_RESOURCE))
-		task->signal->oom_score_adj_min = (short)oom_adj;
+		task->signal->oom_score_adj_min = (short)requested;
 	if (is_oom_protected(task))
 		oom_adj = OOM_SCORE_ADJ_MIN;
 
@@ -1426,7 +1435,7 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 			if (!p->vfork_done && process_shares_mm(p, mm)) {
 				p->signal->oom_score_adj = oom_adj;
 				if (!legacy && has_capability_noaudit(current, CAP_SYS_RESOURCE))
-					p->signal->oom_score_adj_min = (short)oom_adj;
+					p->signal->oom_score_adj_min = (short)requested;
 			}
 			task_unlock(p);
 		}
