@@ -76,6 +76,8 @@ struct qcom_cpufreq_data {
 	int throttle_irq;
 	char irq_name[15];
 	bool cancel_throttle;
+	/* IRQ disabled by the handler, waiting for the poll work to re-enable */
+	bool throttle_irq_masked;
 	struct delayed_work throttle_work;
 	struct cpufreq_policy *policy;
 	unsigned long last_non_boost_freq;
@@ -467,9 +469,10 @@ static void qcom_lmh_dcvs_notify(struct qcom_cpufreq_data *data)
 	 * If h/w throttled frequency is higher than what cpufreq has requested
 	 * for, then stop polling and switch back to interrupt mechanism.
 	 */
-	if (throttled_freq >= qcom_cpufreq_get_freq(cpufreq_cpu_get_raw(cpu))) {
+	if (throttled_freq >= qcom_cpufreq_get_freq(policy)) {
 		thermal_pressure = policy->cpuinfo.max_freq;
 
+		data->throttle_irq_masked = false;
 		enable_irq(data->throttle_irq);
 		trace_dcvsh_throttle(cpu, 0);
 	} else {
@@ -511,6 +514,7 @@ static irqreturn_t qcom_lmh_dcvs_handle_irq(int irq, void *data)
 
 	/* Disable interrupt and enable polling */
 	disable_irq_nosync(c_data->throttle_irq);
+	c_data->throttle_irq_masked = true;
 	trace_dcvsh_throttle(cpumask_first(policy->cpus), 1);
 	schedule_delayed_work(&c_data->throttle_work, 0);
 
@@ -646,13 +650,24 @@ static int qcom_cpufreq_hw_cpu_offline(struct cpufreq_policy *policy)
 	if (data->throttle_irq <= 0)
 		return 0;
 
+	/* Stop the handler first so it cannot disable the IRQ behind our back */
+	disable_irq(data->throttle_irq);
+
 	mutex_lock(&data->throttle_lock);
 	data->cancel_throttle = true;
 	mutex_unlock(&data->throttle_lock);
 
 	cancel_delayed_work_sync(&data->throttle_work);
 	irq_set_affinity_and_hint(data->throttle_irq, NULL);
-	disable_irq_nosync(data->throttle_irq);
+
+	/*
+	 * If we were throttled, the poll work that would re-enable the IRQ is
+	 * now cancelled. Drop the handler's disable so ->ready() balances ours.
+	 */
+	if (data->throttle_irq_masked) {
+		data->throttle_irq_masked = false;
+		enable_irq(data->throttle_irq);
+	}
 
 	arch_update_thermal_pressure(policy->related_cpus, U32_MAX);
 	trace_dcvsh_throttle(cpumask_first(policy->related_cpus), 0);
