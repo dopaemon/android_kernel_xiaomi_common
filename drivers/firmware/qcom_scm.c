@@ -1616,7 +1616,8 @@ int qcom_scm_dcvs_update(int level, s64 total_time, s64 busy_time)
 
 	ret = qcom_scm_call_atomic(__scm->dev, &desc, &res);
 
-	return ret ? : res.result[0];
+	/* The result is a level delta: an errno would be taken as one */
+	return ret ? 0 : res.result[0];
 }
 EXPORT_SYMBOL(qcom_scm_dcvs_update);
 
@@ -1636,7 +1637,8 @@ int qcom_scm_dcvs_update_v2(int level, s64 total_time, s64 busy_time)
 
 	ret = qcom_scm_call(__scm->dev, &desc, &res);
 
-	return ret ? : res.result[0];
+	/* The result is a level delta: an errno would be taken as one */
+	return ret ? 0 : res.result[0];
 }
 EXPORT_SYMBOL(qcom_scm_dcvs_update_v2);
 
@@ -1658,7 +1660,8 @@ int qcom_scm_dcvs_update_ca_v2(int level, s64 total_time, s64 busy_time,
 
 	ret = qcom_scm_call(__scm->dev, &desc, &res);
 
-	return ret ? : res.result[0];
+	/* The result is a level delta: an errno would be taken as one */
+	return ret ? 0 : res.result[0];
 }
 EXPORT_SYMBOL(qcom_scm_dcvs_update_ca_v2);
 
