@@ -95,15 +95,17 @@ static u32 generate_hint(struct devfreq_msm_adreno_tz_data *priv, int buslevel,
 	int wait_active_percent;
 	int gpu_percent;
 
-	if (!priv->bus.ram_time || !priv->bus.total_time)
+	if (!priv->bus.total_time)
 		return 0;
 
 	norm_max_cycles = (unsigned int)(priv->bus.ram_time) /
 			(unsigned int) priv->bus.total_time;
 	norm_cycles = (unsigned int)(priv->bus.ram_time + priv->bus.ram_wait) /
 			(unsigned int) priv->bus.total_time;
-	wait_active_percent = (100 * (unsigned int)priv->bus.ram_wait) /
-			(unsigned int) priv->bus.ram_time;
+	/* An idle bus must still be able to send the SLOW hint */
+	wait_active_percent = priv->bus.ram_time ?
+			(100 * (unsigned int)priv->bus.ram_wait) /
+			(unsigned int) priv->bus.ram_time : 0;
 	gpu_percent = (100 * (unsigned int)priv->bus.gpu_time) /
 			(unsigned int) priv->bus.total_time;
 
