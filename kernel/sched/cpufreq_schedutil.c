@@ -107,10 +107,6 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 	}
 
 	delta_ns = time - sg_policy->last_freq_update_time;
-	if (unlikely(delta_ns < 0)) {
-		sg_policy->last_freq_update_time = time;
-		return true;
-	}
 
 	return delta_ns >= sg_policy->freq_update_delay_ns;
 }
