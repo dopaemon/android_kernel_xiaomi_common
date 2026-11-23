@@ -171,6 +171,9 @@ done:
 
 int snd_card_notify_user(snd_card_status_t card_status)
 {
+	/* NULL if snd_card_sysfs_init() failed */
+	if (!snd_card_pdata)
+		return -ENODEV;
 	snd_card_pdata->card_status = card_status;
 	sysfs_notify(&snd_card_pdata->snd_card_kobj, NULL, "card_state");
 	return 0;
@@ -178,6 +181,8 @@ int snd_card_notify_user(snd_card_status_t card_status)
 
 int snd_card_set_card_status(snd_card_status_t card_status)
 {
+	if (!snd_card_pdata)
+		return -ENODEV;
 	snd_card_pdata->card_status = card_status;
 	return 0;
 }
