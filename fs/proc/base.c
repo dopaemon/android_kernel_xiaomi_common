@@ -101,6 +101,8 @@
 #include <linux/ksm.h>
 #include <linux/cpufreq_times.h>
 #include <linux/dma-buf.h>
+#include <linux/kernel_read_file.h>
+#include <linux/vmalloc.h>
 #if defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 #include <linux/susfs_def.h>
 #endif // #if defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
@@ -129,9 +131,12 @@ static void proc_kill_task(struct work_struct *work)
 }
 
 /*
- * Comma-separated package names whose processes are pinned to
- * OOM_SCORE_ADJ_MIN, so no LMK or OOM killer will ever pick them.
+ * Comma-separated package names (or numeric UIDs) whose processes are pinned
+ * to OOM_SCORE_ADJ_MIN, so no LMK or OOM killer will ever pick them.
  * Runtime: /sys/module/oom_protect/parameters/apps
+ *
+ * Processes are matched by UID, resolved from packages.list, not by comm:
+ * any app can rename itself and would otherwise impersonate a listed one.
  */
 static char oom_protected_apps[1024] =
 	"com.termux,org.asterisk.zcc.ang,"
@@ -146,9 +151,6 @@ static char oom_protected_apps[1024] =
 	"com.teslacoilsw.launcher,bitpit.launcher,com.microsoft.launcher,"
 	"projekt.launcher,de.mm20.launcher2.release,ginlemon.flowerfree,"
 	"com.nothing.launcher,net.oneplus.launcher";
-#undef MODULE_PARAM_PREFIX
-#define MODULE_PARAM_PREFIX "oom_protect."
-module_param_string(apps, oom_protected_apps, sizeof(oom_protected_apps), 0644);
 
 /*
  * Stricter level: SIGKILL from anyone but root or the app itself is refused,
@@ -157,21 +159,25 @@ module_param_string(apps, oom_protected_apps, sizeof(oom_protected_apps), 0644);
  */
 static char oom_unkillable_apps[256] =
 	"com.android.launcher,com.android.launcher3,org.asterisk.zcc.ang";
-module_param_string(unkillable, oom_unkillable_apps,
-		    sizeof(oom_unkillable_apps), 0644);
 
-static bool comm_in_list(const char *list, const char *comm)
+#define OOM_PROTECT_MAX_UIDS	64
+#define AID_APP_START		10000
+#define AID_USER_OFFSET		100000
+
+/* Per-user app IDs, zero-terminated; read locklessly */
+static uid_t oom_protected_uids[OOM_PROTECT_MAX_UIDS];
+static uid_t oom_unkillable_uids[OOM_PROTECT_MAX_UIDS];
+static unsigned long oom_protect_next_scan = INITIAL_JIFFIES;
+static bool oom_protect_resolved;
+
+static bool name_in_list(const char *list, const char *name, size_t nlen)
 {
 	const char *s = list;
-	size_t clen = strlen(comm);
 
 	while (*s) {
 		size_t len = strcspn(s, ",\n");
-		/* Android keeps only the last 15 chars of long package names */
-		const char *tail = len > TASK_COMM_LEN - 1 ?
-				   s + len - (TASK_COMM_LEN - 1) : s;
 
-		if (len && s + len - tail == clen && !strncmp(tail, comm, clen))
+		if (len == nlen && !strncmp(s, name, len))
 			return true;
 		s += len;
 		if (*s)
@@ -181,28 +187,160 @@ static bool comm_in_list(const char *list, const char *comm)
 	return false;
 }
 
-static bool is_oom_protected(const char *comm)
+static void add_uid(uid_t *uids, int *n, const char *str, size_t len)
 {
-	return comm_in_list(oom_protected_apps, comm) ||
-	       comm_in_list(oom_unkillable_apps, comm);
+	char num[12];
+	unsigned int uid;
+
+	if (*n >= OOM_PROTECT_MAX_UIDS - 1 || !len || len >= sizeof(num))
+		return;
+	memcpy(num, str, len);
+	num[len] = '\0';
+	/* Shared system UIDs would cover system_server and friends */
+	if (!kstrtouint(num, 10, &uid) && uid % AID_USER_OFFSET >= AID_APP_START)
+		uids[(*n)++] = uid % AID_USER_OFFSET;
+}
+
+static void add_numeric_uids(const char *list, uid_t *uids, int *n)
+{
+	const char *s = list;
+
+	while (*s) {
+		size_t len = strcspn(s, ",\n");
+
+		add_uid(uids, n, s, len);
+		s += len;
+		if (*s)
+			s++;
+	}
+}
+
+static void oom_protect_resolve(struct work_struct *work)
+{
+	uid_t prot[OOM_PROTECT_MAX_UIDS] = {}, unk[OOM_PROTECT_MAX_UIDS] = {};
+	int np = 0, nu = 0, i;
+	void *buf = NULL;
+	ssize_t size;
+
+	kernel_param_lock(THIS_MODULE);
+	add_numeric_uids(oom_protected_apps, prot, &np);
+	add_numeric_uids(oom_unkillable_apps, unk, &nu);
+
+	/* Lines are "<package> <uid> ..." */
+	size = kernel_read_file_from_path_initns("/data/system/packages.list", 0,
+						 &buf, SZ_1M, NULL, READING_UNKNOWN);
+	if (size > 0) {
+		char *s = buf, *end = s + size;
+
+		while (s < end) {
+			char *eol = memchr(s, '\n', end - s) ?: end;
+			char *sp = memchr(s, ' ', eol - s);
+
+			if (sp) {
+				char *u = sp + 1;
+				char *ue = memchr(u, ' ', eol - u) ?: eol;
+
+				if (name_in_list(oom_protected_apps, s, sp - s))
+					add_uid(prot, &np, u, ue - u);
+				if (name_in_list(oom_unkillable_apps, s, sp - s))
+					add_uid(unk, &nu, u, ue - u);
+			}
+			s = eol + 1;
+		}
+		vfree(buf);
+		oom_protect_resolved = true;
+	}
+	kernel_param_unlock(THIS_MODULE);
+
+	/* Keep the last good table if packages.list is briefly unreadable */
+	if (size <= 0 && oom_protect_resolved)
+		return;
+
+	for (i = 0; i < OOM_PROTECT_MAX_UIDS; i++) {
+		WRITE_ONCE(oom_protected_uids[i], prot[i]);
+		WRITE_ONCE(oom_unkillable_uids[i], unk[i]);
+	}
+}
+static DECLARE_WORK(oom_protect_work, oom_protect_resolve);
+
+/*
+ * Called from every oom_score_adj write: retry every 5s until /data is up,
+ * then rescan each minute to pick up reinstalled packages.
+ */
+static void oom_protect_kick(void)
+{
+	if (time_after(jiffies, READ_ONCE(oom_protect_next_scan))) {
+		WRITE_ONCE(oom_protect_next_scan,
+			   jiffies + (oom_protect_resolved ? 60 : 5) * HZ);
+		schedule_work(&oom_protect_work);
+	}
+}
+
+static int oom_protect_set(const char *val, const struct kernel_param *kp)
+{
+	int ret = param_set_copystring(val, kp);
+
+	/* Rescan on the next oom_score_adj write */
+	if (!ret)
+		WRITE_ONCE(oom_protect_next_scan, jiffies);
+	return ret;
+}
+
+static const struct kernel_param_ops oom_protect_ops = {
+	.set = oom_protect_set,
+	.get = param_get_string,
+};
+
+static const struct kparam_string oom_protected_kps = {
+	.maxlen = sizeof(oom_protected_apps),
+	.string = oom_protected_apps,
+};
+
+static const struct kparam_string oom_unkillable_kps = {
+	.maxlen = sizeof(oom_unkillable_apps),
+	.string = oom_unkillable_apps,
+};
+
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "oom_protect."
+__module_param_call(MODULE_PARAM_PREFIX, apps, &oom_protect_ops,
+		    .str = &oom_protected_kps, 0644, -1, 0);
+__module_param_call(MODULE_PARAM_PREFIX, unkillable, &oom_protect_ops,
+		    .str = &oom_unkillable_kps, 0644, -1, 0);
+
+static bool uid_listed(const uid_t *uids, struct task_struct *t)
+{
+	uid_t uid = from_kuid(&init_user_ns, task_uid(t)) % AID_USER_OFFSET;
+	int i;
+
+	for (i = 0; i < OOM_PROTECT_MAX_UIDS; i++) {
+		uid_t u = READ_ONCE(uids[i]);
+
+		if (!u)
+			break;
+		if (u == uid)
+			return true;
+	}
+
+	return false;
+}
+
+static bool is_oom_protected(struct task_struct *t)
+{
+	return uid_listed(oom_protected_uids, t) ||
+	       uid_listed(oom_unkillable_uids, t);
 }
 
 bool oom_protect_deny_kill(struct task_struct *t)
 {
-	bool deny;
-
 	if (uid_eq(current_euid(), GLOBAL_ROOT_UID) ||
 	    same_thread_group(current, t))
 		return false;
-	if (!comm_in_list(oom_unkillable_apps, t->group_leader->comm))
+	if (!uid_listed(oom_unkillable_uids, t))
 		return false;
 
 	/* Let the app kill its own processes */
-	rcu_read_lock();
-	deny = !uid_eq(current_euid(), __task_cred(t)->uid);
-	rcu_read_unlock();
-
-	return deny;
+	return !uid_eq(current_euid(), task_uid(t));
 }
 
 /* NOTE:
@@ -1221,6 +1359,7 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 	if (!task)
 		return -ESRCH;
 
+	oom_protect_kick();
 	mutex_lock(&oom_adj_mutex);
 	if (legacy) {
 		if (oom_adj < task->signal->oom_score_adj &&
@@ -1260,12 +1399,13 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 		}
 	}
 
-	if (is_oom_protected(task->comm))
+	/* Keep the requested floor; only the effective value is pinned */
+	if (!legacy && has_capability_noaudit(current, CAP_SYS_RESOURCE))
+		task->signal->oom_score_adj_min = (short)oom_adj;
+	if (is_oom_protected(task))
 		oom_adj = OOM_SCORE_ADJ_MIN;
 
 	task->signal->oom_score_adj = oom_adj;
-	if (!legacy && has_capability_noaudit(current, CAP_SYS_RESOURCE))
-		task->signal->oom_score_adj_min = (short)oom_adj;
 	trace_oom_score_adj_update(task);
 	if (oom_adj >= 700)
 		strncpy(task_comm, task->comm, TASK_COMM_LEN);
