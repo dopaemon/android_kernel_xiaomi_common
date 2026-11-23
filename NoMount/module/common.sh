@@ -45,21 +45,23 @@ load_ko() {
     return 0
 }
 
-_lock_fd() {
-    local fd="$1" timeout="$2" n=0
-    while ! flock -n "$fd"; do
-        n=$((n + 1))
-        [ "$n" -ge "$timeout" ] && return 1
+_lock_acquire() {
+    local n=0
+    command exec 9>>"$1" || return 1
+    until "$LOADER" --try-lock <&9; do
+        if [ "$?" -ne 1 ] || [ "$((n += 1))" -ge "$2" ]; then
+            _lock_release
+            return 1
+        fi
         sleep 1
     done
-    return 0
 }
 
+_lock_release() { exec 9>&-; }
+
 bootloop_check() {
-    exec 8>"$NOMOUNT_DATA/.boot.lock"
-    if ! _lock_fd 8 15; then
-        klogerr "boot lock timeout after 15s"
-        exec 8>&-
+    if ! _lock_acquire "$NOMOUNT_DATA/.boot.flock" 15; then
+        klogerr "failed to acquire boot lock"
         return 1
     fi
 
@@ -71,7 +73,7 @@ bootloop_check() {
         prev=$(cat "$BOOT_SEMAPHORE" 2>/dev/null || echo "MISSING")
         if [ "$prev" != "$current" ]; then
             klogerr "Bootloop detected (prev=$prev current=$current)"
-            exec 8>&-
+            _lock_release
             disable_module "🚨 Bootloop Prevented"
             return 1
         fi
@@ -80,41 +82,30 @@ bootloop_check() {
         echo "$current" > "$BOOT_SEMAPHORE"
     fi
 
-    exec 8>&-
+    _lock_release
     return 0
 }
 
 ensure_lkm_loaded() {
-    exec 7>"$NOMOUNT_DATA/.lkm.lock"
-    if ! _lock_fd 7 60; then
-        klogerr "LKM lock timed out after 60s"
-        exec 7>&-
+    if ! _lock_acquire "$NOMOUNT_DATA/.lkm.flock" 60; then
+        klogerr "failed to acquire LKM lock"
         return 1
     fi
 
     if "$LOADER" version >/dev/null 2>&1; then
-        exec 7>&-
+        _lock_release
         return 0
     fi
 
     klog "Loading LKM..."
     if ! load_ko "$MODDIR/lkm/nomount.ko"; then
         klogerr "LKM load failed."
-        exec 7>&-
+        _lock_release
         return 1
     fi
     klog "LKM loaded and initialized correctly."
-    exec 7>&-
+    _lock_release
     return 0
-}
-
-add_rule_and_log() {
-    local out rc
-    out=$(xargs -0 -r -n 200 "$LOADER" rule add "$@" 2>&1)
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-        klogerr "rule add $* failed rc=$rc: $(echo "$out" | head -n 3 | tr '\n' ' ' | cut -c1-300)"
-    fi
 }
 
 dump_all_rules_logcat() {

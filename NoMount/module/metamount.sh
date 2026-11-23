@@ -3,9 +3,6 @@ MODDIR=${0%/*}
 . "$MODDIR/common.sh"
 
 MODULES_DIR="/data/adb/modules"
-TARGET_PARTITIONS="system system_ext vendor odm product apex oem optics prism
-                    mi_ext my_bigball my_carrier my_company my_engineering my_heytap
-                    my_manifest my_preload my_product my_region my_reserve my_stock"
 
 [ -d "$NOMOUNT_DATA" ] || mkdir -p "$NOMOUNT_DATA"
 
@@ -22,12 +19,11 @@ if ! ensure_lkm_loaded; then
     exit 1
 fi
 
-exec 6>"$NOMOUNT_DATA/.inject.lock"
-if ! _lock_fd 6 120; then
-    klogerr "inject lock timed out after 120s"
-    exec 6>&-
+if ! _lock_acquire "$NOMOUNT_DATA/.inject.flock" 120; then
+    klogerr "failed to acquire injection lock"
     exit 1
 fi
+trap 'exit 1' INT TERM
 
 klog "Injection started"
 set -o pipefail
@@ -43,23 +39,8 @@ for mod_path in "$MODULES_DIR"/*; do
         continue
     fi
 
-    for partition in $TARGET_PARTITIONS; do
-        if [ -d "$mod_path/$partition" ]; then
-            [ -d "/$partition" ] || [ -d "/system/$partition" ] || continue
-            klog "mounting module $mod_name (/$partition)"
-            find -L "$mod_path/$partition" \( -type d -o -type c -o -name ".replace" -o -name ".remove" \) \
-                -exec sh "$MODDIR/rule-paths.sh" path "$mod_path" {} + 2>/dev/null \
-                | add_rule_and_log --whiteout || status=1
-
-            find -L "$mod_path/$partition" \( -type d -o -name ".replace" \) \
-                -exec sh "$MODDIR/rule-paths.sh" opaque "$mod_path" {} + 2>/dev/null \
-                | add_rule_and_log --opaque || status=1
-
-            find -L "$mod_path/$partition" \( -type f -o -type l \) ! -name ".replace" ! -name ".remove" \
-                -exec sh "$MODDIR/rule-paths.sh" pair "$mod_path" {} + 2>/dev/null \
-                | add_rule_and_log || status=1
-        fi
-    done
+    klog "loading module $mod_name"
+    "$MODDIR/bin/nm" module load "$mod_path" || status=1
 done
 
 if [ "$status" -eq 0 ]; then
@@ -69,5 +50,4 @@ else
     klogerr "Injection completed with errors."
 fi
 
-exec 6>&-
 exit "$status"

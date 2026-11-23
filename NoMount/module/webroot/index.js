@@ -155,8 +155,8 @@ function renderLanguagePicker() {
 const MOD_DIR = "/data/adb/modules";
 const NM_DATA = "/data/adb/nomount";
 const NM_BIN = "/data/adb/modules/nomount/bin/nm";
-const RULE_PATHS = `${MOD_DIR}/nomount/rule-paths.sh`;
 const FILES = { disable: `${NM_DATA}/disable`, exclusions: `${NM_DATA}/.exclusion_list.json`, isolated: `${NM_DATA}/.block_isolated_uids`, theme: `${NM_DATA}/theme.json`, dump_rules: `${NM_DATA}/dump_rules` };
+const shellQuote = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
 const APP_ICON_FALLBACK = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzgwODA4MCI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bTAgMThjLTQuNDEgMC04LTMuNTktOC04czMuNTktOCA4LTggOCAzLjU5IDggOC0zLjU5IDgtOCA4eiIvPjwvc3ZnPg==";
 const viewLoadState = { 'view-home': false, 'view-modules': false, 'view-exclusions': false, 'view-options': false };
 
@@ -416,12 +416,120 @@ function computePalette(seedHex, scheme) {
     return out;
 }
 
-let _nmSeed = null, _nmMqDark = null;
+let _nmSeed = null, _nmSeedSource = null, _nmLastAppliedPrimary = null, _nmMqDark = null;
+let _nmSystemProbeInFlight = false;
+const NM_SEED_CACHE = 'nm_seed_cache';
+
+function normalizeColor(v) {
+    if (!v) return null;
+    v = v.trim();
+    if (/^#[0-9a-f]{8}$/i.test(v)) return v.slice(0, 7);
+    if (/^#[0-9a-f]{6}$/i.test(v)) return v;
+    if (/^#[0-9a-f]{3}$/i.test(v)) return '#' + v[1]+v[1] + v[2]+v[2] + v[3]+v[3];
+    const m = v.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (m) return '#' + [m[1], m[2], m[3]].map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
+    return null;
+}
+
+function isBaselineGray(hex) {
+    const { s } = hexToHSL(hex);
+    return s < 0.1;
+}
+
+function readThemePrimary() {
+    const sources = [document.documentElement, document.body, document.querySelector('.root_layout')];
+    for (const el of sources) {
+        if (!el) continue;
+        const cs = getComputedStyle(el);
+        const p = normalizeColor(cs.getPropertyValue('--primary'));
+        if (p && !isBaselineGray(p)) return p;
+
+        const m3 = normalizeColor(cs.getPropertyValue('--md-sys-color-primary'));
+        if (!m3 || isBaselineGray(m3) || m3.toLowerCase() === '#6750a4' || m3 === _nmLastAppliedPrimary) continue;
+        return m3;
+    }
+    return null;
+}
+
+function setSeed(seed, source) {
+    _nmSeed = seed;
+    _nmSeedSource = source;
+}
+
+function cacheSeed(hex) {
+    if (!hex) return;
+    try { localStorage.setItem(NM_SEED_CACHE, hex); } catch {}
+}
+function readCachedSeed() {
+    try {
+        const c = localStorage.getItem(NM_SEED_CACHE);
+        return (c && /^#[0-9a-f]{6}$/i.test(c)) ? c : null;
+    } catch { return null; }
+}
+
+async function tryGetMonetSeedFromSystem() {
+    try {
+        const sdkOut = await exec('getprop ro.build.version.sdk 2>/dev/null');
+        const sdk = parseInt(sdkOut.stdout.trim(), 10) || 0;
+        if (sdk < 31) return null;
+
+        const tryHex = (raw) => {
+            if (!raw) return null;
+            for (const m of raw.matchAll(/#([0-9a-f]{6}|[0-9a-f]{8})\b/gi)) {
+                const s = m[1].toLowerCase();
+                const hex = '#' + (s.length === 8 ? s.slice(-6) : s);
+                if (isBaselineGray(hex) || hex === '#000000' || hex === '#ffffff') continue;
+                return hex;
+            }
+            return null;
+        };
+
+        const scheme = resolveScheme();
+        const darkMode = scheme === 'dark' || scheme === 'amoled';
+        const tones = darkMode ? ['200', '300', '400', '500']
+                                  : ['600', '700', '500', '400'];
+        for (const tone of tones) {
+            const { stdout, errno } = await exec(`cmd overlay lookup android android:color/system_accent1_${tone} 2>/dev/null`);
+            if (errno !== 0 || !stdout) continue;
+            const hex = tryHex(stdout);
+            if (hex) return hex;
+        }
+    } catch { }
+    return null;
+}
+
+function scheduleSystemProbe() {
+    if (_nmSystemProbeInFlight) return;
+    _nmSystemProbeInFlight = true;
+    tryGetMonetSeedFromSystem().then(s => {
+        _nmSystemProbeInFlight = false;
+        if (s && _nmSeedSource === 'default') {
+            setSeed(s, 'probe');
+            cacheSeed(s);
+            applyAppearance();
+        }
+    });
+}
+
 function getSeedColor() {
     if (!isMaterial) return customColor;
     if (_nmSeed) return _nmSeed;
-    const v = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
-    _nmSeed = /^#[0-9a-f]{6}$/i.test(v) ? v : '#6750a4';
+
+    const live = readThemePrimary();
+    if (live) {
+        setSeed(live, 'manager');
+        cacheSeed(live);
+        return _nmSeed;
+    }
+
+    const cached = readCachedSeed();
+    if (cached) {
+        setSeed(cached, 'cache');
+        return _nmSeed;
+    }
+
+    setSeed('#6750a4', 'default');
+    scheduleSystemProbe();
     return _nmSeed;
 }
 
@@ -442,6 +550,8 @@ function applyAppearance() {
     root.setAttribute('data-scheme', scheme);
 
     const palette = computePalette(getSeedColor(), scheme);
+    _nmLastAppliedPrimary = palette['--md-sys-color-primary'];
+
     for (const [name, value] of Object.entries(palette))
         root.style.setProperty(name, value);
 
@@ -475,7 +585,7 @@ applyAppearance();
 let nmThemeDirty = false;
 async function syncThemeToDisk() {
     nmThemeDirty = true;
-    const config = { theme: activeTheme, material: isMaterial, color: customColor };
+    const config = { theme: activeTheme, material: isMaterial, color: customColor, seed: _nmSeed || null };
     const jsonStr = JSON.stringify(config);
     const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
     await exec(`mkdir -p ${NM_DATA} && echo "${b64}" | base64 -d > ${FILES.theme}.tmp && mv -f ${FILES.theme}.tmp ${FILES.theme}`);
@@ -490,6 +600,10 @@ async function restoreThemeFromDisk() {
         try { config = JSON.parse(stdout.trim()); } catch { return; }
 
         if (nmThemeDirty) return;
+        if (!_nmSeed && typeof config.seed === 'string' && /^#[0-9a-f]{6}$/i.test(config.seed)) {
+            _nmSeed = config.seed;
+            applyAppearance();
+        }
 
         const diskTheme = (config.theme && config.theme in THEME_NAMES) ? config.theme : activeTheme;
         const diskMaterial = config.material !== undefined ? Boolean(config.material) : isMaterial;
@@ -609,15 +723,13 @@ function switchToTab(target, pushToHistory = true) {
         }
     }
 
-    setTimeout(() => {
-        if (!viewLoadState[target]) {
-            viewLoadState[target] = true;
-            if (target === 'view-home') loadHome();
-            else if (target === 'view-modules') loadModules();
-            else if (target === 'view-exclusions') loadExclusions();
-            else if (target === 'view-options') loadOptions();
-        }
-    }, 0);
+    if (!viewLoadState[target]) {
+        viewLoadState[target] = true;
+        if (target === 'view-home') loadHome();
+        else if (target === 'view-modules') loadModules();
+        else if (target === 'view-exclusions') loadExclusions();
+        else if (target === 'view-options') loadOptions();
+    }
 }
 
 function updateTopAppBar() {
@@ -636,14 +748,15 @@ function updateTopAppBar() {
         return;
     }
 
-    const titleOpacity = Math.max(0, Math.min(1, (UI.c.scrollTop - 18) / 24));
+    const scrollTop = UI.c.scrollTop;
+    const titleOpacity = Math.max(0, Math.min(1, (scrollTop - 18) / 24));
 
     if (UI.title.textContent !== currentActiveViewTitle)
         UI.title.textContent = currentActiveViewTitle;
- 
-    UI.bar.style.setProperty('--top-app-bar-opacity', UI.c.scrollTop > 0.5 ? '1' : '0');
+
+    UI.bar.style.setProperty('--top-app-bar-opacity', scrollTop > 0.5 ? '1' : '0');
     UI.bar.style.setProperty('--top-app-title-opacity', titleOpacity.toFixed(3));
-    UI.bar.classList.toggle('visible', UI.c.scrollTop > 0.5);
+    UI.bar.classList.toggle('visible', scrollTop > 0.5);
     UI.bar.classList.toggle('show-title', titleOpacity > 0);
     UI.bar.setAttribute('aria-hidden', titleOpacity > 0.5 ? 'false' : 'true');
 }
@@ -662,7 +775,10 @@ function initNavigation() {
 
 // Home
 async function loadHome(readModuleInfo = readModules) {
-    try { applyHomeData(JSON.parse(localStorage.getItem('nm_home_cache'))); } catch (e) { console.error("Error loading cache:", e); }
+    const cachedHome = localStorage.getItem('nm_home_cache');
+    if (cachedHome) {
+        try { applyHomeData(JSON.parse(cachedHome)); } catch (e) { console.error("Error loading cache:", e); }
+    }
 
     const script = `
         uname -r; echo "|||"
@@ -705,14 +821,18 @@ async function loadHome(readModuleInfo = readModules) {
                 });
             }),
             readModuleInfo().then(modules => {
-                const count = modules.filter(mod => mod.fileCount > 0).length;
-                requestAnimationFrame(() => {
-                    const stats = getHomeElements().stats;
-                    if (stats) stats.textContent = count === 1 ? translate('module_injected_count') : translate('modules_injected_count', { count });
-                });
+                moduleInfoCache = modules;
+                updateHomeStats();
             })
         ]);
     } catch (e) { console.error("Delayed Home update error:", e); }
+}
+
+function updateHomeStats() {
+    const stats = getHomeElements().stats;
+    if (!stats) return;
+    const count = moduleInfoCache.filter(m => m.fileCount > 0).length;
+    stats.textContent = count === 1 ? translate('module_injected_count') : translate('modules_injected_count', { count });
 }
 
 function applyHomeData(data) {
@@ -743,72 +863,33 @@ function applyHomeData(data) {
 
 // Modules
 let currentRenderId = 0;
-const TARGET_PARTITIONS = "system system_ext vendor odm product apex oem optics prism mi_ext my_bigball my_carrier my_company my_engineering my_heytap my_manifest my_preload my_product my_region my_reserve my_stock";
+let moduleInfoCache = [];
+
 async function readModules(onlyMods = null) {
-    const filter = onlyMods ? `case " ${onlyMods.join(' ')} " in *" $mod "*) ;; *) continue ;; esac` : '';
-    const script = `
-        ${NM_BIN} rule list --json || exit $?; echo "|||"
-        cd -P ${MOD_DIR} || exit 1
-        set --
-        for mod in *; do
-            [ ! -d "$mod" ] && continue
-            [ "$mod" = "nomount" ] && continue
-            [ ! -f "$mod/module.prop" ] && continue
-            ${filter}
-            count=$#
-            for p in ${TARGET_PARTITIONS}; do [ -d "$mod/$p" ] && { [ -d "/$p" ] || [ -d "/system/$p" ]; } && set -- "$@" "$mod/$p"; done
-            [ "$#" -eq "$count" ] && continue
-            name=""
-            while IFS='=' read -r k v; do case "$k" in name) name="$v"; break;; esac; done < "$mod/module.prop"
-            disable=false; [ -f "$mod/disable" ] && disable=true
-            skip=false; [ -f "$mod/skip_mount" ] && skip=true
-            root="\${PWD%/}/$mod"
-            if [ -L "$mod" ]; then root=$(readlink -f "$mod") || exit 1; fi
-            printf '@@M\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$mod" "$name" "$disable" "$skip" "$root"
-        done
-        if [ "$#" -gt 0 ]; then
-            sh "${RULE_PATHS}" links "$@" || exit 1
-            find -H "$@" -type l -exec sh "${RULE_PATHS}" scan {} + || exit 1
-        fi
-    `;
-    const { errno, stdout, stderr } = await exec(script);
+    const filter = onlyMods && onlyMods.length ? ` --only=${shellQuote(onlyMods.join(','))}` : '';
+    const { errno, stdout, stderr } = await exec(`${NM_BIN} module list --json${filter}`);
     if (errno) throw new Error(stderr || 'Failed to read modules');
-    const [jsonPart, modulesPart = ''] = stdout.split('|||');
-    const rules = JSON.parse(jsonPart.trim() || '[]');
-    const modules = new Map(), roots = new Map(), links = new Map();
-    for (const line of modulesPart.split('\n')) {
-        const [kind, modId, ...fields] = line.split('\t');
-        if (kind === '@@M') {
-            const [realName, disable, skipMount, root] = fields;
-            const mod = { modId, realName, disable: disable === 'true', skipMount: skipMount === 'true', fileCount: 0 };
-            modules.set(modId, mod);
-            if (!roots.has(root)) roots.set(root, []);
-            roots.get(root).push(mod);
-        } else if (kind === '@@S') {
-            const [virtual, real, dir] = fields;
-            if (!links.has(virtual)) links.set(virtual, []);
-            links.get(virtual).push({ mod: modules.get(modId), real, dir: dir === 'true' });
-        }
+
+    const data = JSON.parse(stdout);
+    const modules = [];
+    for (const m of data.mods) {
+        if (!m.hasInjectable) continue;
+        modules.push({
+            modId: m.modId,
+            realName: m.realName,
+            disable: m.disable,
+            skipMount: m.skipMount,
+            fileCount: m.fileCount,
+        });
     }
-    for (const { virtual, real } of rules) {
-        if (!real) continue;
-        const owners = new Set();
-        for (let path = real; path; path = path.slice(0, path.lastIndexOf('/'))) {
-            for (const mod of roots.get(path) || []) owners.add(mod);
-        }
-        for (let path = virtual; path; path = path.slice(0, path.lastIndexOf('/'))) {
-            const suffix = virtual.slice(path.length);
-            for (const link of links.get(path) || []) {
-                if ((link.dir || !suffix) && real === (suffix ? link.real.replace(/\/$/, '') + suffix : link.real)) owners.add(link.mod);
-            }
-        }
-        for (const mod of owners) mod.fileCount++;
-    }
-    for (const mod of modules.values()) {
+
+    for (const mod of modules) {
         const { fileCount, disable, skipMount } = mod;
-        mod.statusKey = fileCount > 0 ? ((disable || skipMount) ? 'status_loaded' : 'status_active') : (disable ? 'status_disabled' : (skipMount ? 'status_skipped' : 'status_inactive'));
+        mod.statusKey = fileCount > 0
+            ? ((disable || skipMount) ? 'status_loaded' : 'status_active')
+            : (disable ? 'status_disabled' : (skipMount ? 'status_skipped' : 'status_inactive'));
     }
-    return [...modules.values()];
+    return modules;
 }
 
 function buildModuleCard({ modId, realName, disable, skipMount, fileCount, statusKey }) {
@@ -856,6 +937,8 @@ async function loadModules(readModuleInfo = readModules) {
     try {
         const moduleInfo = await readModuleInfo();
         if (renderId !== currentRenderId) return;
+        moduleInfoCache = moduleInfo;
+        updateHomeStats();
         if (moduleInfo.length === 0) {
             renderEmptyState(listContainer, '(._.)', translate('no_modules_found'));
             return;
@@ -874,58 +957,18 @@ readInitialModules();
 
 async function loadModule(modId) {
     const modPath = `${MOD_DIR}/${modId}`;
-    const script = `
-        cd "${modPath}" || { echo "nm_load_status=1" >&2; exit 0; }
-        valid_dirs=""
-        for p in ${TARGET_PARTITIONS}; do [ -d "$p" ] && { [ -d "/$p" ] || [ -d "/system/$p" ]; } && valid_dirs="$valid_dirs $p"; done
-        [ -z "$valid_dirs" ] && { echo "nm_load_status=0" >&2; exit 0; }
-        status=0
-
-        find -L $valid_dirs '(' -type d -o -type c -o -name ".replace" -o -name ".remove" ')' \\
-            -exec sh "${RULE_PATHS}" path "${modPath}" {} + 2>/dev/null \\
-            | xargs -0 -r -n 200 ${NM_BIN} rule add --whiteout
-        st=$?; [ "$st" -ne 0 ] && status=$st
-
-        find -L $valid_dirs '(' -type d -o -name ".replace" ')' \\
-            -exec sh "${RULE_PATHS}" opaque "${modPath}" {} + 2>/dev/null \\
-            | xargs -0 -r -n 200 ${NM_BIN} rule add --opaque
-        st=$?; [ "$st" -ne 0 ] && status=$st
-
-        find -L $valid_dirs '(' -type f -o -type l ')' ! -name ".replace" ! -name ".remove" \\
-            -exec sh "${RULE_PATHS}" pair "${modPath}" {} + 2>/dev/null \\
-            | xargs -0 -r -n 200 ${NM_BIN} rule add
-        st=$?; [ "$st" -ne 0 ] && status=$st
-
-        echo "nm_load_status=$status" >&2
-    `;
-
-    const result = await exec(script);
-    const m = (result.stderr || '').match(/nm_load_status=(\d+)/);
-    if (!m) throw new Error('load script did not report status');
-    if (parseInt(m[1], 10) !== 0) throw new Error(result.stderr || `load failed (status ${m[1]})`);
+    const { stderr } = await exec(`${NM_BIN} module load ${shellQuote(modPath)}`);
+    const m = (stderr || '').match(/nm_load_status=(\d+)/);
+    if (!m) throw new Error('load did not report status');
+    if (parseInt(m[1], 10) !== 0) throw new Error(stderr || `load failed (status ${m[1]})`);
 }
 
 async function unloadModule(modId) {
     const modPath = `${MOD_DIR}/${modId}`;
-    const script = `
-        cd "${modPath}" || { echo "nm_unload_status=1" >&2; exit 0; }
-        valid_dirs=""
-        for p in ${TARGET_PARTITIONS}; do [ -d "$p" ] && { [ -d "/$p" ] || [ -d "/system/$p" ]; } && valid_dirs="$valid_dirs $p"; done
-        [ -z "$valid_dirs" ] && { echo "nm_unload_status=0" >&2; exit 0; }
-        status=0
-
-        find -L $valid_dirs '(' -type f -o -type l -o -type c -o -type d ')' \\
-            -exec sh "${RULE_PATHS}" del "${modPath}" {} + 2>/dev/null \\
-            | xargs -0 -r -n 200 ${NM_BIN} rule del
-        st=$?; [ "$st" -ne 0 ] && status=$st
-
-        echo "nm_unload_status=$status" >&2
-    `;
-
-    const result = await exec(script);
-    const m = (result.stderr || '').match(/nm_unload_status=(\d+)/);
-    if (!m) throw new Error('unload script did not report status');
-    if (parseInt(m[1], 10) !== 0) throw new Error(result.stderr || `unload failed (status ${m[1]})`);
+    const { stderr } = await exec(`${NM_BIN} module unload ${shellQuote(modPath)}`);
+    const m = (stderr || '').match(/nm_unload_status=(\d+)/);
+    if (!m) throw new Error('unload did not report status');
+    if (parseInt(m[1], 10) !== 0) throw new Error(stderr || `unload failed (status ${m[1]})`);
 }
 
 // Apps & Exclusions
@@ -936,7 +979,13 @@ let allAppsCache = [], showSystemApps = localStorage.getItem('nm_show_system_app
 async function readExclusionsJson() {
     try {
         const { stdout } = await exec(`cat ${FILES.exclusions} 2>/dev/null || echo "[]"`);
-        const parsed = JSON.parse(stdout.trim());
+        return parseExclusionsJson(stdout);
+    } catch (e) { return []; }
+}
+
+function parseExclusionsJson(text) {
+    try {
+        const parsed = JSON.parse(text.trim());
         return Array.isArray(parsed) ? parsed : [];
     } catch (e) { return []; }
 }
@@ -967,20 +1016,47 @@ function buildExclusionCard(uid, app) {
     );
 }
 
+const NM_STATE_SEP = '<<<NMSTATE>>>';
+let uiStatePromise = null;
+
+function readUiState() {
+    if (!uiStatePromise) {
+        const clear = () => { uiStatePromise = null; };
+        uiStatePromise = (async () => {
+            const { stdout } = await exec(
+                `${NM_BIN} uid list 2>/dev/null || echo "[]"; echo "${NM_STATE_SEP}"; ` +
+                `[ -f "${FILES.disable}" ] && echo yes || echo no; echo "${NM_STATE_SEP}"; ` +
+                `[ -f "${FILES.dump_rules}" ] && echo yes || echo no; echo "${NM_STATE_SEP}"; ` +
+                `${NM_BIN} uid block_isolated 2>/dev/null; echo "${NM_STATE_SEP}"; ` +
+                `cat "${FILES.exclusions}" 2>/dev/null || echo "[]"`);
+            const parts = stdout.split(NM_STATE_SEP);
+            return {
+                uids: parts[0].trim(),
+                safeMode: parts[1].trim() === 'yes',
+                dumpRules: parts[2].trim() === 'yes',
+                isolated: parts[3].trim(),
+                exclusions: parts.slice(4).join(NM_STATE_SEP).trim(),
+            };
+        })();
+        uiStatePromise.then(clear, clear);
+    }
+    return uiStatePromise;
+}
+
 async function loadExclusions() {
     const listContainer = document.getElementById('exclusions-list');
     if (!listContainer) return;
     const loadId = ++exclusionsLoadId;
 
     try {
-        const { stdout } = await exec(`${NM_BIN} uid list 2>/dev/null`);
+        const state = await readUiState();
         let blockedUids = [];
         try {
-            const parsed = JSON.parse(stdout.trim());
+            const parsed = JSON.parse(state.uids);
             if (Array.isArray(parsed)) blockedUids = parsed.map(String);
         } catch (e) { console.warn("No UIDs found or parse error"); }
 
-        const savedData = await readExclusionsJson();
+        const savedData = parseExclusionsJson(state.exclusions);
         const appsMap = new Map(savedData.map(app => [String(app.uid), app]));
 
         requestAnimationFrame(() => {
@@ -1008,8 +1084,10 @@ async function getRealUidEntries() {
     let userIds = [...usersOut.matchAll(/UserInfo\{(\d+):/g)].map(m => m[1]);
     if (userIds.length === 0) userIds = ['0'];
 
-    for (const userId of userIds) {
-        const { stdout } = await exec(`pm list packages -U --user ${userId} 2>/dev/null`);
+    const results = await Promise.all(userIds.map(userId =>
+        exec(`pm list packages -U --user ${userId} 2>/dev/null`)));
+    results.forEach(({ stdout }, i) => {
+        const userId = userIds[i];
         for (const line of stdout.split('\n')) {
             const m = line.match(/^package:(\S+)\s+uid:(\d+)/);
             if (!m) continue;
@@ -1017,33 +1095,30 @@ async function getRealUidEntries() {
             if (!entries.has(pkgName)) entries.set(pkgName, []);
             entries.get(pkgName).push({ uid, userId });
         }
-    }
+    });
     return entries;
 }
 
-async function ensureAppsCache(force = false) {
-    if (!force && allAppsCache.length > 0) return;
+const NM_APPS_CACHE_TTL = 300000;
 
-    if (!force) {
-        try {
-            const cachedApps = localStorage.getItem('nm_apps_cache');
-            if (cachedApps) {
-                allAppsCache = JSON.parse(cachedApps);
-                return;
-            }
-        } catch (e) {
-            console.warn("Failed to load apps from LocalStorage, fetching fresh data...", e);
-        }
+function readAppsCache() {
+    try {
+        const raw = localStorage.getItem('nm_apps_cache');
+        if (!raw) return null;
+        const apps = JSON.parse(raw);
+        if (!Array.isArray(apps)) return null;
+        const ts = parseInt(localStorage.getItem('nm_apps_cache_ts') || '0', 10) || 0;
+        return { apps, fresh: Date.now() - ts < NM_APPS_CACHE_TTL };
+    } catch (e) {
+        console.warn("Failed to load apps from LocalStorage", e);
+        return null;
     }
+}
 
-    if (appLoadingPromise) {
-        await appLoadingPromise;
-        if (!force || allAppsCache.length > 0) return;
-    }
-
+function refreshAppsCache() {
+    if (appLoadingPromise) return appLoadingPromise;
     appLoadingPromise = (async () => {
         try {
-            if (force) allAppsCache = [];
             let ksuWait = 10;
             while ((typeof ksu === 'undefined' || !ksu.listPackages) && ksuWait > 0) {
                 await delay(200); ksuWait--;
@@ -1099,17 +1174,59 @@ async function ensureAppsCache(force = false) {
 
             try {
                 localStorage.setItem('nm_apps_cache', JSON.stringify(allAppsCache));
+                localStorage.setItem('nm_apps_cache_ts', String(Date.now()));
             } catch (e) {
                 console.warn("Failed to save apps cache to LocalStorage. Data might be too large.", e);
             }
+            
+            setTimeout(() => {
+                for (const app of allAppsCache.slice(0, 50)) {
+                    const img = new Image();
+                    img.decoding = 'async';
+                    img.src = `ksu://icon/${app.packageName}`;
+                }
+            }, 100);
 
+            renderAppsIfOpen();
         } catch (e) {
             console.error("Error in ensureAppsCache:", e);
+            if (!allAppsCache.length) {
+                const fb = readAppsCache();
+                if (fb) allAppsCache = fb.apps;
+            }
         } finally { 
             appLoadingPromise = null; 
         }
     })();
     return appLoadingPromise;
+}
+
+async function ensureAppsCache(force = false) {
+    if (!force && allAppsCache.length > 0) return;
+
+    if (!force) {
+        const cached = readAppsCache();
+        if (cached) {
+            allAppsCache = cached.apps;
+            if (cached.fresh) return;
+            refreshAppsCache();
+            return;
+        }
+    }
+
+    if (appLoadingPromise) {
+        await appLoadingPromise;
+        if (!force || allAppsCache.length > 0) return;
+    }
+
+    await refreshAppsCache();
+}
+
+function renderAppsIfOpen() {
+    const modal = document.getElementById('app-selector-modal');
+    if (!modal?.classList.contains('active')) return;
+    const search = document.getElementById('app-search-input');
+    renderFilteredApps(search ? search.value : '');
 }
 
 function closeAppSelector(fromHistory = false) {
@@ -1127,7 +1244,6 @@ function openAppSelector() {
     const modal = document.getElementById('app-selector-modal'), 
           container = document.getElementById('app-list-container'), 
           searchInput = document.getElementById('app-search-input');
-          
     const switchWrapper = document.getElementById('switch-system-apps');
     const sysSwitch = switchWrapper ? (switchWrapper.tagName === 'INPUT' ? switchWrapper : switchWrapper.querySelector('input')) : null;
     if (!modal) return;
@@ -1145,37 +1261,53 @@ function openAppSelector() {
     searchInput.value = '';
     if (sysSwitch) sysSwitch.checked = showSystemApps;
 
-    container.replaceChildren(el('div', { class: 'loading-spinner' }, translate('loading') || 'Loading apps...'));
-    listObserver = new IntersectionObserver((entries) => { 
-        if (entries[0].isIntersecting) renderNextAppBatch(); 
-    }, { root: container, rootMargin: '200px' });
+    listObserver = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) renderNextAppBatch();
+    }, { root: container, rootMargin: '400px' });
 
+    const bindHandlers = () => {
+        searchInput.oninput = (e) => filterAndRender(e.target.value);
+        document.getElementById('btn-filter-toggle').onclick = () => document.getElementById('filter-menu').classList.toggle('active');
+        if (sysSwitch) sysSwitch.onchange = (e) => { 
+            showSystemApps = e.target.checked;
+            localStorage.setItem('nm_show_system_apps', showSystemApps);
+            filterAndRender(searchInput.value);
+        };
+    };
+
+    if (allAppsCache.length > 0) {
+        renderFilteredApps('');
+        bindHandlers();
+        return;
+    }
+
+    container.replaceChildren(el('div', { class: 'loading-spinner' }, translate('loading') || 'Loading apps...'));
     setTimeout(async () => {
         try {
             await ensureAppsCache();
-            filterAndRender();
-            searchInput.oninput = (e) => filterAndRender(e.target.value);
-            document.getElementById('btn-filter-toggle').onclick = () => document.getElementById('filter-menu').classList.toggle('active');
-            if (sysSwitch) sysSwitch.onchange = (e) => { 
-                showSystemApps = e.target.checked;
-                localStorage.setItem('nm_show_system_apps', showSystemApps);
-                filterAndRender(searchInput.value);
-            };
+            renderFilteredApps('');
+            bindHandlers();
         } catch (e) { 
             renderTextState(container, 'error-message', `${translate('load_failed') || 'Failed'}`); 
         }
     }, 250);
 }
 
+function renderFilteredApps(searchTerm = '') {
+    const container = document.getElementById('app-list-container');
+    const term = searchTerm.toLowerCase();
+    currentlyDisplayedApps = allAppsCache.filter(app => app._search.includes(term) && (showSystemApps || !app.isSystem));
+    container.replaceChildren();
+    container.scrollTop = 0;
+    appListRenderIndex = 0;
+    renderNextAppBatch();
+}
+
 function filterAndRender(searchTerm = '') {
     return new Promise(resolve => {
         clearTimeout(filterTimeout);
         filterTimeout = setTimeout(() => {
-            const term = searchTerm.toLowerCase();
-            currentlyDisplayedApps = allAppsCache.filter(app => app._search.includes(term) && (showSystemApps || !app.isSystem));
-            document.getElementById('app-list-container').replaceChildren();
-            appListRenderIndex = 0;
-            renderNextAppBatch();
+            renderFilteredApps(searchTerm);
             resolve();
         }, 200);
     });
@@ -1183,7 +1315,7 @@ function filterAndRender(searchTerm = '') {
 
 function renderNextAppBatch() {
     const container = document.getElementById('app-list-container');
-    const batch = currentlyDisplayedApps.slice(appListRenderIndex, appListRenderIndex + 50);
+    const batch = currentlyDisplayedApps.slice(appListRenderIndex, appListRenderIndex + 25);
 
     if (batch.length === 0) {
         if (listObserver) listObserver.disconnect();
@@ -1202,7 +1334,7 @@ function renderNextAppBatch() {
             class: `app-item segment-card${selectedAppsMap.has(app.uid) ? ' selected' : ''}`,
             dataset: { uid: String(app.uid), label: app.appLabel, pkg: app.packageName },
         },
-            el('img', { class: 'app-icon-img', src: `ksu://icon/${app.packageName}`, loading: 'lazy' }),
+            el('img', { class: 'app-icon-img', src: `ksu://icon/${app.packageName}`, loading: 'lazy', decoding: 'async', fetchpriority: 'low' }),
             el('div', { class: 'app-details' }, el('div', { class: 'app-name' }, app.appLabel), el('div', { class: 'app-pkg' }, app.packageName)),
             meta
         ));
@@ -1211,6 +1343,13 @@ function renderNextAppBatch() {
     container.appendChild(frag);
     appListRenderIndex += batch.length;
     if (listObserver && last) listObserver.observe(last);
+
+    const nextBatch = currentlyDisplayedApps.slice(appListRenderIndex, appListRenderIndex + 25);
+    for (const app of nextBatch) {
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = `ksu://icon/${app.packageName}`;
+    }
 }
 
 async function removeExclusion(uid, name, domItem) {
@@ -1269,20 +1408,21 @@ async function loadOptions() {
     const swIso = document.querySelector('#setting-isolated input');
     const swIsoCard = document.getElementById('setting-isolated-card');
 
+    const state = await readUiState();
+
     if (swSafe)
-        swSafe.checked = (await exec(`[ -f ${FILES.disable} ] && echo yes`)).stdout.includes('yes');
+        swSafe.checked = state.safeMode;
 
     if (swDumpRules) {
-        swDumpRules.checked = (await exec(`[ -f ${FILES.dump_rules} ] && echo yes`)).stdout.includes('yes');
-        setDumpNowVisible(swDumpRules.checked);
+        swDumpRules.checked = state.dumpRules;
+        setDumpNowVisible(state.dumpRules);
     }
 
     if (swIso && swIsoCard) {
         const safeModeCard = document.getElementById('setting-safemode').closest('.segment-card');
-        const isoCheck = await exec(`${NM_BIN} uid block_isolated`);
-        const out = isoCheck.stdout.trim();
+        const out = state.isolated;
 
-        if (isoCheck.errno === 0 && (out === '1' || out === '0')) {
+        if (out === '1' || out === '0') {
             swIsoCard.style.display = '';
             if (safeModeCard) {
                 safeModeCard.style.borderStartStartRadius = '';
@@ -1324,6 +1464,7 @@ function initOptionsUI() {
 
         swMat.onchange = (e) => {
             isMaterial = e.target.checked;
+            if (isMaterial) { _nmSeed = null; _nmSeedSource = null; }
             localStorage.setItem('nm_material', isMaterial);
             updateAppearanceCards();
             applyAppearance();
@@ -1481,7 +1622,7 @@ function initOptionsUI() {
         btnDumpNow.onclick = async () => {
             btnDumpNow.disabled = true;
             try {
-                const r = await exec(`sh ${MOD_DIR}/nomount/dump_rules.sh by webui`);
+                const r = await exec(`sh -c 'MODDIR=${MOD_DIR}/nomount; . "$MODDIR/common.sh"; dump_all_rules_logcat by webui'`);
                 if (r.errno !== 0) throw new Error(r.stderr || 'dump failed');
                 showToast(translate('dump_done'));
             } catch { showToast(translate('dump_failed')); }
@@ -1663,6 +1804,9 @@ function initDelegationAndAttach() {
         const statusKey = mod?.statusKey ?? 'status_inactive';
         const nowLoaded = newFileCount > 0;
 
+        const cached = moduleInfoCache.find(m => m.modId === modId);
+        if (cached) { cached.fileCount = newFileCount; cached.statusKey = statusKey; }
+
         const filesChip = card.querySelector('.files-chip');
         if (newFileCount > 0) {
             filesChip.style.display = '';
@@ -1678,6 +1822,8 @@ function initDelegationAndAttach() {
         const hotBtn = card.querySelector('.btn-hot-action');
         const btnSpan = hotBtn.querySelector('span');
 
+        updateHomeStats();
+
         if (nowLoaded) {
             hotBtn.classList.add('unload');
             btnSpan.textContent = translate('modules_hot_unload');
@@ -1687,38 +1833,34 @@ function initDelegationAndAttach() {
         }
     };
 
-    document.getElementById('modules-list')?.addEventListener('change', (e) => {
+    document.getElementById('modules-list')?.addEventListener('change', async (e) => {
         const toggle = e.target.closest('.switch-input');
-        if (toggle) {
-            const labelContainer = toggle.closest('.custom-switch');
-            if (labelContainer.dataset.busy) {
-                e.preventDefault();
-                return;
-            }
-            const card = toggle.closest('.module-card');
-            const modId = card.dataset.moduleId;
-            labelContainer.dataset.busy = 'true';
-            labelContainer.classList.add('switch-busy');
-            const isChecked = toggle.checked;
+        if (!toggle) return;
+        const labelContainer = toggle.closest('.custom-switch');
+        if (labelContainer.dataset.busy) {
+            e.preventDefault();
+            return;
+        }
+        const card = toggle.closest('.module-card');
+        const modId = card.dataset.moduleId;
+        labelContainer.dataset.busy = 'true';
+        labelContainer.classList.add('switch-busy');
+        const isChecked = toggle.checked;
 
-            setTimeout(async () => {
-                try {
-                    if (isChecked) { await exec(`rm ${MOD_DIR}/${modId}/disable`); await loadModule(modId); }
-                    else { await unloadModule(modId); await exec(`touch ${MOD_DIR}/${modId}/disable`); }
-                    await updateModuleCardDOM(card, modId);
-                } catch (err) {
-                    showToast(`Error: ${err.message}`);
-                    toggle.checked = !isChecked;
-                } finally {
-                    labelContainer.classList.remove('switch-busy');
-                    delete labelContainer.dataset.busy;
-                    loadHome();
-                }
-            }, 0);
+        try {
+            if (isChecked) { await exec(`rm -f ${shellQuote(`${MOD_DIR}/${modId}/disable`)}`); await loadModule(modId); }
+            else { await unloadModule(modId); await exec(`touch ${shellQuote(`${MOD_DIR}/${modId}/disable`)}`); }
+            await updateModuleCardDOM(card, modId);
+        } catch (err) {
+            showToast(`Error: ${err.message}`);
+            toggle.checked = !isChecked;
+        } finally {
+            labelContainer.classList.remove('switch-busy');
+            delete labelContainer.dataset.busy;
         }
     });
 
-    document.getElementById('modules-list')?.addEventListener('click', (e) => {
+    document.getElementById('modules-list')?.addEventListener('click', async (e) => {
         const hotBtn = e.target.closest('.btn-hot-action');
         if (hotBtn && !hotBtn.disabled) {
             hotBtn.disabled = true;
@@ -1729,24 +1871,21 @@ function initDelegationAndAttach() {
             const originalText = btnSpan.textContent;
             btnSpan.textContent = translate('loading') || '...';
 
-            setTimeout(async () => {
-                try {
-                    isLoaded ? await unloadModule(modId) : await loadModule(modId);
-                    await updateModuleCardDOM(card, modId);
-                }
-                catch (err) {
-                    showToast(`Error: ${err.message}`);
-                    btnSpan.textContent = originalText;
-                }
-                finally {
-                    hotBtn.disabled = false;
-                    loadHome();
-                }
-            }, 0);
+            try {
+                isLoaded ? await unloadModule(modId) : await loadModule(modId);
+                await updateModuleCardDOM(card, modId);
+            }
+            catch (err) {
+                showToast(`Error: ${err.message}`);
+                btnSpan.textContent = originalText;
+            }
+            finally {
+                hotBtn.disabled = false;
+            }
         }
     });
 
-    document.getElementById('modules-list')?.addEventListener('click', (e) => {
+    document.getElementById('modules-list')?.addEventListener('click', async (e) => {
     const skipBtn = e.target.closest('.btn-skip-action');
     if (skipBtn && !skipBtn.disabled) {
         skipBtn.disabled = true;
@@ -1755,18 +1894,16 @@ function initDelegationAndAttach() {
         const wasSkipped = skipBtn.classList.contains('unskip');
         const skipFile = `${MOD_DIR}/${modId}/skip_mount`;
 
-        setTimeout(async () => {
-            try {
-                await exec(wasSkipped ? `rm -f ${skipFile}` : `touch ${skipFile}`);
-                skipBtn.classList.toggle('unskip', !wasSkipped);
-                skipBtn.querySelector('span').textContent = translate(!wasSkipped ? 'modules_unskip' : 'modules_skip');
-                await updateModuleCardDOM(card, modId);
-            } catch (err) {
-                showToast(`Error: ${err.message}`);
-            } finally {
-                skipBtn.disabled = false;
-            }
-        }, 0);
+        try {
+            await exec(wasSkipped ? `rm -f ${shellQuote(skipFile)}` : `touch ${shellQuote(skipFile)}`);
+            skipBtn.classList.toggle('unskip', !wasSkipped);
+            skipBtn.querySelector('span').textContent = translate(!wasSkipped ? 'modules_unskip' : 'modules_skip');
+            await updateModuleCardDOM(card, modId);
+        } catch (err) {
+            showToast(`Error: ${err.message}`);
+        } finally {
+            skipBtn.disabled = false;
+        }
     }
 });
 
@@ -1778,9 +1915,7 @@ function initDelegationAndAttach() {
             const label = item.dataset.label;
             item.style.opacity = '0.5';
             item.style.pointerEvents = 'none';
-            setTimeout(() => {
-                removeExclusion(uid, label, item);
-            }, 0);
+            removeExclusion(uid, label, item);
         }
     });
 
@@ -1943,9 +2078,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     restoreThemeFromDisk();
     document.body.classList.remove('loading');
     if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => ensureAppsCache(true));
+        requestIdleCallback(() => ensureAppsCache());
     } else {
-        setTimeout(() => ensureAppsCache(true), 200);
+        setTimeout(() => ensureAppsCache(), 200);
     }
 
     try {
