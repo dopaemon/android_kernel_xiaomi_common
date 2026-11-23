@@ -3139,7 +3139,7 @@ static void kcompactd_do_work(pg_data_t *pgdat)
 
 void wakeup_kcompactd(pg_data_t *pgdat, int order, int highest_zoneidx)
 {
-	if (order <= 0 || order >= MAX_ORDER)
+	if (order <= 0 || order > MAX_ORDER)
 		return;
 
 	if (pgdat->kcompactd_max_order < order)
