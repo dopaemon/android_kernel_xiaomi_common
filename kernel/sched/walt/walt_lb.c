@@ -73,17 +73,15 @@ out_unlock: /* called with busiest_rq lock */
 	wrq->push_task = NULL;
 	raw_spin_unlock(&busiest_rq->__lock);
 
+	/*
+	 * task_rq() is already target_rq here. Even if target_cpu went
+	 * inactive meanwhile it is still online, and balance_push() will
+	 * move the task off it.
+	 */
 	if (push_task_detached) {
-		if (likely(cpu_active(target_cpu))) {
-			raw_spin_lock(&target_rq->__lock);
-			walt_attach_task(push_task, target_rq);
-			raw_spin_unlock(&target_rq->__lock);
-		} else {
-			raw_spin_lock(&busiest_rq->__lock);
-			set_task_cpu(push_task, busiest_cpu);
-			walt_attach_task(push_task, busiest_rq);
-			raw_spin_unlock(&busiest_rq->__lock);
-		}
+		raw_spin_lock(&target_rq->__lock);
+		walt_attach_task(push_task, target_rq);
+		raw_spin_unlock(&target_rq->__lock);
 	}
 
 	if (push_task)
