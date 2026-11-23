@@ -3421,8 +3421,7 @@ static unsigned long zram_shrinker_scan(struct shrinker *shrinker, struct shrink
 	struct zram_shrinker_wrapper *w =
 		container_of(shrinker, struct zram_shrinker_wrapper, shrinker);
 	struct zram *zram = w->zram;
-	unsigned long shrink_ret;
-	unsigned long pages_written = 0;
+	unsigned long pages_written = 0, collected;
 	struct zram_pp_ctl *ctl = NULL;
 	struct zram_shrink_ctx ctx = {
 		.zram = zram,
@@ -3457,17 +3456,19 @@ static unsigned long zram_shrinker_scan(struct shrinker *shrinker, struct shrink
 	ctx.ctl = ctl;
 
 	/* 第一阶段:扫描LRU并收集需要writeback的页面 */
-	shrink_ret = list_lru_shrink_walk(&zram->zram_list_lru, sc, zram_shrink_cb, &ctx);
+	list_lru_shrink_walk(&zram->zram_list_lru, sc, zram_shrink_cb, &ctx);
 
 	/* 第二阶段:使用批量处理所有收集的页面 */
-	if (atomic_read(&ctl->num_pp_slots) > 0) {
+	/* num_pp_slots drops to zero once writeback has completed */
+	collected = atomic_read(&ctl->num_pp_slots);
+	if (collected > 0) {
 		int writeback_result = zram_writeback_slots(zram, ctl);
 		
 		if (writeback_result) {
 			atomic64_inc(&zram->stats.reject_reclaim_fail);
 		} else {
 			// 成功回写了所有页面
-			pages_written = atomic_read(&ctl->num_pp_slots);
+			pages_written = collected;
 			atomic64_add(pages_written, &zram->stats.written_back_pages);
 		}
 	}
@@ -3477,7 +3478,8 @@ static unsigned long zram_shrinker_scan(struct shrinker *shrinker, struct shrink
 	pr_debug("shrinker_scan: completed, scanned=%lu, written=%lu\n",
 		 sc->nr_scanned, pages_written);
 
-	return shrink_ret ? shrink_ret : SHRINK_STOP;
+	/* zram_shrink_cb() never isolates (LRU_RETRY), so report writeback */
+	return pages_written ? pages_written : SHRINK_STOP;
 }
 
 static void zram_init_shrinker(struct zram *zram)
