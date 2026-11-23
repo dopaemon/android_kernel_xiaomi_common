@@ -330,7 +330,7 @@ static bool place_pp_slot(struct zram *zram, struct zram_pp_ctl *ctl,
 	struct zram_pp_slot *pps;
 	u32 bid;
 
-	pps = kmalloc(sizeof(*pps), GFP_NOIO | __GFP_NOWARN);
+	pps = kmalloc(sizeof(*pps), GFP_NOWAIT | __GFP_NOWARN);
 	if (!pps)
 		return false;
 
