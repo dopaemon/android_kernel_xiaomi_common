@@ -3216,6 +3216,8 @@ out_err:
 	kfree(qr->qcg);
 	kfree(qr);
 	host->ufs_qos = NULL;
+	/* A perf group may have enabled it before a later one failed */
+	host->cpufreq_dis = true;
 	kfree(host->cpu_info);
 	host->cpu_info = NULL;
 }
