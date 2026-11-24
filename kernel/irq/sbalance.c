@@ -30,6 +30,7 @@
 #include <linux/freezer.h>
 #include <linux/irq.h>
 #include <linux/list_sort.h>
+#include <linux/moduleparam.h>
 #include <linux/sched/cputime.h>
 #include "../sched/sched.h"
 #include "internals.h"
@@ -46,6 +47,10 @@
  * the number of interrupts scaled to the CPU's capacity.
  */
 #define IRQ_SCALED_THRESH CONFIG_IRQ_SBALANCE_THRESH
+
+/* Runtime switch: /sys/module/sbalance/parameters/enabled */
+static bool sbalance_enabled __read_mostly = true;
+module_param_named(enabled, sbalance_enabled, bool, 0644);
 
 struct bal_irq {
 	struct list_head node;
@@ -399,7 +404,8 @@ static int __noreturn sbalance_thread(void *data)
 	set_freezable();
 	while (1) {
 		sbalance_wait(poll_jiffies);
-		balance_irqs();
+		if (READ_ONCE(sbalance_enabled))
+			balance_irqs();
 	}
 }
 
