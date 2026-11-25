@@ -93,9 +93,13 @@ enum rxrpc_call_trace {
 	rxrpc_call_put_notimer,
 	rxrpc_call_put_timer,
 	rxrpc_call_put_userid,
+	rxrpc_call_put_recvmsg_peek_nowait,
 	rxrpc_call_queued,
 	rxrpc_call_queued_ref,
 	rxrpc_call_release,
+	rxrpc_call_see_recvmsg_requeue,
+	rxrpc_call_see_recvmsg_requeue_first,
+	rxrpc_call_see_recvmsg_requeue_move,
 	rxrpc_call_seen,
 };
 
@@ -130,6 +134,7 @@ enum rxrpc_recvmsg_trace {
 	rxrpc_recvmsg_return,
 	rxrpc_recvmsg_terminal,
 	rxrpc_recvmsg_to_be_accepted,
+	rxrpc_recvmsg_unqueue,
 	rxrpc_recvmsg_wait,
 };
 
@@ -291,9 +296,13 @@ enum rxrpc_tx_point {
 	EM(rxrpc_call_put_notimer,		"PnT") \
 	EM(rxrpc_call_put_timer,		"PTM") \
 	EM(rxrpc_call_put_userid,		"Pus") \
+	EM(rxrpc_call_put_recvmsg_peek_nowait,	"PpN") \
 	EM(rxrpc_call_queued,			"QUE") \
 	EM(rxrpc_call_queued_ref,		"QUR") \
 	EM(rxrpc_call_release,			"RLS") \
+	EM(rxrpc_call_see_recvmsg_requeue,	"SrQ") \
+	EM(rxrpc_call_see_recvmsg_requeue_first,"SrF") \
+	EM(rxrpc_call_see_recvmsg_requeue_move,	"SrM") \
 	E_(rxrpc_call_seen,			"SEE")
 
 #define rxrpc_transmit_traces \
@@ -325,6 +334,7 @@ enum rxrpc_tx_point {
 	EM(rxrpc_recvmsg_return,		"RETN") \
 	EM(rxrpc_recvmsg_terminal,		"TERM") \
 	EM(rxrpc_recvmsg_to_be_accepted,	"TBAC") \
+	EM(rxrpc_recvmsg_unqueue,		"UNQU") \
 	E_(rxrpc_recvmsg_wait,			"WAIT")
 
 #define rxrpc_rtt_tx_traces \

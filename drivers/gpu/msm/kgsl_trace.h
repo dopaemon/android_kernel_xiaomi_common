@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #if !defined(_KGSL_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
@@ -19,6 +19,12 @@
 #include "kgsl.h"
 #include "kgsl_drawobj.h"
 #include "kgsl_sharedmem.h"
+
+#define KGSL_TRACE_GPU_FREQ(freq, gpu_id) \
+	do { \
+		trace_gpu_frequency(freq, gpu_id); \
+		trace_kgsl_gpu_frequency(freq, gpu_id); \
+	} while (0)
 
 #define show_memtype(type) \
 	__print_symbolic(type, \
@@ -316,7 +322,7 @@ TRACE_EVENT(kgsl_pwrlevel,
 /*
  * Tracepoint for kgsl gpu_frequency
  */
-TRACE_EVENT(gpu_frequency,
+TRACE_EVENT(kgsl_gpu_frequency,
 	TP_PROTO(unsigned int gpu_freq, unsigned int gpu_id),
 	TP_ARGS(gpu_freq, gpu_id),
 	TP_STRUCT__entry(
@@ -335,28 +341,31 @@ TRACE_EVENT(gpu_frequency,
 
 TRACE_EVENT(kgsl_buslevel,
 
-	TP_PROTO(struct kgsl_device *device, unsigned int pwrlevel,
-		 unsigned int bus),
+	TP_PROTO(struct kgsl_device *device, u32 pwrlevel,
+		 u32 bus, u32 avg_bw),
 
-	TP_ARGS(device, pwrlevel, bus),
+	TP_ARGS(device, pwrlevel, bus, avg_bw),
 
 	TP_STRUCT__entry(
 		__string(device_name, device->name)
-		__field(unsigned int, pwrlevel)
-		__field(unsigned int, bus)
+		__field(u32, pwrlevel)
+		__field(u32, bus)
+		__field(u32, avg_bw)
 	),
 
 	TP_fast_assign(
 		__assign_str(device_name, device->name);
 		__entry->pwrlevel = pwrlevel;
 		__entry->bus = bus;
+		__entry->avg_bw = avg_bw;
 	),
 
 	TP_printk(
-		"d_name=%s pwrlevel=%d bus=%d",
+		"d_name=%s pwrlevel=%u bus=%u avg_bw=%u",
 		__get_str(device_name),
 		__entry->pwrlevel,
-		__entry->bus
+		__entry->bus,
+		__entry->avg_bw
 	)
 );
 

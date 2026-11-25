@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __ADRENO_GEN7_GMU_H
 #define __ADRENO_GEN7_GMU_H
@@ -48,6 +48,10 @@ struct gen7_gmu_device {
 	const struct firmware *fw_image;
 	struct kgsl_memdesc *dump_mem;
 	struct kgsl_memdesc *gmu_log;
+	/** @vrb: GMU virtual register bank memory */
+	struct kgsl_memdesc *vrb;
+	/** @trace: gmu trace container */
+	struct kgsl_gmu_trace trace;
 	struct gen7_hfi hfi;
 	/** @pwrlevels: Array of GMU power levels */
 	struct regulator *cx_gdsc;
@@ -66,6 +70,8 @@ struct gen7_gmu_device {
 	/** @global_entries: To keep track of number of gmu buffers */
 	u32 global_entries;
 	struct gmu_vma_entry *vma;
+	/** @num_vmas: Number of entries in the @vma array */
+	u32 num_vmas;
 	unsigned int log_wptr_retention;
 	/** @cm3_fault: whether gmu received a cm3 fault interrupt */
 	atomic_t cm3_fault;
@@ -486,5 +492,21 @@ size_t gen7_snapshot_gmu_mem(struct kgsl_device *device,
  * Return: 0 on success or negative error on failure
  */
 int gen7_gmu_register_gdsc_notifier(struct adreno_device *adreno_dev);
+
+/**
+ * gen7_bus_ab_quantize - Calculate the AB vote that needs to be sent to GMU
+ * @adreno_dev: Handle to the adreno device
+ * @ab: ab request that needs to be scaled in MBps
+ *
+ * Returns the AB value that needs to be prefixed to bandwidth vote in kbps
+ */
+u32 gen7_bus_ab_quantize(struct adreno_device *adreno_dev, u32 ab);
+
+/**
+ * adreno_gmu_ab_support() - Return true for targets where AB voting
+ * is supported through GMU
+ * @adreno_dev: A pointer to the adreno_device
+ */
+int adreno_gmu_ab_support(struct adreno_device *adreno_dev);
 
 #endif

@@ -391,9 +391,12 @@
 			no-map;
 		};
 
-		adsp_mem: adsp-region@f6000000 {
-			reg = <0x0 0xf6000000 0x0 0x800000>;
-			no-map;
+		adsp_mem: adsp-region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x80000000 0x0 0x80000000>;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x800000>;
+			reusable;
 		};
 
 		qseecom_mem: qseecom-region@f6800000 {
@@ -460,6 +463,16 @@
 			reg = <0x00780000 0x621c>;
 			#address-cells = <1>;
 			#size-cells = <1>;
+
+			qusb2_hstx_trim: hstx-trim@240 {
+				reg = <0x243 0x1>;
+				bits = <1 3>;
+			};
+
+			gpu_speed_bin: gpu-speed-bin@41a0 {
+				reg = <0x41a2 0x2>;
+				bits = <5 8>;
+			};
 		};
 
 		rng: rng@793000 {

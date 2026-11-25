@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -101,6 +102,15 @@ enum mhi_bw_scale_req_status {
 	struct mhi_private *mhi_priv = \
 		dev_get_drvdata(&mhi_cntrl->mhi_dev->dev); \
 	dev_err(dev, "[E][%s] " fmt, __func__, ##__VA_ARGS__); \
+	if (mhi_priv && mhi_priv->log_lvl <= MHI_MSG_LVL_ERROR) \
+		ipc_log_string(mhi_priv->log_buf, "[E][%s] " fmt, __func__, \
+			       ##__VA_ARGS__); \
+} while (0)
+
+#define MHI_IRQ_ERR(fmt, ...) do {	\
+	struct mhi_private *mhi_priv = \
+		dev_get_drvdata(&mhi_cntrl->mhi_dev->dev); \
+	dev_err(mhi_cntrl->cntrl_dev, "[E][%s] " fmt, __func__, ##__VA_ARGS__); \
 	if (mhi_priv && mhi_priv->log_lvl <= MHI_MSG_LVL_ERROR) \
 		ipc_log_string(mhi_priv->log_buf, "[E][%s] " fmt, __func__, \
 			       ##__VA_ARGS__); \
@@ -231,6 +241,7 @@ struct mhi_timesync {
 	u64 local_time;
 	u64 remote_time;
 	bool db_pending;
+	bool cap_en;
 	struct completion completion;
 	spinlock_t lock; /* list protection */
 	struct list_head head;

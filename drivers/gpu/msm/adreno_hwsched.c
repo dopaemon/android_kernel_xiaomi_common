@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <dt-bindings/soc/qcom,ipcc.h>
@@ -497,6 +497,8 @@ static int hwsched_sendcmd(struct adreno_device *adreno_dev,
 	struct adreno_context *drawctxt = ADRENO_CONTEXT(drawobj->context);
 	int ret;
 	struct cmd_list_obj *obj;
+	int is_current_rt = rt_task(current);
+	int nice = task_nice(current);
 
 	obj = kmem_cache_alloc(obj_cache, GFP_KERNEL);
 	if (!obj)
@@ -504,17 +506,18 @@ static int hwsched_sendcmd(struct adreno_device *adreno_dev,
 
 	mutex_lock(&device->mutex);
 
+	/* Elevating thread’s priority to avoid context switch with holding device mutex */
+	if (!is_current_rt)
+		sched_set_fifo(current);
+
 	if (adreno_gpu_halt(adreno_dev) || hwsched_in_fault(hwsched)) {
-		mutex_unlock(&device->mutex);
-		kmem_cache_free(obj_cache, obj);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto done;
 	}
 
-
 	if (kgsl_context_detached(context)) {
-		mutex_unlock(&device->mutex);
-		kmem_cache_free(obj_cache, obj);
-		return -ENOENT;
+		ret = -ENOENT;
+		goto done;
 	}
 
 	hwsched->inflight++;
@@ -524,9 +527,7 @@ static int hwsched_sendcmd(struct adreno_device *adreno_dev,
 		ret = adreno_active_count_get(adreno_dev);
 		if (ret) {
 			hwsched->inflight--;
-			mutex_unlock(&device->mutex);
-			kmem_cache_free(obj_cache, obj);
-			return ret;
+			goto done;
 		}
 		set_bit(ADRENO_HWSCHED_POWER, &hwsched->flags);
 	}
@@ -543,9 +544,7 @@ static int hwsched_sendcmd(struct adreno_device *adreno_dev,
 		}
 
 		hwsched->inflight--;
-		kmem_cache_free(obj_cache, obj);
-		mutex_unlock(&device->mutex);
-		return ret;
+		goto done;
 	}
 
 	if ((hwsched->inflight == 1) &&
@@ -575,9 +574,13 @@ static int hwsched_sendcmd(struct adreno_device *adreno_dev,
 done:
 	adreno_hwsched_process_hw_fence_list(adreno_dev);
 
+	if (!is_current_rt)
+		sched_set_normal(current, nice);
 	mutex_unlock(&device->mutex);
+	if (ret)
+		kmem_cache_free(obj_cache, obj);
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -1586,7 +1589,7 @@ static struct cmd_list_obj *get_active_cmdobj_lpac(
 	list_for_each_entry_safe(obj, tmp, &hwsched->cmd_list, node) {
 		drawobj = obj->drawobj;
 
-		if (!(kgsl_context_is_lpac(drawobj->context)))
+		if (!is_cmdobj(drawobj) || !kgsl_context_is_lpac(drawobj->context))
 			continue;
 
 		kgsl_readtimestamp(device, drawobj->context,
@@ -2434,7 +2437,7 @@ void adreno_hwsched_register_hw_fence(struct adreno_device *adreno_dev)
 	hw_fence->memdesc.physaddr = hw_fence->mem_descriptor.device_addr;
 	hw_fence->memdesc.size = hw_fence->mem_descriptor.size;
 	hw_fence->memdesc.hostptr = hw_fence->mem_descriptor.virtual_addr;
-	hw_fence->memdesc.priv |= KGSL_MEMDESC_IOMEM;
+	SET_FLAG(KGSL_MEMDESC_IOMEM, &hw_fence->memdesc.priv);
 
 	ret = kgsl_memdesc_sg_dma(&hw_fence->memdesc, hw_fence->memdesc.physaddr,
 		hw_fence->memdesc.size);

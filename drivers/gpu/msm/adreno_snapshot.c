@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/utsname.h>
@@ -154,8 +154,8 @@ static int snapshot_freeze_obj_list(struct kgsl_snapshot *snapshot,
 				(ib_objs->gpuaddr + ib_objs->size)) &&
 				(objbuf[index].entry->priv == process)) {
 				freeze = 0;
-				objbuf[index].entry->memdesc.priv &=
-					~KGSL_MEMDESC_SKIP_RECLAIM;
+				CLEAR_FLAG(KGSL_MEMDESC_SKIP_RECLAIM,
+					&(objbuf[index].entry->memdesc.priv));
 				break;
 			}
 		}
@@ -598,19 +598,6 @@ out:
 	return ret;
 }
 
-struct snapshot_ib_meta {
-	struct kgsl_snapshot *snapshot;
-	struct kgsl_snapshot_object *obj;
-	uint64_t ib1base;
-	uint64_t ib1size;
-	uint64_t ib2base;
-	uint64_t ib2size;
-	u64 ib1base_lpac;
-	u64 ib1size_lpac;
-	u64 ib2base_lpac;
-	u64 ib2size_lpac;
-};
-
 static void kgsl_snapshot_add_active_ib_obj_list(struct kgsl_device *device,
 		struct kgsl_snapshot *snapshot)
 {
@@ -815,14 +802,14 @@ static size_t snapshot_ib(struct kgsl_device *device, u8 *buf,
 static void dump_object(struct kgsl_device *device, int obj,
 		struct kgsl_snapshot *snapshot)
 {
-	struct snapshot_ib_meta metadata;
-
 	metadata.snapshot = snapshot;
 	metadata.obj = &objbuf[obj];
 	metadata.ib1base = snapshot->ib1base;
 	metadata.ib1size = snapshot->ib1size;
 	metadata.ib2base = snapshot->ib2base;
 	metadata.ib2size = snapshot->ib2size;
+	metadata.ib3base = snapshot->ib3base;
+	metadata.ib3size = snapshot->ib3size;
 	metadata.ib1base_lpac = snapshot->ib1base_lpac;
 	metadata.ib1size_lpac = snapshot->ib1size_lpac;
 	metadata.ib2base_lpac = snapshot->ib2base_lpac;
@@ -929,7 +916,7 @@ size_t adreno_snapshot_global(struct kgsl_device *device, u8 *buf,
 	header->ptbase = MMU_DEFAULT_TTBR0(device);
 	header->type = SNAPSHOT_GPU_OBJECT_GLOBAL;
 
-	if ((memdesc->priv & KGSL_MEMDESC_IOMEM) != 0)
+	if (TEST_FLAG(KGSL_MEMDESC_IOMEM, &memdesc->priv))
 		memcpy_fromio(ptr, memdesc->hostptr, memdesc->size);
 	else
 		memcpy(ptr, memdesc->hostptr, memdesc->size);

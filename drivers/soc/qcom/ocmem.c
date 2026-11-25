@@ -211,11 +211,10 @@ struct ocmem *of_get_ocmem(struct device *dev)
 	of_node_put(devnode);
 
 	ocmem = platform_get_drvdata(pdev);
-	if (!ocmem) {
-		dev_err(dev, "Cannot get ocmem\n");
-		put_device(&pdev->dev);
-		return ERR_PTR(-ENODEV);
-	}
+	put_device(&pdev->dev);
+	if (!ocmem)
+		return dev_err_ptr_probe(dev, -EPROBE_DEFER, "Cannot get ocmem\n");
+
 	return ocmem;
 }
 EXPORT_SYMBOL(of_get_ocmem);

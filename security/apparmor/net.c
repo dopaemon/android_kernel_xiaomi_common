@@ -182,8 +182,10 @@ int aa_sock_file_perm(struct aa_label *label, const char *op, u32 request,
 		      struct socket *sock)
 {
 	AA_BUG(!label);
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
+
+	/* sock && sock->sk can be NULL for sockets being set up or torn down */
+	if (!sock || !sock->sk)
+		return 0;
 
 	return aa_label_sk_perm(label, op, request, sock->sk);
 }
@@ -206,6 +208,7 @@ static int apparmor_secmark_init(struct aa_secmark *secmark)
 		return PTR_ERR(label);
 
 	secmark->secid = label->secid;
+	aa_put_label(label);
 
 	return 0;
 }

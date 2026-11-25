@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __ADRENO_H
 #define __ADRENO_H
@@ -44,6 +44,42 @@
 
 /* ADRENO_GPU_DEVICE - Given an adreno device return the GPU specific struct */
 #define ADRENO_GPU_DEVICE(_a) ((_a)->gpucore->gpudev)
+
+/*
+ * Disable local interrupts and CPU preemption to avoid interruptions
+ * while holding the CP semaphore; otherwise, it could stall the CP.
+ * Make sure to call ADRENO_RELEASE_CP_SEMAPHORE after calling the
+ * below macro to reenable CPU interrupts.
+ */
+#define ADRENO_ACQUIRE_CP_SEMAPHORE(_adreno_dev, _flags) \
+	({ \
+		bool ret = true; \
+		if ((_adreno_dev)->gpucore->gpudev->acquire_cp_semaphore) { \
+			local_irq_save(_flags); \
+			preempt_disable(); \
+			ret = (_adreno_dev)->gpucore->gpudev->acquire_cp_semaphore(_adreno_dev); \
+			if (!ret) { \
+				preempt_enable(); \
+				local_irq_restore(_flags); \
+				dev_err_ratelimited(KGSL_DEVICE(_adreno_dev)->dev, \
+					"Timed out waiting to acquire CP semaphore:" \
+					" status=0x%08x\n", \
+					ret); \
+			} \
+		} \
+		ret; \
+	})
+
+#define ADRENO_RELEASE_CP_SEMAPHORE(_adreno_dev, _flags) \
+	({ \
+		do { \
+			if ((_adreno_dev)->gpucore->gpudev->release_cp_semaphore) { \
+				(_adreno_dev)->gpucore->gpudev->release_cp_semaphore(_adreno_dev); \
+				preempt_enable(); \
+				local_irq_restore(_flags); \
+			} \
+		} while (0);\
+	})
 
 /*
  * ADRENO_POWER_OPS - Given an adreno device return the GPU specific power
@@ -129,7 +165,8 @@
 #define ADRENO_HW_FENCE BIT(16)
 /* Dynamic Mode Switching supported on this target */
 #define ADRENO_DMS BIT(17)
-
+/* Enable GMU Based AB voting */
+#define ADRENO_GMU_AB BIT(28)
 
 /*
  * Adreno GPU quirks - control bits for various workarounds
@@ -447,6 +484,8 @@ struct adreno_gpu_core {
 	u32 bus_width;
 	/** @snapshot_size: Size of the static snapshot region in bytes */
 	u32 snapshot_size;
+	/** @num_ddr_channels: Number of DDR channels */
+	u32 num_ddr_channels;
 };
 
 /**
@@ -690,6 +729,8 @@ struct adreno_device {
 	struct dentry *bcl_debugfs_dir;
 	/** @bcl_throttle_time_us: Total time in us spent in BCL throttling */
 	u32 bcl_throttle_time_us;
+	/** @gmu_ab: Track if GMU supports ab vote */
+	bool gmu_ab;
 };
 
 /**
@@ -729,6 +770,8 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_CORESIGHT_CX = 14,
 	/** @ADRENO_DEVICE_DMS: Set if DMS is enabled */
 	ADRENO_DEVICE_DMS = 15,
+	/** @ADRENO_DEVICE_GMU_AB: Set if AB vote via GMU is enabled */
+	ADRENO_DEVICE_GMU_AB = 16,
 };
 
 /**
@@ -914,6 +957,14 @@ struct adreno_gpudev {
 	 * @context_destroy: Target specific function called during context destruction
 	 */
 	void (*context_destroy)(struct adreno_device *adreno_dev, struct adreno_context *drawctxt);
+	/**
+	 * @acquire_cp_semaphore: Return true if CP semaphore is acquired, otherwise false
+	 */
+	bool (*acquire_cp_semaphore)(struct adreno_device *adreno_dev);
+	/**
+	 * @release_cp_semaphore: Release CP semaphore
+	 */
+	void (*release_cp_semaphore)(struct adreno_device *adreno_dev);
 };
 
 /**

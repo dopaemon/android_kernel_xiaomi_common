@@ -142,7 +142,7 @@ static const char *const cp_sec_iio_chan[] = {
 	[CHARGE_PUMP_LN_ALARM_STATUS] = "ln_alarm_status_slave",
 	[CHARGE_PUMP_LN_FAULT_STATUS] = "ln_fault_status_slave",
 	[CHARGE_PUMP_LN_VBUS_ERROR_STATUS] = "ln_vbus_error_status_slave",
-	[CHARGE_PUMP_LN_REG_STATUS] = "ln_reg_status",
+	[CHARGE_PUMP_LN_REG_STATUS] = "ln_reg_status_slave",
 };
 
 enum main_chg_iio_channels {
@@ -299,7 +299,7 @@ extern bool is_main_chg_chan_valid(struct xm_battmngr_iio *battmngr_iio,
 extern bool is_batt_fg_chan_valid(struct xm_battmngr_iio *battmngr_iio,
 				  enum batt_fg_iio_channels chan);
 extern bool is_pd_chan_valid(struct xm_battmngr_iio *battmngr_iio,
-			     enum batt_fg_iio_channels chan);
+			     enum pd_iio_channels chan);
 extern int xm_battmngr_iio_init(struct xm_battmngr_iio *battmngr_iio);
 
 #endif /* __XM_BATTMNGR_IIO_H */

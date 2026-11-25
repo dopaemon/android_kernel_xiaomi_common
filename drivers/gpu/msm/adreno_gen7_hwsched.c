@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -435,6 +435,16 @@ static int gen7_hwsched_gmu_first_boot(struct adreno_device *adreno_dev)
 
 	adreno_hwsched_register_hw_fence(adreno_dev);
 
+	if (adreno_dev->gmu_ab &&
+		gen7_hwsched_hfi_get_value(adreno_dev, HFI_VALUE_GMU_AB_VOTE) == 1 &&
+		!WARN_ONCE(!adreno_dev->gpucore->num_ddr_channels,
+			"Number of DDR channel is not specified in gpu core")) {
+		set_bit(ADRENO_DEVICE_GMU_AB, &adreno_dev->priv);
+	} else {
+		/* If gmu_ab feature flag is enabled but GMU doesn't support it, set it to false */
+		adreno_dev->gmu_ab = false;
+	}
+
 	icc_set_bw(pwr->icc_path, 0, 0);
 
 	device->gmu_fault = false;
@@ -573,6 +583,7 @@ static int gen7_hwsched_notify_slumber(struct adreno_device *adreno_dev)
 			pwr->default_pwrlevel - 1;
 	req.bw = pwr->pwrlevels[pwr->default_pwrlevel].bus_freq;
 
+	req.bw |= gen7_bus_ab_quantize(adreno_dev, 0);
 	/* Disable the power counter so that the GMU is not busy */
 	gmu_core_regwrite(device, GEN7_GMU_CX_GMU_POWER_COUNTER_ENABLE, 0);
 
@@ -696,6 +707,43 @@ static void hwsched_idle_timer(struct timer_list *t)
 	kgsl_schedule_work(&device->idle_check_ws);
 }
 
+static int gen7_hwsched_gmu_memory_init(struct adreno_device *adreno_dev)
+{
+	struct gen7_gmu_device *gmu = to_gen7_gmu(adreno_dev);
+
+	/* GMU Virtual register bank */
+	if (IS_ERR_OR_NULL(gmu->vrb)) {
+		gmu->vrb = gen7_reserve_gmu_kernel_block(gmu, 0, GMU_VRB_SIZE,
+						GMU_NONCACHED_KERNEL, 0);
+
+		if (IS_ERR(gmu->vrb))
+			return PTR_ERR(gmu->vrb);
+
+		/* Populate size of the virtual register bank */
+		gmu_core_set_vrb_register(gmu->vrb->hostptr, VRB_SIZE_IDX,
+					gmu->vrb->size >> 2);
+	}
+
+	/* GMU trace log */
+	if (IS_ERR_OR_NULL(gmu->trace.md)) {
+		gmu->trace.md = gen7_reserve_gmu_kernel_block(gmu, 0,
+					GMU_TRACE_SIZE, GMU_NONCACHED_KERNEL, 0);
+
+		if (IS_ERR(gmu->trace.md))
+			return PTR_ERR(gmu->trace.md);
+
+		/* Pass trace buffer address to GMU through the VRB */
+		gmu_core_set_vrb_register(gmu->vrb->hostptr,
+					VRB_TRACE_BUFFER_ADDR_IDX,
+					gmu->trace.md->gmuaddr);
+
+		/* Initialize the GMU trace buffer header */
+		gmu_core_trace_header_init(&gmu->trace);
+	}
+
+	return 0;
+}
+
 static int gen7_hwsched_gmu_init(struct adreno_device *adreno_dev)
 {
 	int ret;
@@ -705,6 +753,10 @@ static int gen7_hwsched_gmu_init(struct adreno_device *adreno_dev)
 		return ret;
 
 	ret = gen7_gmu_memory_init(adreno_dev);
+	if (ret)
+		return ret;
+
+	ret = gen7_hwsched_gmu_memory_init(adreno_dev);
 	if (ret)
 		return ret;
 
@@ -1049,7 +1101,7 @@ int gen7_hwsched_active_count_get(struct adreno_device *adreno_dev)
 }
 
 static int gen7_hwsched_dcvs_set(struct adreno_device *adreno_dev,
-		int gpu_pwrlevel, int bus_level)
+		int gpu_pwrlevel, int bus_level, u32 ab)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
@@ -1079,8 +1131,10 @@ static int gen7_hwsched_dcvs_set(struct adreno_device *adreno_dev,
 	if (bus_level < pwr->ddr_table_count && bus_level > 0)
 		req.bw = bus_level;
 
+	req.bw |=  gen7_bus_ab_quantize(adreno_dev, ab);
+
 	/* GMU will vote for slumber levels through the sleep sequence */
-	if ((req.freq == INVALID_DCVS_IDX) && (req.bw == INVALID_DCVS_IDX))
+	if ((req.freq == INVALID_DCVS_IDX) && (req.bw == INVALID_BW_VOTE))
 		return 0;
 
 	ret = CMD_MSG_HDR(req, H2F_MSG_GX_BW_PERF_VOTE);
@@ -1112,7 +1166,7 @@ static int gen7_hwsched_dcvs_set(struct adreno_device *adreno_dev,
 static int gen7_hwsched_clock_set(struct adreno_device *adreno_dev,
 	u32 pwrlevel)
 {
-	return gen7_hwsched_dcvs_set(adreno_dev, pwrlevel, INVALID_DCVS_IDX);
+	return gen7_hwsched_dcvs_set(adreno_dev, pwrlevel, INVALID_DCVS_IDX, INVALID_AB_VALUE);
 }
 
 static void scale_gmu_frequency(struct adreno_device *adreno_dev, int buslevel)
@@ -1156,24 +1210,34 @@ static int gen7_hwsched_bus_set(struct adreno_device *adreno_dev, int buslevel,
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int ret = 0;
 
-	if (buslevel != pwr->cur_buslevel) {
-		ret = gen7_hwsched_dcvs_set(adreno_dev, INVALID_DCVS_IDX,
-				buslevel);
-		if (ret)
-			return ret;
+	if (buslevel == pwr->cur_buslevel)
+		buslevel = INVALID_DCVS_IDX;
+
+	if ((ab == pwr->cur_ab) || ((ab == 0) && (adreno_dev->gmu_ab)))
+		ab = INVALID_AB_VALUE;
+
+	if ((ab == INVALID_AB_VALUE) && (buslevel == INVALID_DCVS_IDX))
+		return 0;
+
+	ret = gen7_hwsched_dcvs_set(adreno_dev, INVALID_DCVS_IDX,
+			buslevel, ab);
+	if (ret)
+		return ret;
+
+	if (buslevel != INVALID_DCVS_IDX) {
 
 		scale_gmu_frequency(adreno_dev, buslevel);
 
 		pwr->cur_buslevel = buslevel;
-
-		trace_kgsl_buslevel(device, pwr->active_pwrlevel, buslevel);
 	}
 
-	if (ab != pwr->cur_ab) {
-		icc_set_bw(pwr->icc_path, MBps_to_icc(ab), 0);
+	if (ab != INVALID_AB_VALUE) {
+		if (!adreno_dev->gmu_ab)
+			icc_set_bw(pwr->icc_path, MBps_to_icc(ab), 0);
 		pwr->cur_ab = ab;
 	}
 
+	trace_kgsl_buslevel(device, pwr->active_pwrlevel, pwr->cur_buslevel, pwr->cur_ab);
 	return ret;
 }
 
@@ -1500,6 +1564,24 @@ int gen7_hwsched_add_to_minidump(struct adreno_device *adreno_dev)
 					KGSL_HFIMEM_ENTRY,
 					gen7_dev->gmu.hfi.hfi_mem->hostptr,
 					gen7_dev->gmu.hfi.hfi_mem->size);
+		if (ret)
+			return ret;
+	}
+
+	if (!IS_ERR_OR_NULL(gen7_dev->gmu.vrb)) {
+		ret = kgsl_add_va_to_minidump(adreno_dev->dev.dev,
+					KGSL_GMU_VRB_ENTRY,
+					gen7_dev->gmu.vrb->hostptr,
+					gen7_dev->gmu.vrb->size);
+		if (ret)
+			return ret;
+	}
+
+	if (!IS_ERR_OR_NULL(gen7_dev->gmu.trace.md)) {
+		ret = kgsl_add_va_to_minidump(adreno_dev->dev.dev,
+					KGSL_GMU_TRACE_ENTRY,
+					gen7_dev->gmu.trace.md->hostptr,
+					gen7_dev->gmu.trace.md->size);
 		if (ret)
 			return ret;
 	}
