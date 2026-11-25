@@ -37,7 +37,6 @@ gh_rm_drv.ko
 socinfo.ko
 qcom-dload-mode.ko
 deferred-free-helper.ko
-mem-offline.ko
 mem-hooks.ko
 memory_dump_v2.ko
 msm_dma_iommu_mapping.ko

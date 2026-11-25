@@ -35,7 +35,6 @@ iommu-logger.ko
 mem_buf_dev.ko
 mem_buf.ko
 mem-hooks.ko
-mem-offline.ko
 memory_dump_v2.ko
 minidump.ko
 msm_dma_iommu_mapping.ko
