@@ -291,6 +291,13 @@ WAIPIO_BOARDS += cupid-sm8450-pm8008-overlay-oc144.dtbo cupid-sm8450-pm8008-over
 
 waipio-dtb-$(CONFIG_ARCH_WAIPIO) += \
 	$(call add-overlays, $(WAIPIO_BOARDS),$(WAIPIO_BASE_DTB))
+
+# DoraCore: optional Adreno 730 undervolt + overclock variant of
+# waipio-v2.dtb (retail SM8450), see the cape ones below.
+WAIPIO_GPU_DTB += waipio-v2-gpu-uvoc.dtb
+
+waipio-dtb-$(CONFIG_ARCH_WAIPIO) += $(WAIPIO_GPU_DTB) \
+	$(call add-overlays, cupid-sm8450-pm8008-overlay.dtbo,$(WAIPIO_GPU_DTB))
 dtb-y += $(waipio-dtb-y)
 
 CAPE_BASE_DTB += cape.dtb
@@ -322,6 +329,13 @@ UKEE_BOARDS += marble-sm7475-pm8008-overlay.dtbo
 
 ukee-dtb-$(CONFIG_ARCH_CAPE) += \
 	$(call add-overlays, $(UKEE_BOARDS),$(UKEE_BASE_DTB))
+
+# DoraCore: optional Adreno 725 undervolt / overclock variants of ukee.dtb,
+# see the cape ones above.
+UKEE_GPU_DTB += ukee-gpu-uv.dtb ukee-gpu-uvoc.dtb ukee-gpu-perf.dtb ukee-gpu-save.dtb
+
+ukee-dtb-$(CONFIG_ARCH_CAPE) += $(UKEE_GPU_DTB) \
+	$(call add-overlays, marble-sm7475-pm8008-overlay.dtbo,$(UKEE_GPU_DTB))
 dtb-y += $(ukee-dtb-y)
 
 endif

@@ -598,11 +598,16 @@ _platform_map = {
         "dtb_list": [
             {"name": "waipio.dtb", "soc": "waipio"},
             {"name": "waipio-v2.dtb", "soc": "waipio"},
+            {"name": "waipio-v2-gpu-uvoc.dtb", "soc": "waipio"},
             {"name": "cape.dtb", "soc": "cape"},
             {"name": "cape-gpu-uv.dtb", "soc": "cape"},
             {"name": "cape-gpu-oc.dtb", "soc": "cape"},
             {"name": "cape-gpu-uvoc.dtb", "soc": "cape"},
             {"name": "ukee.dtb", "soc": "ukee"},
+            {"name": "ukee-gpu-uv.dtb", "soc": "ukee"},
+            {"name": "ukee-gpu-uvoc.dtb", "soc": "ukee"},
+            {"name": "ukee-gpu-perf.dtb", "soc": "ukee"},
+            {"name": "ukee-gpu-save.dtb", "soc": "ukee"},
         ],
         "dtbo_list": [
             {"name": "cupid-sm8450-pm8008-overlay.dtbo", "soc": "waipio"},
