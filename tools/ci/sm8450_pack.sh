@@ -229,7 +229,10 @@ else
   esac
   echo "device ${DEVICE:-?}: SoC ${DEVICE_SOC:-unknown}"
   GPU_DTBS=()
-  [ -z "$DEVICE_SOC" ] || mapfile -t GPU_DTBS < <(find "$DIST" -maxdepth 1 -type f -name "$DEVICE_SOC-gpu-*.dtb" | sort)
+  # <soc>-gpu-<name>.dtb, or <soc>-v2-gpu-<name>.dtb for a chip revision
+  # (waipio-v2: retail SM8450)
+  [ -z "$DEVICE_SOC" ] || mapfile -t GPU_DTBS < <(find "$DIST" -maxdepth 1 -type f \
+    \( -name "$DEVICE_SOC-gpu-*.dtb" -o -name "$DEVICE_SOC-v*-gpu-*.dtb" \) | sort)
   for gpu in "${GPU_DTBS[@]}"; do
     variant=${gpu##*-gpu-}; variant=${variant%.dtb}
     base=${gpu%-gpu-*}.dtb
@@ -238,6 +241,8 @@ else
     echo "dtb-gpu-$variant: $(basename "$gpu") instead of $(basename "$base")"
     cat "${DTBS[@]/#$base/$gpu}" > "$OUT/dtb-gpu/dtb-gpu-$variant"
   done
+  # the installer names the GPU and its tables by SoC
+  [ "${#GPU_DTBS[@]}" = 0 ] || echo "$DEVICE_SOC" > "$OUT/dtb-gpu/soc"
 fi
 [ -s "$WORK/dtb.img" ] || { echo "no dtb produced" >&2; exit 1; }
 # make_dtbo <out.img> <dtbo>...

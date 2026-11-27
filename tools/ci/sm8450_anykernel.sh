@@ -162,16 +162,42 @@ fi;
 rm -rf $AKHOME/dtbo-oc;
 
 # GPU: the default dtb or one of the undervolt/overclock variants the CI
-# put in dtb-gpu/ (only built for some SoCs)
-gpu_warning() {
-  case $choice in
-    2) label="The undervolt";;
-    3) label="The overclock";;
-    *) label="The undervolt + overclock";;
+# put in dtb-gpu/ (only built for some SoCs; dtb-gpu/soc names the SoC)
+gpu_soc=$(cat $AKHOME/dtb-gpu/soc 2>/dev/null);
+case $gpu_soc in
+  waipio) gpu_name="Adreno 730"; gpu_stock=818;;
+  cape) gpu_name="Adreno 730"; gpu_stock=900;;
+  ukee) gpu_name="Adreno 725"; gpu_stock=580;;
+  *) gpu_name="GPU"; gpu_stock=;;
+esac;
+gpu_label() {
+  case $gpu_soc-$1 in
+    *-uv) echo "Undervolt (stock $gpu_stock MHz, lower voltage)";;
+    cape-oc) echo "Overclock (912 MHz max)";;
+    cape-uvoc) echo "Undervolt + overclock (912 MHz max)";;
+    waipio-uvoc) echo "Undervolt + overclock (831 MHz max)";;
+    ukee-uvoc) echo "Balance: undervolt + overclock (591 MHz max)";;
+    ukee-perf) echo "Performance: UV + OC, higher DDR (591 MHz max)";;
+    ukee-save) echo "Battery save: UV + underclock (547 MHz max)";;
+    *) echo "$1";;
   esac;
+}
+gpus=;
+for v in uv oc uvoc perf save; do
+  [ -f $AKHOME/dtb-gpu/dtb-gpu-$v ] && gpus="${gpus:+$gpus }$v";
+done;
+# gpu_at <menu choice>: the variant shown at that position (2 = first one)
+gpu_at() {
+  local n=$(($1 - 1));
+  set -- $gpus;
+  eval echo \$$n;
+}
+gpu_warning() {
+  label=$(gpu_label $(gpu_at $choice));
   confirm "!!!!! WARNING: GPU UNDERVOLT / OVERCLOCK !!!!!" \
-    "$label table runs the Adreno 730 outside" \
-    "Qualcomm's stock voltage/frequency table." \
+    "\"$label\"" \
+    "runs the $gpu_name outside Qualcomm's stock" \
+    "voltage/frequency table." \
     "Undervolting can cause graphics glitches, app" \
     "crashes, GPU hangs, reboots or a bootloop;" \
     "overclocking adds heat, battery drain and wear." \
@@ -180,19 +206,20 @@ gpu_warning() {
     "If the phone crashes or bootloops, flash this" \
     "zip again from recovery and choose Default.";
 }
-if [ -f $AKHOME/dtb-gpu/dtb-gpu-uv -a -f $AKHOME/dtb-gpu/dtb-gpu-oc -a -f $AKHOME/dtb-gpu/dtb-gpu-uvoc ] && has_keys "GPU table"; then
-  pick "GPU (Adreno 730):" gpu_warning \
-    "Default (stock, 900 MHz)" \
-    "Undervolt (stock 900 MHz, lower voltage)" \
-    "Overclock (912 MHz max)" \
-    "Undervolt + overclock (912 MHz max)";
-  case $choice in
-    2) gpu=uv; label="Undervolt";;
-    3) gpu=oc; label="Overclock";;
-    4) gpu=uvoc; label="Undervolt + overclock";;
-    *) gpu=; label="Default";;
-  esac;
-  if [ "$gpu" ]; then
+gpu_pick() {
+  local v;
+  set -- "Default (stock, $gpu_stock MHz)";
+  for v in $gpus; do
+    set -- "$@" "$(gpu_label $v)";
+  done;
+  pick "GPU ($gpu_name):" gpu_warning "$@";
+}
+if [ "$gpus" ] && has_keys "GPU table"; then
+  gpu_pick;
+  gpu=; label=Default;
+  if [ $choice -gt 1 ]; then
+    gpu=$(gpu_at $choice);
+    label=$(gpu_label $gpu);
     cp -f $AKHOME/dtb-gpu/dtb-gpu-$gpu $AKHOME/vendor_boot-files/dtb || abort "Selecting dtb failed. Aborting...";
   fi;
   ui_print "GPU: $label";
