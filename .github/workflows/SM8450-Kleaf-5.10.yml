@@ -275,7 +275,7 @@ jobs:
             LLVM=1
             LLVM_IAS=1
             CROSS_COMPILE=aarch64-linux-gnu-
-            DTC_EXT=dtc
+            DTC_EXT="$KP/prebuilts/kernel-build-tools/linux-x86/bin/dtc"
             TARGET_PRODUCT="$DEVICE"
           )
 
