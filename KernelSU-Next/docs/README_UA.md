@@ -1,0 +1,103 @@
+[English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md) | [Türkçe](README_TR.md) | [Português (Brasil)](README_PT-BR.md) | [한국어](README_KO.md) | [Français](README_FR.md) | [Bahasa Indonesia](README_ID.md) | [Русский](README_RU.md) | **Українська** | [ภาษาไทย](README_TH.md) | [Tiếng Việt](README_VI.md) | [Italiano](README_IT.md) | [Polski](README_PL.md) | [Български](README_BG.md) | [日本語](README_JA.md) | [Español](README_ES.md)
+
+---
+
+<div align="center">
+  <img src="/assets/kernelsu_next.png" width="96" alt="KernelSU Next Logo">
+
+  <h2>KernelSU Next</h2>
+  <p><strong>Рішення для root на базі ядра для пристроїв Android.</strong></p>
+
+  <p>
+    <a href="https://github.com/KernelSU-Next/KernelSU-Next/releases/latest">
+      <img src="https://img.shields.io/github/v/release/KernelSU-Next/KernelSU-Next?label=Release&logo=github" alt="Latest Release">
+    </a>
+    <a href="https://github.com/KernelSU-Next/KernelSU-Next/releases">
+      <img src="https://img.shields.io/github/downloads/KernelSU-Next/KernelSU-Next/total?label=Downloads&logo=github" alt="Total Downloads">
+    </a>
+    <a href="https://nightly.link/KernelSU-Next/KernelSU-Next/workflows/build-manager-ci/dev/manager">
+      <img src="https://img.shields.io/badge/Nightly%20Release-gray?logo=hackthebox&logoColor=fff" alt="Nightly Build">
+    </a>
+    <a href="https://github.com/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml">
+      <img src="https://github.com/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/badge.svg" alt="Build Status">
+    </a>
+    <a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html">
+      <img src="https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu" alt="License: GPL v2">
+    </a>
+    <a href="/LICENSE">
+      <img src="https://img.shields.io/github/license/KernelSU-Next/KernelSU-Next?logo=gnu" alt="GitHub License">
+    </a>
+    <a title="Crowdin" target="_blank" href="https://crowdin.com/project/kernelsu-next"><img src="https://badges.crowdin.net/kernelsu-next/localized.svg"></a>
+  </p>
+</div>
+
+---
+
+## 🚀 Функції
+
+- Керування доступом root і `su` на основі ядра.
+- Система модулів на базі [metamodules](https://kernelsu.org/guide/metamodule.html): розширювана інфраструктура для системних модифікацій.
+- Вбудоване завантаження драйвера SUSFS LKM для пристроїв GKI 2.0.
+- Виявлення ризиків, яке блокує встановлення підозрілих модулів.
+- Підтримка резервного копіювання та відновлення модулів і профілів додатків.
+- [Профіль додатку](https://kernelsu.org/guide/app-profile.html): обмежує потужність root у клітці.
+
+---
+
+## ✅ Сумісність
+
+KernelSU Next підтримує ядра Android з **4.4 до 6.18**.
+
+| Версія ядра | Нотатки про підтримку |
+|----------------------|-------------------------------------------------------------------------|
+| 5.10+ (GKI 2.0)      | Підтримка попередньо зібраних образів та LKM/KMI |
+| 4.19 – 5.4 (GKI 1.0) | Потрібен вбудований драйвер KernelSU у ядро |
+| < 4.14 (EOL)         | Потрібен драйвер KernelSU (3.18+ є експериментальним і може потребувати бэкпорти) |
+
+**Підтримувані архітектури:** `arm64-v8a` та `x86_64`
+
+> [!CAUTION]
+> Нові версії ядра внесли критичну зміну, через яку KernelSU Next може зламатися і навіть викликати kernel panic на `x86_64`! Перевірте сайт для отримання додаткової інформації!
+
+---
+
+## 📦 Встановлення
+
+Будь ласка, зверніться до посібника з [встановлення](https://kernelsu-next.github.io/webpage/pages/installation.html) для отримання інструкцій.
+
+---
+
+## 🏅 Участь
+
+- Перейдіть на [Crowdin](https://crowdin.com/project/kernelsu-next), щоб надіслати переклад для менеджера!
+- Щоб повідомити про проблеми безпеки, дивіться [SECURITY.md](/SECURITY.md).
+
+---
+
+## 📜 Ліцензія
+
+- **каталог `/kernel`:** [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html).
+- **Усі інші файли:** [GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0.html).
+
+---
+
+## 💸 Пожертви
+
+Якщо ви хочете підтримати проєкт:
+
+- **USDT (BEP20, ERC20)**: `0x0b269716dc00692676e4217e23c7f67abd5f0f3e`
+- **USDT (TRC20)**: `TXu6VX8dvJLQPx4WBobjbYT5tefHTDikWo`
+- **LTC**: `LMYRqRXPKAFpYncBhNS44W1iwFit14LH1u`
+
+---
+
+## 🙏 Подяки
+
+- [Kernel-Assisted Superuser](https://git.zx2c4.com/kernel-assisted-superuser/about/) – Ідея та концепція
+- [Magisk](https://github.com/topjohnwu/Magisk) – Основна реалізація root
+- [Genuine](https://github.com/brevent/genuine/) – Перевірка підпису APK v2
+- [Diamorphine](https://github.com/m0nad/Diamorphine) – Техніки rootkit
+- [KernelSU](https://github.com/tiann/KernelSU) – Оригінальна база, завдяки якій став можливий KernelSU Next
+- [Susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) – Розширення приховування root на рівні ядра для KernelSU
+- [Susfs4ksu-lkm](https://github.com/inforcqb/susfs4ksu-lkm) – SUSFS, портований як завантажуваний модуль ядра
+
