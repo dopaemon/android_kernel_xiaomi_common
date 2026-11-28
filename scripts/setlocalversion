@@ -190,28 +190,22 @@ else
 	exit 1
 fi
 
-# localversion* files in the build and source directory
-res="$(collect_files localversion*)"
-if test ! "$srctree" -ef .; then
-	res="$res$(collect_files "$srctree"/localversion*)"
-fi
-
-# CONFIG_LOCALVERSION and LOCALVERSION (if set)
-res="${res}${CONFIG_LOCALVERSION}${LOCALVERSION}"
-
-# scm version string if not at a tagged commit
+# DoraCore: without CONFIG_LOCALVERSION_AUTO the release is named by
+# CONFIG_LOCALVERSION alone (no localversion* files, no git hash, no '+').
 if test "$CONFIG_LOCALVERSION_AUTO" = "y"; then
+	# localversion* files in the build and source directory
+	res="$(collect_files localversion*)"
+	if test ! "$srctree" -ef .; then
+		res="$res$(collect_files "$srctree"/localversion*)"
+	fi
+
+	# CONFIG_LOCALVERSION and LOCALVERSION (if set)
+	res="${res}${CONFIG_LOCALVERSION}${LOCALVERSION}"
+
 	# full scm version string
 	res="$res$(scm_version)"
 else
-	# append a plus sign if the repository is not in a clean
-	# annotated or signed tagged state (as git describe only
-	# looks at signed or annotated tags - git tag -a/-s) and
-	# LOCALVERSION= is not specified
-	if test "${LOCALVERSION+set}" != "set"; then
-		scm=$(scm_version --short)
-		res="$res${scm:++}"
-	fi
+	res="${CONFIG_LOCALVERSION}${LOCALVERSION}"
 fi
 
 echo "$res"
