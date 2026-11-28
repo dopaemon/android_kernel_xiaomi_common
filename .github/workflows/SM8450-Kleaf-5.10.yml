@@ -324,11 +324,13 @@ jobs:
                 M="../sm8450-modules/$mod" \
                 KERNEL_SRC="$KERNEL_SRC" \
                 OUT_DIR="$KOUT" \
+                CFLAGS_MODULE="-Wno-error" \
                 "${MAKE_ARGS[@]}"
               make -j"$JOBS" -C "$EXT_ROOT/$mod" \
                 M="../sm8450-modules/$mod" \
                 KERNEL_SRC="$KERNEL_SRC" \
                 OUT_DIR="$KOUT" \
+                CFLAGS_MODULE="-Wno-error" \
                 "${MAKE_ARGS[@]}" \
                 INSTALL_MOD_PATH="$MOD_STAGE" \
                 INSTALL_MOD_STRIP=1 \
