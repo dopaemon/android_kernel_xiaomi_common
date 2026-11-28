@@ -1,0 +1,8 @@
+/*
+ * DoraCore: mayfly display overlay with every display overclock timing
+ * (146 Hz and 155 Hz TE). Packed as an optional dtbo.img variant; the
+ * default dtbo.img keeps mayfly-sde-display-mtp-overlay.dtbo.
+ */
+#include "mayfly-sde-display-mtp-overlay.dts"
+#include "mayfly-panel-oc-144hz.dtsi"
+#include "mayfly-panel-oc-156hz.dtsi"

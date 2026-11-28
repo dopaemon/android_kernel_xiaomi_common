@@ -1,0 +1,7 @@
+/*
+ * DoraCore: cupid display overlay with the 144 Hz (146 Hz TE) overclock timing.
+ * Packed as an optional dtbo.img variant; the default dtbo.img keeps
+ * cupid-sde-display-mtp-overlay.dtbo.
+ */
+#include "cupid-sde-display-mtp-overlay.dts"
+#include "cupid-panel-oc-144hz.dtsi"
