@@ -1806,8 +1806,9 @@ static int android_device_create(struct gadget_info *gi)
 
 		err = device_create_file(gi->dev, attr);
 		if (err) {
-			device_destroy(gi->dev->class,
-				       gi->dev->devt);
+			if (android_device == gi->dev)
+				android_device = NULL;
+			device_unregister(gi->dev);
 			return err;
 		}
 	}
@@ -1823,7 +1824,13 @@ static void android_device_destroy(struct gadget_info *gi)
 	attrs = android_usb_attributes;
 	while ((attr = *attrs++))
 		device_remove_file(gi->dev, attr);
-	device_destroy(gi->dev->class, gi->dev->devt);
+	if (android_device == gi->dev)
+		android_device = NULL;
+	/*
+	 * Not device_destroy(): every gadget's device has devt 0, so a lookup
+	 * by devt finds the oldest one, android0, whichever gadget is dropped.
+	 */
+	device_unregister(gi->dev);
 }
 #else
 static inline int android_device_create(struct gadget_info *gi)

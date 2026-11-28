@@ -42,6 +42,7 @@ struct f_hidg {
 	unsigned char			bInterfaceProtocol;
 	unsigned char			protocol;
 	unsigned char			idle;
+	unsigned char			interval;
 	unsigned short			report_desc_length;
 	char				*report_desc;
 	unsigned short			report_length;
@@ -72,7 +73,7 @@ struct f_hidg {
 	struct usb_request		*req;
 
 	struct device			dev;
-	struct cdev			cdev;
+	struct cdev			*cdev;
 	struct usb_function		func;
 
 	struct usb_ep			*in_ep;
@@ -554,8 +555,9 @@ static int f_hidg_release(struct inode *inode, struct file *fd)
 
 static int f_hidg_open(struct inode *inode, struct file *fd)
 {
+	struct kobject *parent = inode->i_cdev->kobj.parent;
 	struct f_hidg *hidg =
-		container_of(inode->i_cdev, struct f_hidg, cdev);
+		container_of(parent, struct f_hidg, dev.kobj);
 
 	fd->private_data = hidg;
 
@@ -963,6 +965,22 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 	hidg_hs_out_ep_desc.wMaxPacketSize = cpu_to_le16(hidg->report_length);
 	hidg_fs_out_ep_desc.wMaxPacketSize = cpu_to_le16(hidg->report_length);
 	/*
+	 * A nonzero interval overrides the endpoint poll rate the host is told to
+	 * use. The value is the raw bInterval: at high and super speed the period
+	 * is 2^(interval-1) microframes (125 us each), so 1 polls every 125 us
+	 * instead of the default 4 (1 ms); at full speed it is milliseconds. Like
+	 * the wMaxPacketSize writes above, this mutates the shared endpoint
+	 * descriptors at bind. Zero leaves the compiled-in defaults.
+	 */
+	if (hidg->interval) {
+		hidg_ss_in_ep_desc.bInterval = hidg->interval;
+		hidg_hs_in_ep_desc.bInterval = hidg->interval;
+		hidg_fs_in_ep_desc.bInterval = hidg->interval;
+		hidg_ss_out_ep_desc.bInterval = hidg->interval;
+		hidg_hs_out_ep_desc.bInterval = hidg->interval;
+		hidg_fs_out_ep_desc.bInterval = hidg->interval;
+	}
+	/*
 	 * We can use hidg_desc struct here but we should not relay
 	 * that its content won't change after returning from this function.
 	 */
@@ -1000,8 +1018,14 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 	hidg->req = NULL;
 
 	/* create char device */
-	cdev_init(&hidg->cdev, &f_hidg_fops);
-	status = cdev_device_add(&hidg->cdev, &hidg->dev);
+	hidg->cdev = cdev_alloc();
+	if (!hidg->cdev) {
+		status = -ENOMEM;
+		goto fail_free_descs;
+	}
+	hidg->cdev->ops = &f_hidg_fops;
+
+	status = cdev_device_add(hidg->cdev, &hidg->dev);
 	if (status)
 		goto fail_free_descs;
 
@@ -1094,6 +1118,7 @@ F_HID_OPT(subclass, 8, 255);
 F_HID_OPT(protocol, 8, 255);
 F_HID_OPT(no_out_endpoint, 8, 1);
 F_HID_OPT(report_length, 16, 65535);
+F_HID_OPT(interval, 8, 255);
 
 static ssize_t f_hid_opts_report_desc_show(struct config_item *item, char *page)
 {
@@ -1154,6 +1179,7 @@ static struct configfs_attribute *hid_attrs[] = {
 	&f_hid_opts_attr_protocol,
 	&f_hid_opts_attr_no_out_endpoint,
 	&f_hid_opts_attr_report_length,
+	&f_hid_opts_attr_interval,
 	&f_hid_opts_attr_report_desc,
 	&f_hid_opts_attr_dev,
 	NULL,
@@ -1246,7 +1272,7 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_hidg *hidg = func_to_hidg(f);
 
-	cdev_device_del(&hidg->cdev, &hidg->dev);
+	cdev_device_del(hidg->cdev, &hidg->dev);
 
 	usb_free_all_descriptors(f);
 }
@@ -1282,6 +1308,7 @@ static struct usb_function *hidg_alloc(struct usb_function_instance *fi)
 
 	hidg->bInterfaceSubClass = opts->subclass;
 	hidg->bInterfaceProtocol = opts->protocol;
+	hidg->interval = opts->interval;
 	hidg->report_length = opts->report_length;
 	hidg->report_desc_length = opts->report_desc_length;
 	if (opts->report_desc) {
