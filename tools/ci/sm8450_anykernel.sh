@@ -29,6 +29,15 @@ IS_SLOT_DEVICE=1;
 RAMDISK_COMPRESSION=auto;
 PATCH_VBMETA_FLAG=auto;
 
+# AK3 looks for the slot with getprop and in /proc/cmdline only; Android 12+
+# bootloaders can pass androidboot.* in /proc/bootconfig alone, which some
+# recoveries don't expose as ro.boot.* props ("Unable to determine active slot")
+getprop() {
+  local val=$(command getprop "$@" 2>/dev/null);
+  [ "$val" ] || val=$(sed -n "s/^androidboot\.${1#ro.boot.} = \"\(.*\)\"$/\1/p" /proc/bootconfig 2>/dev/null);
+  echo "$val";
+}
+
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh;
 
