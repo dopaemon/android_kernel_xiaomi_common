@@ -181,7 +181,7 @@ jobs:
           # Build fdtoverlay, fdtoverlaymerge, fdtget, fdtput from LineageOS external/dtc
           git clone -b "$LINEAGE_BRANCH" --single-branch --depth=1 \
             https://github.com/LineageOS/android_external_dtc.git "$RUNNER_TEMP/dtc"
-          make -C "$RUNNER_TEMP/dtc" -j"$(nproc)" NO_PYTHON=1 NO_YAML=1 \
+          make -C "$RUNNER_TEMP/dtc" -j"$(nproc)" NO_PYTHON=1 NO_YAML=1 WARNINGS="-Wall -Wno-error" \
             fdtoverlay fdtoverlaymerge fdtget fdtput
           install -m 0755 \
             "$RUNNER_TEMP/dtc/fdtoverlay" \
