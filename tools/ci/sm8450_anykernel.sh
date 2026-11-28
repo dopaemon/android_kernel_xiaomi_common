@@ -249,6 +249,25 @@ PATCH_VBMETA_FLAG=auto;
 # reset for vendor_boot patching
 reset_ak;
 
+# Some mayfly ROMs (ColorOS ports) ship a vendor_boot whose only vendor
+# ramdisk table entry is shorter than vendor_ramdisk_size in the header.
+# The bootloader doesn't care, magiskboot aborts ("failed to fill whole
+# buffer" -> "Splitting image failed"): set the entry to the header size.
+u32() { od -An -tu4 -j $1 -N4 $BLOCK | tr -d ' '; }
+if [ "$(dd if=$BLOCK bs=8 count=1 2>/dev/null)" = VNDRBOOT ] \
+  && [ "$(u32 8)" = 4 ] && [ "$(u32 2116)" = 1 ]; then
+  vb_page=$(u32 12); vb_rd=$(u32 24);
+  vb_al() { echo $(( ($1 + vb_page - 1) / vb_page * vb_page )); }
+  vb_tbl=$(( $(vb_al $(u32 2096)) + $(vb_al $vb_rd) + $(vb_al $(u32 2100)) ));
+  vb_entry=$(u32 $vb_tbl);
+  if [ "$vb_entry" -lt "$vb_rd" ]; then
+    ui_print " " "Fixing vendor ramdisk table size ($vb_entry -> $vb_rd)...";
+    printf "$(printf '\\%03o\\%03o\\%03o\\%03o' $((vb_rd & 255)) $((vb_rd >> 8 & 255)) $((vb_rd >> 16 & 255)) $((vb_rd >> 24 & 255)))" \
+      | dd of=$BLOCK bs=1 seek=$vb_tbl count=4 conv=notrunc 2>/dev/null \
+      || abort "Fixing vendor_boot failed. Aborting...";
+  fi;
+fi;
+
 # vendor_boot install: new dtb (vendor_boot-files/dtb) and new first stage
 # modules in the vendor ramdisk that carries lib/modules ("dlkm" on LineageOS)
 dump_boot;
