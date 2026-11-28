@@ -55,25 +55,23 @@ for proc in zygote zygote64 system_server; do
 done;
 
 # vol_key: wait for a volume key press and print "up" or "down"; prints
-# "none" only if getevent stops (no input device to read)
+# "none" after 60 tries without a volume key. Uses the static keycheck
+# (as the GKI 6.6 zips do): the recovery's getevent is dynamically linked
+# and fails once AnyKernel3 has unset LD_LIBRARY_PATH and mounted /system.
+# keycheck exits with the key code: 42/115 Vol+, 21/41/114 Vol-.
 vol_key() {
-  local ev=$AKHOME/vol_key.ev pid key=;
-  : > $ev;
-  getevent -lq > $ev 2>/dev/null &
-  pid=$!;
-  while [ ! "$key" ]; do
-    sleep 0.2 2>/dev/null || sleep 1;
-    if grep -q 'KEY_VOLUMEUP *DOWN' $ev; then
-      key=up;
-    elif grep -q 'KEY_VOLUMEDOWN *DOWN' $ev; then
-      key=down;
-    elif ! kill -0 $pid 2>/dev/null; then
-      key=none;
-    fi;
+  local rc n=0;
+  while [ $n -lt 60 ]; do
+    $AKHOME/tools/keycheck; rc=$?;
+    $AKHOME/tools/keycheck; # the key release
+    case $rc in
+      42|115) echo up; return;;
+      21|41|114) echo down; return;;
+    esac;
+    n=$((n + 1));
+    sleep 0.2;
   done;
-  kill $pid 2>/dev/null;
-  rm -f $ev;
-  echo $key;
+  echo none;
 }
 
 # menu <title> <option>...: Vol+ steps through the options, Vol- picks the
@@ -133,7 +131,7 @@ pick() {
 }
 
 has_keys() {
-  command -v getevent >/dev/null 2>&1 && return 0;
+  [ -x $AKHOME/tools/keycheck ] && return 0;
   ui_print " " "No key input in this recovery, keeping the default $1";
   return 1;
 }

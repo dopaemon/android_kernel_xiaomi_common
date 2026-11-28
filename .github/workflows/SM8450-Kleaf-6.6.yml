@@ -287,6 +287,9 @@ jobs:
           rm -rf "$AK3/.git" "$AK3/.github" "$AK3/README.md" "$AK3/modules" "$AK3/patch" "$AK3/ramdisk"
           curl -fsSL --retry 5 -o "$AK3/banner" \
             https://raw.githubusercontent.com/dopaemon/Anykernel3/master/banner
+          # Static volume key reader, as in the GKI 6.6 "volume" zips
+          curl -fsSL --retry 5 -o "$AK3/tools/keycheck" \
+            https://raw.githubusercontent.com/dopaemon/Anykernel3/a50c4e81f84685384201b143da7f62ff9eba6fb2/tools/keycheck
           sed -i -e 's/5\.10\.y - GKI/6.6.y - SM8450 Kleaf/' "$AK3/banner"
           KERNEL_STRING="DoraCore SM8450 6.6 (${{ github.event.inputs.BUILD_TARGET }}) for $DEVICE by dopaemon"
           sed -e "s|@DEVICE@|$DEVICE|" -e "s|@KERNEL_STRING@|$KERNEL_STRING|" \
