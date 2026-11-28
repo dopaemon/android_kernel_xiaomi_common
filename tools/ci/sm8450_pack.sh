@@ -25,7 +25,9 @@
 
 set -euo pipefail
 
-: "${DIST:?}" "${MODULE_LISTS:?}" "${KP:?}" "${OUT:?}"
+: "${DIST:?}" "${MODULE_LISTS:?}" "${OUT:?}"
+KP=${KP:-}
+ALLOW_MISSING_MODULES=${ALLOW_MISSING_MODULES:-0}
 KERNEL_IMAGE=${KERNEL_IMAGE:-$DIST/Image}
 WORK=$(mktemp -d "${RUNNER_TEMP:-/tmp}/sm8450-pack.XXXXXX")
 
@@ -45,10 +47,13 @@ fetch_googlesource() {
 find_tool() {
   # $1 name; prints a command usable as "$cmd args"
   local p
-  for p in "$KP/prebuilts/kernel-build-tools/linux-x86/bin/$1" \
-           "$KP/prebuilts/build-tools/linux-x86/bin/$1"; do
-    [ -x "$p" ] && { echo "$p"; return; }
-  done
+  if [ -n "$KP" ]; then
+    for p in "$KP/prebuilts/kernel-build-tools/linux-x86/bin/$1" \
+             "$KP/prebuilts/build-tools/linux-x86/bin/$1" \
+             "$KP/prebuilts/build-tools/bin/$1"; do
+      [ -x "$p" ] && { echo "$p"; return; }
+    done
+  fi
   command -v "$1" 2>/dev/null && return
   return 1
 }
@@ -90,7 +95,13 @@ build_modules() {
   rm -rf "$out" "$stg"
   mkdir -p "$out/lib/modules" "$stg/lib/modules/0.0/${mnt}lib/modules"
   while read -r name; do
-    [ -f "$DIST/$name" ] || { echo "ERROR: $name not in dist" >&2; missing=1; continue; }
+    if [ ! -f "$DIST/$name" ]; then
+      if [ "$ALLOW_MISSING_MODULES" = 1 ]; then
+        echo "WARN: $name not in dist (skipping)" >&2
+        continue
+      fi
+      echo "ERROR: $name not in dist" >&2; missing=1; continue
+    fi
     cp "$DIST/$name" "$out/lib/modules/"
     cp "$DIST/$name" "$stg/lib/modules/0.0/${mnt}lib/modules/"
   done < "$kos"
@@ -114,6 +125,8 @@ build_modules() {
       name=$(basename "$name" .ko)
       if [ -f "$out/lib/modules/$name.ko" ]; then
         echo "$name" >> "$out/lib/modules/modules.load"
+      elif [ "$ALLOW_MISSING_MODULES" = 1 ]; then
+        echo "WARN: $name.ko from the load list was not built (skipping)" >&2
       else
         echo "ERROR: $name.ko from the load list was not built" >&2
         missing=1
@@ -179,21 +192,35 @@ make_ext4() {
 
 log "Module lists"
 # Standalone build: the GKI module list names the system_dlkm modules.
-# (A mixed build ships system_dlkm.modules.load from kernel_aarch64.)
+# (A mixed build ships system_dlkm.modules.load from kernel_aarch64;
+#  Linux 5.10 GKI has no system_dlkm partition.)
 SYSTEM_LOAD=$DIST/gki_system_dlkm_modules_arm64
 [ -f "$SYSTEM_LOAD" ] || SYSTEM_LOAD=$DIST/system_dlkm.modules.load
-[ -f "$SYSTEM_LOAD" ] || { echo "no system_dlkm module list in $DIST" >&2; exit 1; }
-read_list "$SYSTEM_LOAD" | sort -u > "$WORK/system.list"
+HAS_SYSTEM_DLKM=0
+if [ -f "$SYSTEM_LOAD" ] && [ -f "$MODULE_LISTS/modules.blocklist.system_dlkm" ]; then
+  HAS_SYSTEM_DLKM=1
+  read_list "$SYSTEM_LOAD" | sort -u > "$WORK/system.list"
+else
+  : > "$WORK/system.list"
+fi
 find "$DIST" -maxdepth 1 -type f -name '*.ko' -printf '%f\n' | sort > "$WORK/all.list"
 comm -23 "$WORK/all.list" "$WORK/system.list" > "$WORK/vendor.list"
-read_list "$MODULE_LISTS/modules.load.vendor_boot" > "$WORK/vendor_boot.list"
+if [ -f "$MODULE_LISTS/modules.boot" ]; then
+  read_list "$MODULE_LISTS/modules.boot" | sort -u > "$WORK/vendor_boot.list"
+else
+  read_list "$MODULE_LISTS/modules.load.vendor_boot" > "$WORK/vendor_boot.list"
+fi
 echo "dist: $(wc -l < "$WORK/all.list") modules, system_dlkm: $(wc -l < "$WORK/system.list")," \
      "vendor_dlkm: $(wc -l < "$WORK/vendor.list"), vendor_boot: $(wc -l < "$WORK/vendor_boot.list")"
 
-log "system_dlkm modules"
-build_modules "$WORK/system_dlkm" system_dlkm/ "$WORK/depmod_system_dlkm" \
-  "$WORK/system.list" "$WORK/system.list"
-cp "$MODULE_LISTS/modules.blocklist.system_dlkm" "$WORK/system_dlkm/lib/modules/modules.blocklist"
+SYSTEM_DEPMOD_EXT=""
+if [ "$HAS_SYSTEM_DLKM" = 1 ]; then
+  log "system_dlkm modules"
+  build_modules "$WORK/system_dlkm" system_dlkm/ "$WORK/depmod_system_dlkm" \
+    "$WORK/system.list" "$WORK/system.list"
+  cp "$MODULE_LISTS/modules.blocklist.system_dlkm" "$WORK/system_dlkm/lib/modules/modules.blocklist"
+  SYSTEM_DEPMOD_EXT="$WORK/depmod_system_dlkm/lib/modules/0.0/system_dlkm"
+fi
 
 log "vendor_boot (dlkm fragment) modules"
 build_modules "$WORK/vendor_ramdisk" "" "$WORK/depmod_vendor_ramdisk" \
@@ -204,7 +231,7 @@ build_modules "$WORK/vendor_ramdisk" "" "$WORK/depmod_vendor_ramdisk" \
 log "vendor_dlkm modules"
 build_modules "$WORK/vendor_dlkm" vendor_dlkm/ "$WORK/depmod_vendor" \
   "$WORK/vendor.list" "$MODULE_LISTS/modules.load" \
-  "$WORK/depmod_system_dlkm/lib/modules/0.0/system_dlkm"
+  "$SYSTEM_DEPMOD_EXT"
 cp "$MODULE_LISTS/modules.blocklist" "$WORK/vendor_dlkm/lib/modules/modules.blocklist"
 
 log "dtb / dtbo"
@@ -282,7 +309,9 @@ fi
 
 log "vendor_dlkm.img / system_dlkm.img"
 make_ext4 vendor_dlkm u:object_r:vendor_file:s0 u:object_r:vendor_configs_file:s0 "$WORK/vendor_dlkm/lib/modules" "$OUT/vendor_dlkm.img"
-make_ext4 system_dlkm u:object_r:system_dlkm_file:s0 u:object_r:system_dlkm_file:s0 "$WORK/system_dlkm/lib/modules" "$OUT/system_dlkm.img"
+if [ "$HAS_SYSTEM_DLKM" = 1 ]; then
+  make_ext4 system_dlkm u:object_r:system_dlkm_file:s0 u:object_r:system_dlkm_file:s0 "$WORK/system_dlkm/lib/modules" "$OUT/system_dlkm.img"
+fi
 
 log "AnyKernel3 payload"
 # boot-files / vendor_boot-files are picked up by AK3 setup_ak for the

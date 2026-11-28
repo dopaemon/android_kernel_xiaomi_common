@@ -1,0 +1,441 @@
+name: SM8450 5.10 | DoraCore AnyKernel3 (boot, vendor_boot, dtbo, vendor_dlkm)
+
+# Builds DoraCore for Xiaomi SM8450/SM8475/SM7475 on Linux 5.10 the same way
+# LineageOS builds android_kernel_xiaomi_sm8450 (vendor/lineage/build/tasks/
+# kernel.mk), without the full Android tree. Linux 5.10 uses Kbuild (not Kleaf),
+# and everything SM8450 comes from the DoraCore tree: the msm kernel itself plus
+# the subtrees
+#   arch/arm64/boot/dts/vendor    (sm8450-devicetrees)
+#   vendor/xiaomi/sm8450-modules  (sm8450-modules)
+#   vendor/xiaomi/sm8450-common   (module load lists and blocklists)
+# The result is an AnyKernel3 zip: boot and vendor_boot are patched on the
+# device (kernel, dtb + optional GPU UV/OC dtbs, vendor ramdisk modules),
+# dtbo (+ optional display OC variants) and vendor_dlkm are flashed whole.
+
+on:
+  workflow_dispatch:
+    inputs:
+      BUILD_DEVICE:
+        description: 'Device (TARGET_PRODUCT)'
+        required: true
+        default: 'mayfly'
+        type: choice
+        options:
+        - all
+        - cupid
+        - diting
+        - marble
+        - mayfly
+        - mondrian
+        - thor
+        - unicorn
+        - zeus
+        - zizhan
+      KERNEL_GIT:
+        description: 'DoraCore source'
+        required: true
+        default: 'https://github.com/dopaemon/android_kernel_xiaomi_common.git'
+      KERNEL_BRANCH:
+        description: 'DoraCore branch'
+        required: true
+        default: 'Rebase'
+      BUILD_TARGET:
+        description: 'KernelSU'
+        required: true
+        default: 'KSU'
+        type: choice
+        options:
+        - KSU
+        - NonKSU
+      LTO_MODE:
+        description: 'LTO mode'
+        required: true
+        default: 'thin'
+        type: choice
+        options:
+        - default
+        - thin
+        - full
+        - none
+      RELEASE:
+        description: 'Status Release'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+        - draft
+        - prerelease
+        - release
+
+jobs:
+  create_release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.set-tag.outputs.tag }}
+    permissions:
+      contents: write
+    steps:
+      - name: Set tag as timestamp
+        id: set-tag
+        run: echo "tag=sm8450-5.10-$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.set-tag.outputs.tag }}
+          name: DoraCore SM8450 5.10 Images ${{ steps.set-tag.outputs.tag }}
+          draft: ${{ github.event.inputs.RELEASE == 'draft' }}
+          prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
+          make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
+          body: |
+            DoraCore full kernel for Xiaomi SM8450/SM8475/SM7475 (Linux 5.10).
+            Source: ${{ github.event.inputs.KERNEL_GIT }} (${{ github.event.inputs.KERNEL_BRANCH }}), ${{ github.event.inputs.BUILD_TARGET }}
+            AnyKernel3 zip: boot (Image), vendor_boot (dtb + ramdisk modules), dtbo, vendor_dlkm.
+            Credits: cupid-development, ArianK16a
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: create_release
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ${{ fromJSON(github.event.inputs.BUILD_DEVICE == 'all' && '["cupid","diting","marble","mayfly","mondrian","thor","unicorn","zeus","zizhan"]' || format('["{0}"]', github.event.inputs.BUILD_DEVICE)) }}
+
+    env:
+      DEVICE: ${{ matrix.device }}
+      LINEAGE_BRANCH: lineage-24.0
+      PREBUILTS_BRANCH: main-kernel-build-2024
+      KP: ${{ github.workspace }}/platform
+      KERNEL_SRC: ${{ github.workspace }}/src/sm8450
+      EXT_ROOT: ${{ github.workspace }}/src/sm8450-modules
+      KOUT: ${{ github.workspace }}/build/out
+      MOD_STAGE: ${{ github.workspace }}/mod-stage
+      DIST: ${{ github.workspace }}/dist
+      PACK_OUT: ${{ github.workspace }}/ak3-payload
+      MODULE_LISTS: ${{ github.workspace }}/src/sm8450/vendor/xiaomi/sm8450-common
+      AK3_REPO: https://github.com/osm0sis/AnyKernel3.git
+      AK3_COMMIT: 41f04bdb4ee30a44e429c2c1131d5e8bb32b15f1
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Free Disk Space
+        uses: endersonmenezes/free-disk-space@v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: true
+          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+          remove_packages_one_command: true
+          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+          rm_cmd: "rmz"
+          rmz_version: "3.1.1"
+          testing: true
+
+      - name: Setup Swap
+        run: |
+          set -euo pipefail
+          sudo swapoff -a || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 32G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon -p 32767 /swapfile
+          sudo sysctl -w vm.swappiness=200
+          swapon --show
+          df -BG
+
+      - name: Build Environment & Prebuilts
+        run: |
+          set -euo pipefail
+          echo "BUILD_DATE=$(TZ=Asia/Ho_Chi_Minh date +'%Y-%m%d-%H%M')" >> $GITHUB_ENV
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git curl python3 python-is-python3 aria2 unzip zip lz4 cpio \
+            e2fsprogs attr kmod util-linux gcc \
+            bc bison flex make libssl-dev libelf-dev dwarves binutils-aarch64-linux-gnu
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git config --global color.ui false
+
+          mkdir -p "$KP/prebuilts/clang/host" "$KP/tools"
+          git clone -b "$PREBUILTS_BRANCH" --single-branch --depth=1 \
+            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+            "$KP/prebuilts/clang/host/linux-x86"
+          git clone -b "$PREBUILTS_BRANCH" --single-branch --depth=1 \
+            https://android.googlesource.com/kernel/prebuilts/build-tools \
+            "$KP/prebuilts/kernel-build-tools"
+          git clone -b "$PREBUILTS_BRANCH" --single-branch --depth=1 \
+            https://android.googlesource.com/platform/prebuilts/build-tools \
+            "$KP/prebuilts/build-tools"
+
+          # Build fdtoverlay, fdtoverlaymerge, fdtget, fdtput from LineageOS external/dtc
+          git clone -b "$LINEAGE_BRANCH" --single-branch --depth=1 \
+            https://github.com/LineageOS/android_external_dtc.git "$RUNNER_TEMP/dtc"
+          make -C "$RUNNER_TEMP/dtc" -j"$(nproc)" NO_PYTHON=1 NO_YAML=1 \
+            fdtoverlay fdtoverlaymerge fdtget fdtput
+          install -m 0755 \
+            "$RUNNER_TEMP/dtc/fdtoverlay" \
+            "$RUNNER_TEMP/dtc/fdtoverlaymerge" \
+            "$RUNNER_TEMP/dtc/fdtget" \
+            "$RUNNER_TEMP/dtc/fdtput" \
+            "$KP/tools/"
+          rm -rf "$RUNNER_TEMP/dtc"
+
+          curl -fsSL --retry 5 -o "$KP/tools/merge_dtbs.py" \
+            "https://raw.githubusercontent.com/LineageOS/android_vendor_lineage/$LINEAGE_BRANCH/build/tools/merge_dtbs.py"
+          chmod +x "$KP/tools/merge_dtbs.py"
+
+          CLANG_DIR=$(ls -d "$KP/prebuilts/clang/host/linux-x86"/clang-r* | sort -V | tail -1)
+          [ -x "$CLANG_DIR/bin/clang" ] || { echo "clang not found in $KP/prebuilts/clang/host/linux-x86" >&2; exit 1; }
+          echo "CLANG_BIN=$CLANG_DIR/bin" >> $GITHUB_ENV
+          "$CLANG_DIR/bin/clang" --version | head -n 1
+          df -BG
+
+      - name: Clone DoraCore
+        run: |
+          set -euo pipefail
+          git clone -b "${{ github.event.inputs.KERNEL_BRANCH }}" --single-branch --depth=1 --no-tags \
+            --recurse-submodules --shallow-submodules \
+            "${{ github.event.inputs.KERNEL_GIT }}" "$KERNEL_SRC"
+          cd "$KERNEL_SRC"
+          echo "DoraCore: $(make -s kernelversion) @ $(git rev-parse --short=12 HEAD)"
+          [ -d arch/arm64/boot/dts/vendor/qcom ] || { echo "DoraCore tree has no arch/arm64/boot/dts/vendor subtree" >&2; exit 1; }
+          [ -d vendor/xiaomi/sm8450-modules/qcom ] || { echo "DoraCore tree has no vendor/xiaomi/sm8450-modules subtree" >&2; exit 1; }
+          for f in modules.load modules.load.vendor_boot modules.boot modules.blocklist; do
+            [ -s "$MODULE_LISTS/$f" ] || { echo "DoraCore tree has no $MODULE_LISTS/$f" >&2; exit 1; }
+          done
+          # Mirror LineageOS layout (../sm8450-modules next to sm8450) so
+          # KBUILD_EXTRA_SYMBOLS=$(OUT_DIR)/../sm8450-modules/... resolves.
+          ln -sfn "$KERNEL_SRC/vendor/xiaomi/sm8450-modules" "$EXT_ROOT"
+
+      - name: Prepare Kernel Config
+        run: |
+          set -euo pipefail
+          export PATH="$CLANG_BIN:$KP/prebuilts/kernel-build-tools/linux-x86/bin:$KP/prebuilts/build-tools/linux-x86/bin:$PATH"
+          cd "$KERNEL_SRC"
+          DEFCONFIG=arch/arm64/configs/gki_defconfig
+          if [ "${{ github.event.inputs.BUILD_TARGET }}" = NonKSU ]; then
+            sed -i -e '/^CONFIG_KSU[_=]/d' -e '/^# CONFIG_KSU[_ ].* is not set$/d' "$DEFCONFIG"
+            echo "# CONFIG_KSU is not set" >> "$DEFCONFIG"
+          fi
+          grep -n 'CONFIG_KSU\b' "$DEFCONFIG" || true
+
+          mkdir -p "$KOUT"
+          MAKE_ARGS=(
+            O="$KOUT"
+            ARCH=arm64
+            LLVM=1
+            LLVM_IAS=1
+            CROSS_COMPILE=aarch64-linux-gnu-
+          )
+          cp "$DEFCONFIG" "$KOUT/.config"
+          make -j"$(nproc)" "${MAKE_ARGS[@]}" olddefconfig
+
+          for cfg in \
+            arch/arm64/configs/vendor/waipio_GKI.config \
+            arch/arm64/configs/vendor/xiaomi_GKI.config \
+            "arch/arm64/configs/vendor/${DEVICE}_GKI.config" \
+            arch/arm64/configs/vendor/debugfs.config; do
+            [ -f "$cfg" ] || { echo "missing config fragment: $cfg" >&2; exit 1; }
+            (cd "$KOUT" && "$KERNEL_SRC/scripts/kconfig/merge_config.sh" -m -O "$KOUT" "$KOUT/.config" "$KERNEL_SRC/$cfg")
+            make -j"$(nproc)" "${MAKE_ARGS[@]}" olddefconfig
+          done
+
+          case "${{ github.event.inputs.LTO_MODE }}" in
+            thin)
+              scripts/config --file "$KOUT/.config" -e LTO_CLANG_THIN -d LTO_CLANG_FULL
+              ;;
+            full)
+              scripts/config --file "$KOUT/.config" -d LTO_CLANG_THIN -e LTO_CLANG_FULL
+              ;;
+            none)
+              scripts/config --file "$KOUT/.config" -d LTO_CLANG_THIN -d LTO_CLANG_FULL
+              ;;
+          esac
+          make -j"$(nproc)" "${MAKE_ARGS[@]}" olddefconfig
+
+      - name: Build Kernel, Modules & DTBs
+        run: |
+          set -euo pipefail
+          export PATH="$CLANG_BIN:$KP/tools:$KP/prebuilts/kernel-build-tools/linux-x86/bin:$KP/prebuilts/build-tools/linux-x86/bin:$PATH"
+          JOBS=$(nproc)
+          MAKE_ARGS=(
+            O="$KOUT"
+            ARCH=arm64
+            LLVM=1
+            LLVM_IAS=1
+            CROSS_COMPILE=aarch64-linux-gnu-
+            DTC_EXT=dtc
+            TARGET_PRODUCT="$DEVICE"
+          )
+
+          ( while sleep 60; do
+              printf '[monitor] %s | %s | disk %s\n' "$(date +%T)" \
+                "$(free -m | awk '/Mem:/ {print "RAM " $3 "/" $2 " MiB"} /Swap:/ {print "SWAP " $3 "/" $2 " MiB"}' | paste -sd' ')" \
+                "$(df -h --output=used,size / | tail -1)"
+            done ) &
+          MON=$!
+          trap 'kill "$MON" 2>/dev/null || true' EXIT
+
+          {
+            cd "$KERNEL_SRC"
+            echo "===== Building Image, DTBs and in-tree modules ====="
+            make -j"$JOBS" "${MAKE_ARGS[@]}" Image dtbs modules
+
+            rm -rf "$MOD_STAGE"
+            mkdir -p "$MOD_STAGE"
+            make -j"$JOBS" "${MAKE_ARGS[@]}" \
+              INSTALL_MOD_PATH="$MOD_STAGE" INSTALL_MOD_STRIP=1 modules_install
+
+            echo "===== Building external modules ====="
+            EXT_MODULES=(
+              qcom/opensource/mmrm-driver
+              qcom/opensource/audio-kernel
+              qcom/opensource/camera-kernel
+              qcom/opensource/cvp-kernel
+              qcom/opensource/dataipa/drivers/platform/msm
+              qcom/opensource/datarmnet/core
+              qcom/opensource/datarmnet-ext/aps
+              qcom/opensource/datarmnet-ext/offload
+              qcom/opensource/datarmnet-ext/shs
+              qcom/opensource/datarmnet-ext/perf
+              qcom/opensource/datarmnet-ext/perf_tether
+              qcom/opensource/datarmnet-ext/sch
+              qcom/opensource/datarmnet-ext/wlan
+              qcom/opensource/display-drivers/msm
+              qcom/opensource/eva-kernel
+              qcom/opensource/video-driver
+              qcom/opensource/wlan/qcacld-3.0/.qca6490
+              qcom/opensource/wlan/qcacld-3.0/.qca6750
+            )
+            for mod in "${EXT_MODULES[@]}"; do
+              echo "--- External module: $mod ---"
+              make -j"$JOBS" -C "$EXT_ROOT/$mod" \
+                M="../sm8450-modules/$mod" \
+                KERNEL_SRC="$KERNEL_SRC" \
+                OUT_DIR="$KOUT" \
+                "${MAKE_ARGS[@]}"
+              make -j"$JOBS" -C "$EXT_ROOT/$mod" \
+                M="../sm8450-modules/$mod" \
+                KERNEL_SRC="$KERNEL_SRC" \
+                OUT_DIR="$KOUT" \
+                "${MAKE_ARGS[@]}" \
+                INSTALL_MOD_PATH="$MOD_STAGE" \
+                INSTALL_MOD_STRIP=1 \
+                KERNEL_UAPI_HEADERS_DIR="$KOUT" \
+                modules_install
+            done
+
+            echo "===== Collecting dist ====="
+            rm -rf "$DIST"
+            mkdir -p "$DIST"
+            cp "$KOUT/arch/arm64/boot/Image" "$DIST/Image"
+            cp "$KOUT/System.map" "$DIST/System.map"
+            find "$MOD_STAGE/lib/modules" -type f -name '*.ko' -exec cp {} "$DIST/" \;
+
+            echo "===== Merging DTBs and DTBOs ====="
+            DTB_WORK="$RUNNER_TEMP/dtbs-work"
+            rm -rf "$DTB_WORK"
+            mkdir -p "$DTB_WORK/base" "$DTB_WORK/techpack" "$DTB_WORK/out" "$DTB_WORK/oc"
+            cp -r "$KOUT/arch/arm64/boot/dts/vendor/." "$DTB_WORK/techpack/"
+            mv "$DTB_WORK/techpack"/*/*.dtb "$DTB_WORK/techpack"/*/*.dtbo "$DTB_WORK/base/"
+
+            # Keep optional display OC techpack overlays aside for separate merging
+            find "$DTB_WORK/techpack" -type f -name '*-sde-display-mtp-overlay-oc*.dtbo' \
+              -exec mv {} "$DTB_WORK/oc/" \;
+
+            python3 "$KP/tools/merge_dtbs.py" \
+              --base "$DTB_WORK/base" \
+              --techpack "$DTB_WORK/techpack" \
+              --out "$DTB_WORK/out"
+            cp "$DTB_WORK/out"/*.dtb "$DTB_WORK/out"/*.dtbo "$DIST/"
+
+            # Build merged display OC overlay variants (<dev>-sm*-overlay-oc<var>.dtbo)
+            for oc in "$DTB_WORK/oc"/*-sde-display-mtp-overlay-oc*.dtbo; do
+              [ -f "$oc" ] || continue
+              oc_base=$(basename "$oc")
+              oc_dev=${oc_base%%-sde-display-mtp-overlay-oc*}
+              oc_var=${oc_base##*-overlay-}; oc_var=${oc_var%.dtbo}
+              board_dtbo=$(find "$DTB_WORK/base" -maxdepth 1 -type f -name "${oc_dev}-sm*-overlay.dtbo" | head -1)
+              [ -n "$board_dtbo" ] || { echo "ERROR: no base board overlay for $oc_base" >&2; exit 1; }
+              stock_disp=$(find "$DTB_WORK/techpack" -type f -name "${oc_dev}-sde-display-mtp-overlay.dtbo" | head -1)
+              [ -n "$stock_disp" ] || { echo "ERROR: no stock display overlay for $oc_base" >&2; exit 1; }
+
+              echo "--- Merging display OC variant: $oc_dev ($oc_var) ---"
+              oc_tmp="$DTB_WORK/oc-merge-${oc_dev}-${oc_var}"
+              rm -rf "$oc_tmp"
+              mkdir -p "$oc_tmp/base" "$oc_tmp/techpack" "$oc_tmp/out"
+              cp "$board_dtbo" "$oc_tmp/base/"
+              cp -r "$DTB_WORK/techpack/." "$oc_tmp/techpack/"
+              rel_disp=${stock_disp#$DTB_WORK/techpack/}
+              cp -f "$oc" "$oc_tmp/techpack/$rel_disp"
+              python3 "$KP/tools/merge_dtbs.py" \
+                --base "$oc_tmp/base" \
+                --techpack "$oc_tmp/techpack" \
+                --out "$oc_tmp/out"
+              board_name=$(basename "$board_dtbo" .dtbo)
+              cp "$oc_tmp/out/${board_name}.dtbo" "$DIST/${board_name}-${oc_var}.dtbo"
+            done
+          } 2>&1 | tee "$GITHUB_WORKSPACE/build-$DEVICE-kbuild.log"
+
+          ls "$DIST" | head -100 || true
+          echo "Modules: $(ls "$DIST"/*.ko | wc -l)"
+          strings "$DIST/Image" | grep -m1 'Linux version' || true
+
+      - name: Pack Images
+        run: |
+          set -euo pipefail
+          OUT="$PACK_OUT" ALLOW_MISSING_MODULES=1 \
+            bash tools/ci/sm8450_pack.sh 2>&1 | tee "$GITHUB_WORKSPACE/build-$DEVICE-pack.log"
+
+      - name: Create AnyKernel3 Zip
+        run: |
+          set -euo pipefail
+          AK3="$GITHUB_WORKSPACE/AnyKernel3"
+          # Upstream AnyKernel3 (pinned): its magiskboot handles the hdr v4
+          # vendor_boot ramdisk table ("dlkm" fragment).
+          git init -q "$AK3"
+          git -C "$AK3" fetch -q --depth=1 "$AK3_REPO" "$AK3_COMMIT"
+          git -C "$AK3" checkout -q FETCH_HEAD
+          rm -rf "$AK3/.git" "$AK3/.github" "$AK3/README.md" "$AK3/modules" "$AK3/patch" "$AK3/ramdisk"
+          curl -fsSL --retry 5 -o "$AK3/banner" \
+            https://raw.githubusercontent.com/dopaemon/Anykernel3/master/banner
+          sed -i -e 's/5\.10\.y - GKI/5.10.y - SM8450/' "$AK3/banner"
+          KERNEL_STRING="DoraCore SM8450 5.10 (${{ github.event.inputs.BUILD_TARGET }}) for $DEVICE by dopaemon"
+          sed -e "s|@DEVICE@|$DEVICE|" -e "s|@KERNEL_STRING@|$KERNEL_STRING|" \
+            tools/ci/sm8450_anykernel.sh > "$AK3/anykernel.sh"
+          cp -r "$PACK_OUT"/. "$AK3/"
+          cd "$AK3"
+          find . -type f ! -name '*.ko' | sort
+          ZIP_NAME="DoraCore-${DEVICE}-SM8450-5.10-${{ github.event.inputs.BUILD_TARGET }}-AK3-${BUILD_DATE}.zip"
+          zip -r9 "$GITHUB_WORKSPACE/$ZIP_NAME" . -x '.git*'
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create_release.outputs.tag }}
+          draft: ${{ github.event.inputs.RELEASE == 'draft' }}
+          prerelease: ${{ github.event.inputs.RELEASE == 'prerelease' }}
+          make_latest: ${{ github.event.inputs.RELEASE == 'release' }}
+          files: ${{ env.ZIP_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.DEVICE }}-sm8450-5.10-logs
+          path: ${{ github.workspace }}/build-*.log
+          if-no-files-found: ignore
